@@ -7,9 +7,12 @@ use Config::IniFiles;
 use JSON;
 use File::Spec;
 use File::Path qw/make_path/;
-use POE qw/Component::IRC Component::Client::DNS/;
+use POE;
 
 use version 0.77; our $VERSION = version->declare('v0.1.0');
+sub bot_version { return $VERSION }
+
+my @poe_events = qw/_start sig_terminate/;
 
 my %irc_handlers = (
 	'socialgamer' => 'ZIRCBot::IRC::SocialGamer',
@@ -24,6 +27,38 @@ sub get_irc_handler {
 }
 
 enum 'ZIRCBot::IRC::Handler', [keys %irc_handlers];
+
+has 'irc_handler' => (
+	is => 'ro',
+	isa => 'ZIRCBot::IRC::Handler',
+	default => 'socialgamer',
+);
+
+has 'nick' => (
+	is => 'ro',
+	isa => 'Str',
+	writer => '_set_nick',
+	default => 'ZIRCBot',
+);
+
+has 'config_dir' => (
+	is => 'ro',
+	isa => 'Str',
+	trigger => sub { my ($self, $path) = @_; make_path($path); },
+	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zircbot'); make_path($path); return $path },
+);
+
+has 'config_file' => (
+	is => 'ro',
+	isa => 'Str',
+	default => 'zircbot.conf',
+);
+
+has 'db_file' => (
+	is => 'ro',
+	isa => 'Str',
+	default => 'zircbot.db',
+);
 
 has 'config' => (
 	is => 'ro',
@@ -62,45 +97,11 @@ has 'irc' => (
 	handles => [qw/yield/],
 );
 
-has 'resolver' => (
-	is => 'ro',
-	isa => 'POE::Component::Client::DNS',
-	default => sub { POE::Component::Client::DNS->spawn },
-	handles => {
-		resolve_dns => 'resolve',
-	},
-);
-
-has 'irc_handler' => (
-	is => 'ro',
-	isa => 'ZIRCBot::IRC::Handler',
-	default => 'socialgamer',
-);
-
-has 'nick' => (
-	is => 'ro',
-	isa => 'Str',
-	writer => '_set_nick',
-	default => 'ZIRCBot',
-);
-
-has 'config_dir' => (
-	is => 'ro',
-	isa => 'Str',
-	trigger => sub { my ($self, $path) = @_; make_path($path); },
-	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zircbot'); make_path($path); return $path },
-);
-
-has 'config_file' => (
-	is => 'ro',
-	isa => 'Str',
-	default => 'zircbot.conf',
-);
-
-has 'db_file' => (
-	is => 'ro',
-	isa => 'Str',
-	default => 'zircbot.db',
+has 'is_stopping' => (
+	is => 'rw',
+	isa => 'Bool',
+	default => 0,
+	init_arg => undef,
 );
 
 sub BUILD {
@@ -112,6 +113,55 @@ sub BUILD {
 	apply_all_roles($self, $irc_role);
 }
 
+sub run {
+	my $self = shift;
+	$self->create_poe_session;
+	POE::Kernel->run;
+}
+
+sub get_poe_events {
+	my $self = shift;
+	return (@poe_events, $self->get_irc_events);
+}
+
+sub create_poe_session {
+	my $self = shift;
+	my @session_events = $self->get_poe_events;
+	POE::Session->create(
+		object_states => [
+			$self => \@session_events,
+		],
+	);
+}
+
+sub _start {
+	my $self = $_[OBJECT];
+	my $kernel = $_[KERNEL];
+	
+	$kernel->sig(TERM => 'sig_terminate');
+	$kernel->sig(INT => 'sig_terminate');
+	$kernel->sig(QUIT => 'sig_terminate');
+	
+	$self->hook_start;
+}
+
+sub hook_start {
+}
+
+sub sig_terminate {
+	my $self = $_[OBJECT];
+	my $kernel = $_[KERNEL];
+	my $signal = $_[ARG0];
+	
+	$self->print_debug("Received signal SIG$signal");
+	$self->is_stopping(1);
+	$self->hook_stop;
+	$kernel->sig_handled;
+}
+
+sub hook_stop {
+}
+
 sub _load_config {
 	my $self = shift;
 	my $config_file = File::Spec->catfile($self->config_dir, $self->config_file);
@@ -121,7 +171,6 @@ sub _load_config {
 		-nocase => 1,
 		-allowcontinue => 1,
 		-nomultiline => 1,
-		-handle_trailing_comment => 1,
 	);
 	tied(%config)->SetFileName($config_file);
 	if (-e $config_file) {
@@ -162,6 +211,7 @@ sub _init_config {
 		'password' => '',
 		'flood' => 0,
 		'away_msg' => 'I am a bot. Say !help in a channel or in PM for help.',
+		'reconnect' => 1,
 	};
 	$config_hr->{commands} = {
 		'trigger' => '!',
@@ -211,22 +261,22 @@ sub _load_commands {
 	return {};
 }
 
-sub _init_irc {
+sub print_debug {
 	my $self = shift;
-	my $server = $self->config->{irc}{server};
-	die "IRC server is not configured\n" unless length $server;
-	my $irc = POE::Component::IRC->spawn(
-		Nick => $self->config->{irc}{nick} // 'ZIRCBot',
-		Server => $self->config->{irc}{server},
-		Port => $self->config->{irc}{port} // 6667,
-		Password => $self->config->{irc}{server_pass} // '',
-		UseSSL => $self->config->{irc}{ssl} // 0,
-		Ircname => $self->config->{irc}{realname} // '',
-		Username => $self->config->{irc}{nick} // 'ZIRCBot',
-		Flood => $self->config->{irc}{flood} // 0,
-		Resolver => $self->resolver,
-	) or die $!;
-	return $irc;
+	$self->print_log(@_) if $self->config->{main}{debug};
+}
+
+sub print_echo {
+	my $self = shift;
+	$self->print_log(@_) if $self->config->{main}{echo};
+}
+
+sub print_log {
+	my $self = shift;
+	my @msgs = @_;
+	my $localtime = scalar localtime;
+	print "[ $localtime ] $_\n" foreach @msgs;
+	return 1;
 }
 
 no Moose;
