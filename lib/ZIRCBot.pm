@@ -1,6 +1,8 @@
 package ZIRCBot;
 
 use Moose;
+use Moose::Util qw/apply_all_roles/;
+use Moose::Util::TypeConstraints;
 use Config::IniFiles;
 use JSON;
 use File::Spec;
@@ -8,6 +10,20 @@ use File::Path qw/make_path/;
 use POE qw/Component::IRC Component::Client::DNS/;
 
 use version 0.77; our $VERSION = version->declare('v0.1.0');
+
+my %irc_handlers = (
+	'socialgamer' => 'ZIRCBot::IRC::SocialGamer',
+	'freenode' => 'ZIRCBot::IRC::Freenode',
+	'gamesurge' => 'ZIRCBot::IRC::GameSurge',
+);
+
+sub get_irc_handler {
+	my $type = shift // return undef;
+	return undef unless exists $irc_handlers{$type};
+	return $irc_handlers{$type};
+}
+
+enum 'ZIRCBot::IRC::Handler', [keys %irc_handlers];
 
 has 'config' => (
 	is => 'ro',
@@ -40,7 +56,7 @@ has 'commands' => (
 has 'irc' => (
 	is => 'ro',
 	isa => 'POE::Component::IRC',
-	builder => '_spawn_irc',
+	builder => '_init_irc',
 	lazy => 1,
 	init_arg => undef,
 	handles => [qw/yield/],
@@ -53,6 +69,12 @@ has 'resolver' => (
 	handles => {
 		resolve_dns => 'resolve',
 	},
+);
+
+has 'irc_handler' => (
+	is => 'ro',
+	isa => 'ZIRCBot::IRC::Handler',
+	default => 'socialgamer',
 );
 
 has 'nick' => (
@@ -80,6 +102,15 @@ has 'db_file' => (
 	isa => 'Str',
 	default => 'zircbot.db',
 );
+
+sub BUILD {
+	my $self = shift;
+	
+	my $irc_handler = $self->irc_handler;
+	my $irc_role = get_irc_handler($irc_handler);
+	die "Could not find role for IRC handler $irc_handler\n" unless $irc_role;
+	apply_all_roles($self, $irc_role);
+}
 
 sub _load_config {
 	my $self = shift;
@@ -180,7 +211,7 @@ sub _load_commands {
 	return {};
 }
 
-sub _spawn_irc {
+sub _init_irc {
 	my $self = shift;
 	my $server = $self->config->{irc}{server};
 	die "IRC server is not configured\n" unless length $server;
@@ -195,6 +226,7 @@ sub _spawn_irc {
 		Flood => $self->config->{irc}{flood} // 0,
 		Resolver => $self->resolver,
 	) or die $!;
+	return $irc;
 }
 
 no Moose;
