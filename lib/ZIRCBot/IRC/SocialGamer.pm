@@ -1,6 +1,7 @@
 package ZIRCBot::IRC::SocialGamer;
 
-use Moose::Role;
+use Moo::Role;
+use warnings NONFATAL => 'all';
 
 with 'ZIRCBot::IRC';
 
@@ -9,14 +10,10 @@ my @irc_events = qw/irc_320/;
 around 'get_irc_events' => sub {
 	my $orig = shift;
 	my $self = shift;
-	my @events = $self->$orig;
-	push @events, @irc_events;
-	return @events;
+	return ($self->$orig, @irc_events);
 };
 
 sub irc_320 { # RPL_WHOISIDENTIFIED
 }
-
-no Moose::Role;
 
 1;

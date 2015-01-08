@@ -1,7 +1,9 @@
 package ZIRCBot::IRC;
 
-use Moose::Role;
 use POE qw/Component::IRC/;
+
+use Moo::Role;
+use warnings NONFATAL => 'all';
 
 my @irc_events = qw/_default irc_375 irc_372 irc_376 irc_422 irc_331 irc_332 irc_333 irc_352 irc_315
 	irc_311 irc_319 irc_301 irc_313 irc_330 irc_335 irc_317 irc_318
@@ -9,7 +11,7 @@ my @irc_events = qw/_default irc_375 irc_372 irc_376 irc_422 irc_331 irc_332 irc
 	irc_invite irc_kick irc_join irc_part irc_nick irc_mode/;
 sub get_irc_events { @irc_events }
 
-sub _init_irc {
+sub _build_irc {
 	my $self = shift;
 	my $server = $self->config->{irc}{server};
 	die "IRC server is not configured\n" unless length $server;
@@ -35,7 +37,7 @@ sub _connect_options {
 		Ircname => $realname,
 		Username => $nick,
 		Flood => $flood,
-#		Resolver => $self->resolver,
+		Resolver => $self->resolver,
 	);
 	$options{Password} = $server_pass if length $server_pass;
 	return %options;
@@ -203,7 +205,5 @@ sub irc_nick {
 
 sub irc_mode {
 }
-
-no Moose::Role;
 
 1;

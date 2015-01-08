@@ -1,16 +1,20 @@
 package ZIRCBot;
 
-use Moose;
-use Moose::Util qw/apply_all_roles/;
-use Moose::Util::TypeConstraints;
 use Config::IniFiles;
 use JSON;
 use File::Spec;
-use File::Path qw/make_path/;
-use POE;
+use File::Path 'make_path';
+use POE qw/Component::Client::DNS/;
+use Scalar::Util 'blessed';
 
-use version 0.77; our $VERSION = version->declare('v0.1.0');
+use Moo;
+use warnings NONFATAL => 'all';
+use namespace::clean;
+
+use version 0.77; our $VERSION = version->declare('v0.2.0');
 sub bot_version { return $VERSION }
+
+with 'ZIRCBot::DNS';
 
 my @poe_events = qw/_start sig_terminate/;
 
@@ -26,80 +30,65 @@ sub get_irc_handler {
 	return $irc_handlers{$type};
 }
 
-enum 'ZIRCBot::IRC::Handler', [keys %irc_handlers];
-
 has 'irc_handler' => (
 	is => 'ro',
-	isa => 'ZIRCBot::IRC::Handler',
+	isa => sub { die 'Invalid IRC handler' unless get_irc_handler($_[0]) },
 	default => 'socialgamer',
 );
 
 has 'nick' => (
-	is => 'ro',
-	isa => 'Str',
-	writer => '_set_nick',
+	is => 'rwp',
 	default => 'ZIRCBot',
 );
 
 has 'config_dir' => (
 	is => 'ro',
-	isa => 'Str',
 	trigger => sub { my ($self, $path) = @_; make_path($path); },
 	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zircbot'); make_path($path); return $path },
 );
 
 has 'config_file' => (
 	is => 'ro',
-	isa => 'Str',
 	default => 'zircbot.conf',
 );
 
 has 'db_file' => (
 	is => 'ro',
-	isa => 'Str',
 	default => 'zircbot.db',
 );
 
 has 'config' => (
-	is => 'ro',
-	isa => 'HashRef',
-	builder => '_load_config',
-	lazy => 1,
+	is => 'lazy',
 	init_arg => undef,
 );
 
 has 'db' => (
-	is => 'ro',
-	isa => 'HashRef',
-	builder => '_load_db',
-	lazy => 1,
+	is => 'lazy',
 	init_arg => undef,
 );
 
 has 'commands' => (
 	is => 'ro',
-	isa => 'HashRef[ZIRCBot::Command]',
-	builder => '_load_commands',
 	lazy => 1,
+	default => sub { {} },
 	init_arg => undef,
-	traits => ['Hash'],
-	handles => {
-		command => 'get',
-	},
 );
 
 has 'irc' => (
-	is => 'ro',
-	isa => 'POE::Component::IRC',
-	builder => '_init_irc',
-	lazy => 1,
+	is => 'lazy',
+	isa => sub { die 'Invalid IRC object' unless defined $_[0] and blessed $_[0] and $_[0]->isa('POE::Component::IRC') },
 	init_arg => undef,
-	handles => [qw/yield/],
+);
+
+has 'resolver' => (
+	is => 'lazy',
+	isa => sub { die 'Invalid resolver object' unless defined $_[0] and blessed $_[0] and $_[0]->isa('POE::Component::Client::DNS') },
+	init_arg => undef,
 );
 
 has 'is_stopping' => (
 	is => 'rw',
-	isa => 'Bool',
+	coerce => sub { $_[0] ? 1 : 0 },
 	default => 0,
 	init_arg => undef,
 );
@@ -110,18 +99,13 @@ sub BUILD {
 	my $irc_handler = $self->irc_handler;
 	my $irc_role = get_irc_handler($irc_handler);
 	die "Could not find role for IRC handler $irc_handler\n" unless $irc_role;
-	apply_all_roles($self, $irc_role);
-}
-
-sub run {
-	my $self = shift;
-	$self->create_poe_session;
-	POE::Kernel->run;
+	require Role::Tiny;
+	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
 
 sub get_poe_events {
 	my $self = shift;
-	return (@poe_events, $self->get_irc_events);
+	return (@poe_events, $self->get_irc_events, $self->get_dns_events);
 }
 
 sub create_poe_session {
@@ -162,7 +146,7 @@ sub sig_terminate {
 sub hook_stop {
 }
 
-sub _load_config {
+sub _build_config {
 	my $self = shift;
 	my $config_file = File::Spec->catfile($self->config_dir, $self->config_file);
 	my %config;
@@ -226,7 +210,7 @@ sub _init_config {
 	return 1;
 }
 
-sub _load_db {
+sub _build_db {
 	my $self = shift;
 	my $db_file = File::Spec->catfile($self->config_dir, $self->db_file);
 	my $db;
@@ -257,10 +241,6 @@ sub _store_db {
 	return 1;
 }
 
-sub _load_commands {
-	return {};
-}
-
 sub print_debug {
 	my $self = shift;
 	$self->print_log(@_) if $self->config->{main}{debug};
@@ -278,8 +258,5 @@ sub print_log {
 	print "[ $localtime ] $_\n" foreach @msgs;
 	return 1;
 }
-
-no Moose;
-__PACKAGE__->meta->make_immutable;
 
 1;

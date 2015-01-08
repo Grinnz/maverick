@@ -1,9 +1,8 @@
 package ZIRCBot::IRC::Freenode;
 
-use Moose::Role;
+use Moo::Role;
+use warnings NONFATAL => 'all';
 
 with 'ZIRCBot::IRC';
-
-no Moose::Role;
 
 1;

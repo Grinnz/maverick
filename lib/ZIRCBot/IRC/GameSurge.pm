@@ -1,6 +1,7 @@
 package ZIRCBot::IRC::GameSurge;
 
-use Moose::Role;
+use Moo::Role;
+use warnings NONFATAL => 'all';
 
 with 'ZIRCBot::IRC';
 
@@ -13,7 +14,5 @@ sub identify {
 		$irc->yield(quote => "authserv auth $nick $pass");
 	}
 }
-
-no Moose::Role;
 
 1;
