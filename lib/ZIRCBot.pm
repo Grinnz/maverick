@@ -15,7 +15,7 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-our $VERSION = '0.030';
+our $VERSION = '0.04';
 sub bot_version { return $VERSION }
 
 with 'ZIRCBot::DNS';
