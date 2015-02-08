@@ -1,8 +1,10 @@
 # To use: cpanm --installdeps .
 
+requires 'Carp';
 requires 'Exporter';
 requires 'File::Spec';
 requires 'File::Path';
+requires 'List::Util';
 requires 'Scalar::Util';
 requires 'Config::IniFiles', '2.83';
 requires 'Mojolicious', '5.77';

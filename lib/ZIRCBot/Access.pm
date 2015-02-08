@@ -17,9 +17,19 @@ use constant ACCESS_LEVELS => {
 };
 use constant ACCESS_LEVELS();
 
-our @EXPORT = keys %{ACCESS_LEVELS()};
+our @EXPORT = (keys %{ACCESS_LEVELS()},
+	qw/access_levels valid_access_level channel_access_level/);
 
 my %level_nums = map { $_ => 1 } values %{ACCESS_LEVELS()};
+my %channel_access = (
+	'' => ACCESS_NONE,
+	'+' => ACCESS_CHANNEL_VOICE,
+	'%' => ACCESS_CHANNEL_HALFOP,
+	'@' => ACCESS_CHANNEL_OP,
+	'&' => ACCESS_CHANNEL_ADMIN,
+	'~' => ACCESS_CHANNEL_OWNER,
+	'-' => ACCESS_CHANNEL_OWNER,
+);
 
 sub access_levels {
 	return wantarray ? (values %{ACCESS_LEVELS()}) : [values %{ACCESS_LEVELS()}];
@@ -28,6 +38,12 @@ sub access_levels {
 sub valid_access_level {
 	my $level = shift // return;
 	return (exists $level_nums{$level} and $level_nums{$level}) ? 1 : '';
+}
+
+sub channel_access_level {
+	my $symbol = shift // return;
+	return undef unless exists $channel_access{$symbol};
+	return $channel_access{$symbol};
 }
 
 1;

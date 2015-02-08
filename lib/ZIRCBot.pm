@@ -5,9 +5,11 @@ use Net::DNS::Native; # load early to avoid threading issues
 use Config::IniFiles;
 use File::Spec;
 use File::Path 'make_path';
+use List::Util 'any';
 use Mojo::IOLoop;
 use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
+use ZIRCBot::Access;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -92,7 +94,7 @@ sub BUILD {
 	my $self = shift;
 	my $irc_role = $self->irc_role // die 'Invalid IRC handler';
 	require Role::Tiny;
-	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /^ZIRCBot::IRC::/;
+	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /::/;
 	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
 
@@ -120,6 +122,18 @@ sub sig_reload {
 	$self->logger->debug("Received signal SIG$signal, reloading");
 	$self->clear_logger;
 	$self->_reload_config;
+}
+
+sub user_access_level {
+	my ($self, $user) = @_;
+	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
+	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
+		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
+	}
+	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
+		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
+	}
+	return ACCESS_NONE;
 }
 
 sub _build_config {
