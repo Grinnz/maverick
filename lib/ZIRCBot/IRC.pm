@@ -83,12 +83,14 @@ before 'start' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
 	
-	$irc->register_default_event_handlers;
 	weaken $self;
 	foreach my $event ($self->get_irc_events) {
 		my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
 		$irc->on($event => sub { $self->$handler(@_) });
 	}
+	$irc->register_default_event_handlers;
+	my $handler = $self->can('irc_rpl_welcome');
+	$irc->on(irc_rpl_welcome => sub { $self->$handler(@_) });
 	$irc->on(close => sub { $self->irc_disconnected($_[0]) });
 	$irc->on(error => sub { $self->logger->error($_[1]); $_[0]->disconnect; });
 	
@@ -156,6 +158,13 @@ sub irc_default {
 	my $params_str = join ', ', map { "'$_'" } @{$message->{params}};
 	my $from = parse_from_nick($message->{prefix});
 	$self->logger->debug("[$command] <$from> [ $params_str ]");
+}
+
+sub irc_rpl_welcome {
+	my ($self, $irc, $message) = @_;
+	my ($to) = @{$message->{params}};
+	$self->logger->debug("Set nick to $to");
+	$irc->nick($to);
 }
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART
@@ -408,6 +417,7 @@ sub irc_nick {
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
 	$self->user($from)->nick($to);
+	$irc->nick($to) if lc $from eq lc $irc->nick;
 }
 
 sub irc_mode {
