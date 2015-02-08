@@ -95,7 +95,7 @@ sub irc_autojoin {
 	return unless @channels;
 	@channels = map { split /[\s,]+/ } @channels;
 	my $channels_str = join ', ', @channels;
-	$self->print_debug("Joining channels: $channels_str");
+	$self->logger->debug("Joining channels: $channels_str");
 	$irc->write(join => $_) for @channels;
 }
 
