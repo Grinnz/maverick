@@ -2,6 +2,7 @@ package ZIRCBot;
 
 use Net::DNS::Native; # load early to avoid threading issues
 
+use Carp;
 use Config::IniFiles;
 use File::Spec;
 use File::Path 'make_path';
@@ -26,12 +27,6 @@ has 'irc_role' => (
 	default => 'Freenode',
 );
 
-has 'nick' => (
-	is => 'rwp',
-	lazy => 1,
-	default => 'ZIRCBot',
-);
-
 has 'config_dir' => (
 	is => 'ro',
 	lazy => 1,
@@ -46,8 +41,9 @@ has 'config_file' => (
 );
 
 has 'config' => (
-	is => 'lazy',
-	init_arg => undef,
+	is => 'rwp',
+	lazy => 1,
+	default => sub { {} },
 );
 
 has 'db_file' => (
@@ -57,7 +53,9 @@ has 'db_file' => (
 );
 
 has 'db' => (
-	is => 'lazy',
+	is => 'rwp',
+	lazy => 1,
+	builder => 1,
 	init_arg => undef,
 );
 
@@ -92,6 +90,9 @@ has 'is_stopping' => (
 
 sub BUILD {
 	my $self = shift;
+	
+	$self->_load_config($self->config);
+	
 	my $irc_role = $self->irc_role // die 'Invalid IRC handler';
 	require Role::Tiny;
 	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /::/;
@@ -145,29 +146,20 @@ sub _build_config {
 		-nocase => 1,
 		-allowcontinue => 1,
 		-nomultiline => 1,
+		-handle_trailing_comment => 1,
 	);
 	tied(%config)->SetFileName($config_file);
 	if (-e $config_file) {
 		tied(%config)->ReadConfig;
 	} else {
-		$self->_init_config(\%config);
+		$self->_default_config(\%config);
 		tied(%config)->WriteConfig($config_file);
 	}
 	
 	return \%config;
 }
 
-sub _reload_config {
-	my $self = shift;
-	tied(%{$self->config})->ReadConfig;
-}
-
-sub _store_config {
-	my $self = shift;
-	tied(%{$self->config})->RewriteConfig;
-}
-
-sub _init_config {
+sub _default_config {
 	my $self = shift;
 	my $config_hr = shift;
 	%$config_hr = ();
@@ -183,7 +175,6 @@ sub _init_config {
 		'realname' => '',
 		'nick' => 'ZIRCBot',
 		'password' => '',
-		'flood' => 0,
 		'away_msg' => 'I am a bot. Say !help in a channel or in PM for help.',
 		'reconnect' => 1,
 	};
@@ -198,6 +189,32 @@ sub _init_config {
 	};
 	$config_hr->{apis} = {};
 	return 1;
+}
+
+sub _load_config {
+	my $self = shift;
+	my $override_config = shift // {};
+	croak "Invalid configuration override" unless ref $override_config eq 'HASH';
+	$self->_set_config($self->_build_config);
+	return 1 unless keys %$override_config;
+	foreach my $section (keys %$override_config) {
+		$self->config->{$section} //= {};
+		next unless ref $override_config->{$section} eq 'HASH';
+		foreach my $param (keys %{$override_config->{$section}}) {
+			$self->config->{$section}{$param} = $override_config->{$section}{$param};
+		}
+	}
+	$self->_store_config;
+}
+
+sub _reload_config {
+	my $self = shift;
+	tied(%{$self->config})->ReadConfig;
+}
+
+sub _store_config {
+	my $self = shift;
+	tied(%{$self->config})->RewriteConfig;
 }
 
 sub _build_db {
@@ -219,6 +236,11 @@ sub _build_db {
 		close $db_fh;
 	}
 	return $db;
+}
+
+sub _load_db {
+	my $self = shift;
+	$self->_set_db($self->_build_db);
 }
 
 sub _store_db {
