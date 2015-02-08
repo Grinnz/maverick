@@ -1,8 +1,7 @@
 package ZIRCBot::DNS;
 
-use Carp;
-use Net::DNS::Native;
 use Mojo::IOLoop;
+use Net::DNS::Native;
 use Scalar::Util 'weaken';
 
 use Moo::Role;
