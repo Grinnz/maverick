@@ -5,13 +5,13 @@ use warnings NONFATAL => 'all';
 
 with 'ZIRCBot::IRC';
 
-sub identify {
-	my $self = shift;
-	my $irc = $self->irc;
+sub irc_identify {
+	my ($self, $irc) = @_;
 	my $nick = $self->config->{irc}{nick};
 	my $pass = $self->config->{irc}{password};
-	if (length $nick and length $pass) {
-		$irc->yield(quote => "authserv auth $nick $pass");
+	if (defined $nick and length $nick and defined $pass and length $pass) {
+		$self->("Identifying with NickServ as $nick");
+		$irc->write(quote => "authserv auth $nick $pass");
 	}
 }
 

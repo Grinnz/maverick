@@ -1,118 +1,114 @@
 package ZIRCBot::IRC;
 
-use POE qw/Component::IRC/;
+use Mojo::IRC;
+use Parse::IRC;
+use Scalar::Util 'weaken';
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
-my @irc_events = qw/_default irc_375 irc_372 irc_376 irc_422 irc_331 irc_332 irc_333 irc_352 irc_315
+my @irc_events = qw/irc_375 irc_372 irc_376 irc_422 irc_331 irc_332 irc_333 irc_352 irc_315
 	irc_311 irc_319 irc_301 irc_313 irc_330 irc_335 irc_317 irc_318
-	irc_notice irc_public irc_msg irc_whois irc_ping irc_disconnected
+	irc_notice irc_public irc_privmsg irc_whois
 	irc_invite irc_kick irc_join irc_part irc_nick irc_mode/;
 sub get_irc_events { @irc_events }
 
+has 'irc' => (
+	is => 'lazy',
+	init_arg => undef,
+);
+
 sub _build_irc {
 	my $self = shift;
-	my $server = $self->config->{irc}{server};
-	die "IRC server is not configured\n" unless length $server;
-	my $irc = POE::Component::IRC->spawn($self->_connect_options) or die $!;
+	my $irc = Mojo::IRC->new($self->_connect_options);
+	$irc->parser(Parse::IRC->new(ctcp => 1, public => 1));
 	return $irc;
 }
 
 sub _connect_options {
 	my $self = shift;
-	my ($server, $port, $server_pass, $ssl, $nick, $realname, $flood) = 
-		@{$self->config->{irc}}{qw/server port server_pass ssl nick realname flood/};
-	die "IRC server is not configured\n" unless length $server;
-	$port //= 6667;
-	$ssl //= 0;
+	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
+		@{$self->config->{irc}}{qw/server port server_pass ssl nick realname/};
+	die "IRC server is not configured\n" unless defined $server and length $server;
+	$server .= ":$port" if defined $port and length $port;
 	$nick //= 'ZIRCBot',
 	$realname = sprintf 'ZIRCBot %s by %s', $self->bot_version, 'Grinnz' unless length $realname;
-	$flood //= 0;
 	my %options = (
-		Server => $server,
-		Port => $port,
-		UseSSL => $ssl,
-		Nick => $nick,
-		Ircname => $realname,
-		Username => $nick,
-		Flood => $flood,
-		Resolver => $self->resolver,
+		server => $server,
+		nick => $nick,
+		user => $nick,
+		name => $realname,
 	);
-	$options{Password} = $server_pass if length $server_pass;
+	$options{tls} = {} if $ssl;
+	$options{pass} = $server_pass if defined $server_pass and length $server_pass;
 	return %options;
 }
 
-after 'hook_start' => sub {
+before 'start' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
 	
-	$irc->yield(register => 'all');
+	$irc->register_default_event_handlers;
+	weaken $self;
+	foreach my $event ($self->get_irc_events) {
+		my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
+		$irc->on($event => sub { $self->$handler(@_) });
+	}
+	$irc->on(close => sub { $self->irc_disconnected($irc) });
 	
 	my $server = $irc->server;
-	my $port = $irc->port;
-	$self->print_debug("Connecting to $server/$port...");
-	$irc->yield(connect => {});
+	$self->logger->debug("Connecting to $server");
+	$irc->connect(sub { $self->irc_connected(@_) });
 };
 
-sub hook_connected {
-	my $self = shift;
-	$self->identify;
-	$self->autojoin;
-}
-
-sub identify {
+after 'stop' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
-	my $nick = $self->config->{irc}{nick};
-	my $pass = $self->config->{irc}{password};
-	if (length $nick and length $pass) {
-		$self->print_debug("Identifying with NickServ as $nick...");
-		$irc->yield(quote => "NICKSERV identify $nick $pass");
+	
+	$self->logger->debug("Disconnecting from server");
+	$irc->disconnect;
+};
+
+sub irc_connected {
+	my ($self, $irc, $err) = @_;
+	if ($err) {
+		$self->logger->error($err);
+	} else {
+		$self->irc_identify($irc);
+		$self->irc_autojoin($irc);
 	}
 }
 
-sub autojoin {
-	my $self = shift;
-	my $irc = $self->irc;
+sub irc_identify {
+	my ($self, $irc) = @_;
+	my $nick = $self->config->{irc}{nick};
+	my $pass = $self->config->{irc}{password};
+	if (defined $nick and length $nick and defined $pass and length $pass) {
+		$self->("Identifying with NickServ as $nick");
+		$irc->write(quote => "NICKSERV identify $nick $pass");
+	}
+}
+
+sub irc_autojoin {
+	my ($self, $irc) = @_;
 	my @channels = $self->config->{channels}{autojoin};
 	return unless @channels;
-	my $channels_str = join ',', @channels;
+	@channels = map { split /[\s,]+/ } @channels;
+	my $channels_str = join ', ', @channels;
 	$self->print_debug("Joining channels: $channels_str");
-	$irc->yield(join => $_) for @channels;
+	$irc->write(join => $_) for @channels;
 }
 
 sub irc_disconnected {
-	my $self = $_[OBJECT];
-	my $irc = $self->irc;
-	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
-		$irc->yield(connect => {});
-	} else {
-		$irc->yield(shutdown => 'Bye');
-	}
-}
-
-after 'hook_stop' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
-	$irc->yield(shutdown => 'Bye');
-};
-
-sub _default { # Print unknown events in debug mode
-	my $self = $_[OBJECT];
-	my ($event, $args) = @_[ARG0,ARG1];
-	my @output = "$event:";
-	foreach my $arg (@$args) {
-		$arg //= 'NULL';
-		if (ref $arg eq 'ARRAY') {
-			@$arg = map { $_ // 'NULL' } @$arg;
-			push @output, '[' . join(', ', @$arg) . ']';
-		} else {
-			push @output, $arg;
-		}
+	$self->logger->debug("Disconnected from server");
+	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
+		my $server = $irc->server;
+		$self->logger->debug("Reconnecting to $server");
+		weaken $self;
+		$irc->connect(sub { $self->irc_connected(@_) });
 	}
-	$self->print_debug(join ' ', @output);
-	return 0;
 }
 
 sub irc_375 { # RPL_MOTDSTART
@@ -122,13 +118,9 @@ sub irc_372 { # RPL_MOTD
 } # prevent MOTD from showing up in the debug output
 
 sub irc_376 { # RPL_ENDOFMOTD
-	my $self = $_[OBJECT];
-	$self->hook_connected;
 }
 
 sub irc_422 { # ERR_NOMOTD
-	my $self = $_[OBJECT];
-	$self->hook_connected;
 }
 
 sub irc_331 { # RPL_NOTOPIC
@@ -176,13 +168,10 @@ sub irc_notice {
 sub irc_public {
 }
 
-sub irc_msg {
+sub irc_privmsg {
 }
 
 sub irc_whois {
-}
-
-sub irc_ping {
 }
 
 sub irc_invite {

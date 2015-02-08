@@ -1,46 +1,52 @@
 package ZIRCBot::DNS;
 
-use POE qw/Component::Client::DNS/;
+use Carp;
+use Net::DNS::Native;
+use Mojo::IOLoop;
+use Scalar::Util 'weaken';
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
-my @dns_events = qw/dns_response/;
-sub get_dns_events { @dns_events }
+has 'resolver' => (
+	is => 'lazy',
+	init_arg => undef,
+);
+
+has 'watchers' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+	clearer => 1,
+);
 
 sub _build_resolver {
 	my $self = shift;
-	return POE::Component::Client::DNS->spawn;
+	return Net::DNS::Native->new;
 }
 
-after 'hook_stop' => sub {
+after 'stop' => sub {
 	my $self = shift;
-	$self->resolver->shutdown;
+	foreach my $sock (values %{$self->watchers}) {
+		Mojo::IOLoop->singleton->reactor->remove($sock);
+	}
+	$self->clear_watchers;
 };
 
 sub dns_resolve {
-	my $self = shift;
-	my ($host, $type, $context) = @_;
-	return unless defined $host;
+	my ($self, $host, $cb) = @_;
 	
-	$context //= {};
-	
-	my %options;
-	$options{host} = $host;
-	$options{type} = $type if defined $type;
-	$options{context} = $context;
-	$options{event} = 'dns_response';
-	
-	my $response = $self->resolver->resolve(%options);
-	
-	if ($response) {
-		POE::Kernel->yield(dns_response => $response);
-	}
-}
-
-sub dns_response {
-	my $self = $_[OBJECT];
-	my $response = $_[ARG0];
+	my $dns = $self->resolver;
+	my $sock = $dns->getaddrinfo($host);
+	$self->watchers->{fileno $sock} = $sock;
+	weaken $self;
+	Mojo::IOLoop->singleton->reactor->io($sock, sub {
+		Mojo::IOLoop->singleton->reactor->remove($sock);
+		delete $self->watchers->{fileno $sock};
+		$self->$cb($dns->get_result($sock));
+	})->watch($sock, 1, 0);
+	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 
 1;

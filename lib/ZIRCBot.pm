@@ -1,22 +1,22 @@
 package ZIRCBot;
 
+use Net::DNS::Native; # load early to avoid threading issues
+
 use Config::IniFiles;
-use JSON;
 use File::Spec;
 use File::Path 'make_path';
-use POE qw/Component::Client::DNS/;
-use Scalar::Util 'blessed';
+use Mojo::IOLoop;
+use Mojo::JSON qw/encode_json decode_json/;
+use Mojo::Log;
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-use version 0.77; our $VERSION = version->declare('v0.2.0');
+use version; our $VERSION = version->declare('v0.3.0');
 sub bot_version { return $VERSION }
 
 with 'ZIRCBot::DNS';
-
-my @poe_events = qw/_start sig_terminate/;
 
 my %irc_handlers = (
 	'socialgamer' => 'ZIRCBot::IRC::SocialGamer',
@@ -52,14 +52,14 @@ has 'config_file' => (
 	default => 'zircbot.conf',
 );
 
-has 'db_file' => (
-	is => 'ro',
-	default => 'zircbot.db',
-);
-
 has 'config' => (
 	is => 'lazy',
 	init_arg => undef,
+);
+
+has 'db_file' => (
+	is => 'ro',
+	default => 'zircbot.db',
 );
 
 has 'db' => (
@@ -74,17 +74,18 @@ has 'commands' => (
 	init_arg => undef,
 );
 
-has 'irc' => (
+has 'logger' => (
 	is => 'lazy',
-	isa => sub { die 'Invalid IRC object' unless defined $_[0] and blessed $_[0] and $_[0]->isa('POE::Component::IRC') },
 	init_arg => undef,
+	clearer => 1,
 );
 
-has 'resolver' => (
-	is => 'lazy',
-	isa => sub { die 'Invalid resolver object' unless defined $_[0] and blessed $_[0] and $_[0]->isa('POE::Component::Client::DNS') },
-	init_arg => undef,
-);
+sub _build_logger {
+	my $self = shift;
+	my $logger = Mojo::Log->new;
+	$logger->level('info') unless $self->config->{main}{debug};
+	return $logger;
+}
 
 has 'is_stopping' => (
 	is => 'rw',
@@ -103,47 +104,29 @@ sub BUILD {
 	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
 
-sub get_poe_events {
+sub start {
 	my $self = shift;
-	return (@poe_events, $self->get_irc_events, $self->get_dns_events);
+	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
+	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
+	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 
-sub create_poe_session {
+sub stop {
 	my $self = shift;
-	my @session_events = $self->get_poe_events;
-	POE::Session->create(
-		object_states => [
-			$self => \@session_events,
-		],
-	);
-}
-
-sub _start {
-	my $self = $_[OBJECT];
-	my $kernel = $_[KERNEL];
-	
-	$kernel->sig(TERM => 'sig_terminate');
-	$kernel->sig(INT => 'sig_terminate');
-	$kernel->sig(QUIT => 'sig_terminate');
-	
-	$self->hook_start;
-}
-
-sub hook_start {
-}
-
-sub sig_terminate {
-	my $self = $_[OBJECT];
-	my $kernel = $_[KERNEL];
-	my $signal = $_[ARG0];
-	
-	$self->print_debug("Received signal SIG$signal");
 	$self->is_stopping(1);
-	$self->hook_stop;
-	$kernel->sig_handled;
 }
 
-sub hook_stop {
+sub sig_stop {
+	my ($self, $signal) = @_;
+	$self->logger->debug("Received signal SIG$signal, stopping");
+	$self->stop;
+}
+
+sub sig_reload {
+	my ($self, $signal) = @_;
+	$self->logger->debug("Received signal SIG$signal, reloading");
+	$self->clear_logger;
+	$self->_reload_config;
 }
 
 sub _build_config {
@@ -238,24 +221,6 @@ sub _store_db {
 	open my $db_fh, '>', $db_file or die $!;
 	print $db_fh $db_json;
 	close $db_fh;
-	return 1;
-}
-
-sub print_debug {
-	my $self = shift;
-	$self->print_log(@_) if $self->config->{main}{debug};
-}
-
-sub print_echo {
-	my $self = shift;
-	$self->print_log(@_) if $self->config->{main}{echo};
-}
-
-sub print_log {
-	my $self = shift;
-	my @msgs = @_;
-	my $localtime = scalar localtime;
-	print "[ $localtime ] $_\n" foreach @msgs;
 	return 1;
 }
 
