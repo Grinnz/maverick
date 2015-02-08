@@ -2,6 +2,7 @@ package ZIRCBot::IRC;
 
 use Carp;
 use List::Util 'any';
+use IRC::Utils 'parse_user';
 use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
@@ -156,7 +157,7 @@ sub irc_default {
 	my ($self, $irc, $message) = @_;
 	my $command = $message->{command} // '';
 	my $params_str = join ', ', map { "'$_'" } @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("[$command] <$from> [ $params_str ]");
 }
 
@@ -340,35 +341,35 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 sub irc_notice {
 	my ($self, $irc, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->info("[notice $to] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_public {
 	my ($self, $irc, $message) = @_;
 	my ($channel, $msg) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_privmsg {
 	my ($self, $irc, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_invite {
 	my ($self, $irc, $message) = @_;
 	my ($to, $channel) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has invited $to to $channel");
 }
 
 sub irc_kick {
 	my ($self, $irc, $message) = @_;
 	my ($channel, $to) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has kicked $to from $channel");
 	$self->channel($channel)->remove_user($to);
 	$self->user($to)->remove_channel($channel);
@@ -381,10 +382,11 @@ sub irc_kick {
 sub irc_join {
 	my ($self, $irc, $message) = @_;
 	my ($channel) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from joined $channel");
 	if ($from eq $irc->nick) {
 		$self->channel($channel);
+		$irc->write(privmsg => $channel, ('a'x1000).'b');
 	}
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
@@ -394,7 +396,7 @@ sub irc_join {
 sub irc_part {
 	my ($self, $irc, $message) = @_;
 	my ($channel) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from parted $channel");
 	if ($from eq $irc->nick) {
 	}
@@ -404,7 +406,7 @@ sub irc_part {
 
 sub irc_quit {
 	my ($self, $irc, $message) = @_;
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has quit");
 	$_->remove_user($from) foreach values %{$self->channels};
 	$self->user($from)->clear_channels;
@@ -413,7 +415,7 @@ sub irc_quit {
 sub irc_nick {
 	my ($self, $irc, $message) = @_;
 	my ($to) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
 	$self->user($from)->nick($to);
@@ -423,7 +425,7 @@ sub irc_nick {
 sub irc_mode {
 	my ($self, $irc, $message) = @_;
 	my ($to, $mode, @params) = @{$message->{params}};
-	my $from = parse_from_nick($message->{prefix});
+	my $from = parse_user($message->{prefix});
 	my $params_str = join ' ', @params;
 	if ($to =~ /^#/) {
 		my $channel = $to;
@@ -438,14 +440,6 @@ sub irc_mode {
 		my $user = $to;
 		$self->logger->debug("User $from changed mode of $user to $mode $params_str");
 	}
-}
-
-# Helper functions
-
-sub parse_from_nick {
-	my $prefix = shift // return undef;
-	$prefix =~ /^([^!]+)/ and return $1;
-	return '';
 }
 
 1;
