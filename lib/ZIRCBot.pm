@@ -102,7 +102,7 @@ sub start {
 	my $self = shift;
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
-	$SIG{__WARN__} = sub { $self->logger->warn(@_) };
+	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 
