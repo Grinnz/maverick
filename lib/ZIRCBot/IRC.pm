@@ -66,7 +66,7 @@ after 'stop' => sub {
 	my $irc = $self->irc;
 	
 	$self->logger->debug("Disconnecting from server");
-	$irc->disconnect;
+	$irc->disconnect(sub {});
 };
 
 sub irc_connected {
