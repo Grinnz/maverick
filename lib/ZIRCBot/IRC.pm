@@ -1,16 +1,19 @@
 package ZIRCBot::IRC;
 
 use Mojo::IRC;
+use Mojo::Util 'dumper';
 use Parse::IRC;
 use Scalar::Util 'weaken';
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
-my @irc_events = qw/irc_375 irc_372 irc_376 irc_422 irc_331 irc_332 irc_333 irc_352 irc_315
-	irc_311 irc_319 irc_301 irc_313 irc_330 irc_335 irc_317 irc_318
-	irc_notice irc_public irc_privmsg irc_whois
-	irc_invite irc_kick irc_join irc_part irc_nick irc_mode/;
+my @irc_events = qw/irc_333 irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
+	irc_rpl_notopic irc_rpl_topic irc_rpl_whoreply irc_rpl_endofwho
+	irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
+	irc_rpl_whoisaccount irc_rpl_whoisidle irc_rpl_endofwhois
+	irc_notice irc_public irc_privmsg irc_whois irc_invite irc_kick irc_join
+	irc_part irc_nick irc_mode/;
 sub get_irc_events { @irc_events }
 
 has 'irc' => (
@@ -69,6 +72,8 @@ after 'stop' => sub {
 	$irc->disconnect(sub {});
 };
 
+# IRC methods
+
 sub irc_connected {
 	my ($self, $irc, $err) = @_;
 	if ($err) {
@@ -111,88 +116,128 @@ sub irc_disconnected {
 	}
 }
 
-sub irc_375 { # RPL_MOTDSTART
+# IRC event callbacks
+
+sub irc_rpl_motdstart { # RPL_MOTDSTART
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_372 { # RPL_MOTD
-} # prevent MOTD from showing up in the debug output
-
-sub irc_376 { # RPL_ENDOFMOTD
+sub irc_rpl_endofmotd { # RPL_ENDOFMOTD
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_422 { # ERR_NOMOTD
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_331 { # RPL_NOTOPIC
+sub irc_rpl_notopic { # RPL_NOTOPIC
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_332 { # RPL_TOPIC
+sub irc_rpl_topic { # RPL_TOPIC
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_333 { # topic info
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_352 { # RPL_WHOREPLY
+sub irc_rpl_whoreply { # RPL_WHOREPLY
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_315 { # RPL_ENDOFWHO
+sub irc_rpl_endofwho { # RPL_ENDOFWHO
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_311 { # RPL_WHOISUSER
+sub irc_rpl_whoisuser { # RPL_WHOISUSER
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_319 { # RPL_WHOISCHANNELS
+sub irc_rpl_whoischannels { # RPL_WHOISCHANNELS
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_301 { # RPL_AWAY
+sub irc_rpl_away { # RPL_AWAY
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_313 { # RPL_WHOISOPERATOR
+sub irc_rpl_whoisoperator { # RPL_WHOISOPERATOR
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_330 { # RPL_WHOISACCOUNT
+sub irc_rpl_whoisaccount { # RPL_WHOISACCOUNT
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_335 { # whois bot string
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_317 { # RPL_WHOISIDLE
+sub irc_rpl_whoisidle { # RPL_WHOISIDLE
+	my ($self, $irc, $message) = @_;
 }
 
-sub irc_318 { # RPL_ENDOFWHOIS
+sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_notice {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_public {
+	my ($self, $irc, $message) = @_;
+	my ($channel, $msg) = @{$message->{params}};
+	my $from = parse_from_nick($message->{prefix});
+	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_privmsg {
+	my ($self, $irc, $message) = @_;
+	my ($to, $msg) = @{$message->{params}};
+	my $from = parse_from_nick($message->{prefix});
+	$self->logger->info("[privmsg] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_whois {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_invite {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_kick {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_join {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_part {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_quit {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_nick {
+	my ($self, $irc, $message) = @_;
 }
 
 sub irc_mode {
+	my ($self, $irc, $message) = @_;
+}
+
+# Helper functions
+
+sub parse_from_nick {
+	my $prefix = shift // return undef;
+	$prefix =~ /^([^!]+)/ and return $1;
+	return undef;
 }
 
 1;
