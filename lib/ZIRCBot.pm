@@ -18,37 +18,28 @@ sub bot_version { return $VERSION }
 
 with 'ZIRCBot::DNS';
 
-my %irc_handlers = (
-	'socialgamer' => 'ZIRCBot::IRC::SocialGamer',
-	'freenode' => 'ZIRCBot::IRC::Freenode',
-	'gamesurge' => 'ZIRCBot::IRC::GameSurge',
-);
-
-sub get_irc_handler {
-	my $type = shift // return undef;
-	return undef unless exists $irc_handlers{$type};
-	return $irc_handlers{$type};
-}
-
-has 'irc_handler' => (
+has 'irc_role' => (
 	is => 'ro',
-	isa => sub { die 'Invalid IRC handler' unless get_irc_handler($_[0]) },
-	default => 'socialgamer',
+	lazy => 1,
+	default => 'Freenode',
 );
 
 has 'nick' => (
 	is => 'rwp',
+	lazy => 1,
 	default => 'ZIRCBot',
 );
 
 has 'config_dir' => (
 	is => 'ro',
+	lazy => 1,
 	trigger => sub { my ($self, $path) = @_; make_path($path); },
 	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zircbot'); make_path($path); return $path },
 );
 
 has 'config_file' => (
 	is => 'ro',
+	lazy => 1,
 	default => 'zircbot.conf',
 );
 
@@ -59,6 +50,7 @@ has 'config' => (
 
 has 'db_file' => (
 	is => 'ro',
+	lazy => 1,
 	default => 'zircbot.db',
 );
 
@@ -82,13 +74,15 @@ has 'logger' => (
 
 sub _build_logger {
 	my $self = shift;
-	my $logger = Mojo::Log->new;
+	my $path = $self->config->{main}{logfile} || undef;
+	my $logger = Mojo::Log->new(path => $path);
 	$logger->level('info') unless $self->config->{main}{debug};
 	return $logger;
 }
 
 has 'is_stopping' => (
 	is => 'rw',
+	lazy => 1,
 	coerce => sub { $_[0] ? 1 : 0 },
 	default => 0,
 	init_arg => undef,
@@ -96,11 +90,9 @@ has 'is_stopping' => (
 
 sub BUILD {
 	my $self = shift;
-	
-	my $irc_handler = $self->irc_handler;
-	my $irc_role = get_irc_handler($irc_handler);
-	die "Could not find role for IRC handler $irc_handler\n" unless $irc_role;
+	my $irc_role = $self->irc_role // die 'Invalid IRC handler';
 	require Role::Tiny;
+	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /^ZIRCBot::IRC::/;
 	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
 
@@ -108,6 +100,7 @@ sub start {
 	my $self = shift;
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
+	$SIG{__WARN__} = sub { $self->logger->warn(@_) };
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 

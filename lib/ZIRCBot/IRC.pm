@@ -35,7 +35,8 @@ sub _connect_options {
 	die "IRC server is not configured\n" unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
 	$nick //= 'ZIRCBot',
-	$realname = sprintf 'ZIRCBot %s by %s', $self->bot_version, 'Grinnz' unless length $realname;
+	$realname = sprintf 'ZIRCBot %s by %s', $self->bot_version, 'Grinnz'
+		unless defined $realname and length $realname;
 	my %options = (
 		server => $server,
 		nick => $nick,
@@ -64,7 +65,7 @@ before 'start' => sub {
 	$irc->connect(sub { $self->irc_connected(@_) });
 };
 
-after 'stop' => sub {
+before 'stop' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
 	

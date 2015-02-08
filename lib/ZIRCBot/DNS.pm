@@ -25,7 +25,7 @@ sub _build_resolver {
 	return Net::DNS::Native->new;
 }
 
-after 'stop' => sub {
+before 'stop' => sub {
 	my $self = shift;
 	foreach my $sock (values %{$self->watchers}) {
 		Mojo::IOLoop->singleton->reactor->remove($sock);
