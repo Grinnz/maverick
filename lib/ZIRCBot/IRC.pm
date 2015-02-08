@@ -18,7 +18,7 @@ my @irc_events = qw/irc_333 irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
 	irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
 	irc_rpl_whoisaccount irc_rpl_whoisidle irc_rpl_endofwhois
 	irc_notice irc_public irc_privmsg irc_invite irc_kick irc_join
-	irc_part irc_quit irc_nick irc_mode/;
+	irc_part irc_quit irc_nick irc_mode irc_default/;
 sub get_irc_events { @irc_events }
 
 has 'channels' => (
@@ -149,6 +149,14 @@ sub irc_disconnected {
 }
 
 # IRC event callbacks
+
+sub irc_default {
+	my ($self, $irc, $message) = @_;
+	my $command = $message->{command} // '';
+	my $params_str = join ', ', map { "'$_'" } @{$message->{params}};
+	my $from = parse_from_nick($message->{prefix});
+	$self->logger->debug("[$command] <$from> [ $params_str ]");
+}
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART
 	my ($self, $irc, $message) = @_;
