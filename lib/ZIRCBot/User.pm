@@ -26,6 +26,20 @@ has 'realname' => (
 	is => 'rw',
 );
 
+sub hostmask {
+	my $self = shift;
+	my $nick = $self->nick // '';
+	my $username = $self->username // '';
+	my $host = $self->host // '';
+	return "$nick!$username\@$host";
+}
+
+sub banmask {
+	my $self = shift;
+	my $host = $self->nick // '';
+	return "*!*\@$host";
+}
+
 has 'is_away' => (
 	is => 'rw',
 	lazy => 1,

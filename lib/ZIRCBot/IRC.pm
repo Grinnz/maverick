@@ -14,6 +14,8 @@ use ZIRCBot::User;
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
+use constant IRC_MAX_MESSAGE_LENGTH => 510;
+
 my @irc_events = qw/irc_333 irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
 	irc_rpl_notopic irc_rpl_topic irc_rpl_namreply irc_rpl_whoreply irc_rpl_endofwho
 	irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
@@ -80,6 +82,13 @@ sub _connect_options {
 	return %options;
 }
 
+has 'check_recurring_timer' => (
+	is => 'rw',
+	lazy => 1,
+	predicate => 1,
+	clearer => 1,
+);
+
 before 'start' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
@@ -117,6 +126,7 @@ sub irc_connected {
 	} else {
 		$self->irc_identify($irc);
 		$self->irc_autojoin($irc);
+		$self->irc_check_recurring($irc);
 	}
 }
 
@@ -136,19 +146,64 @@ sub irc_autojoin {
 	return unless @channels;
 	my $channels_str = join ', ', @channels;
 	$self->logger->debug("Joining channels: $channels_str");
-	$irc->write(join => $_) for @channels;
+	while (my @chunk = splice @channels, 0, 10) {
+		$irc->write(join => join(',', @chunk));
+	}
+}
+
+sub irc_check_recurring {
+	my ($self, $irc) = @_;
+	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
+	weaken $self;
+	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->irc_check($irc) });
+	$self->check_recurring_timer($timer_id);
+}
+
+sub irc_check {
+	my ($self, $irc) = @_;
+	my $desired = $self->config->{irc}{nick};
+	unless (lc $desired eq lc substr $irc->nick, 0, length $desired) {
+		$irc->write(nick => $desired);
+		$irc->write(whois => $desired);
+	} else {
+		$irc->write(whois => $irc->nick);
+	}
 }
 
 sub irc_disconnected {
-	my $self = shift;
-	my $irc = $self->irc;
+	my ($self, $irc) = @_;
 	$self->logger->debug("Disconnected from server");
+	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
+	$self->clear_check_recurring_timer;
 	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
 		my $server = $irc->server;
 		$self->logger->debug("Reconnecting to $server");
 		weaken $self;
-		Mojo::IOLoop->next_tick(sub { $irc->connect(sub { $self->irc_connected(@_) }) });
+		$irc->connect(sub { $self->irc_connected(@_) });
 	}
+}
+
+sub irc_limit_msg {
+	my ($self, @args) = @_;
+	my $msg = pop @args;
+	my $hostmask = $self->user($self->irc->nick)->hostmask;
+	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
+	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
+	$msg = substr($msg, 0, ($allowed_len-3)).'...' if length $msg > $allowed_len;
+	return (@args, $msg);
+}
+
+sub irc_split_msg {
+	my ($self, @args) = @_;
+	my $msg = pop @args;
+	my $hostmask = $self->user($self->irc->nick)->hostmask;
+	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
+	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
+	my @returns;
+	while (my $chunk = substr $msg, 0, $allowed_len, '') {
+		push @returns, [@args, $chunk];
+	}
+	return \@returns;
 }
 
 # IRC event callbacks
@@ -166,6 +221,7 @@ sub irc_rpl_welcome {
 	my ($to) = @{$message->{params}};
 	$self->logger->debug("Set nick to $to");
 	$irc->nick($to);
+	$irc->write(whois => $irc->nick);
 }
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART
@@ -241,6 +297,8 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_bot($bot);
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
+	
+	$self->irc_identify if lc $nick eq lc $irc->nick and !$reg;
 }
 
 sub irc_rpl_endofwho { # RPL_ENDOFWHO
@@ -336,6 +394,7 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my ($self, $irc, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("End of whois reply for $nick");
+	$self->irc_identify if lc $nick eq lc $irc->nick and !$self->user($nick)->is_registered;
 }
 
 sub irc_notice {
@@ -386,11 +445,10 @@ sub irc_join {
 	$self->logger->debug("User $from joined $channel");
 	if ($from eq $irc->nick) {
 		$self->channel($channel);
-		$irc->write(privmsg => $channel, ('a'x1000).'b');
 	}
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
-	$irc->write(whois => $from);
+	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
 }
 
 sub irc_part {
