@@ -1,6 +1,7 @@
 package ZIRCBot::IRC;
 
 use Carp;
+use Future;
 use List::Util 'any';
 use IRC::Utils 'parse_user';
 use Mojo::IRC;
@@ -17,11 +18,12 @@ use warnings NONFATAL => 'all';
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
 my @irc_events = qw/irc_default irc_invite irc_join irc_kick irc_mode irc_nick
-	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_motdstart
-	irc_rpl_endofmotd irc_rpl_notopic irc_rpl_topic irc_rpl_topicwhotime
-	irc_rpl_namreply irc_rpl_whoreply irc_rpl_endofwho irc_rpl_whoisuser
-	irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
-	irc_rpl_whoisaccount irc_rpl_whoisidle irc_rpl_endofwhois irc_335 irc_422/;
+	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_welcome
+	irc_rpl_motdstart irc_rpl_endofmotd err_nomotd irc_rpl_notopic
+	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
+	irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away
+	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
+	irc_rpl_endofwhois/;
 sub get_irc_events { @irc_events }
 
 has 'channels' => (
@@ -93,14 +95,12 @@ before 'start' => sub {
 	my $self = shift;
 	my $irc = $self->irc;
 	
+	$irc->register_default_event_handlers;
 	weaken $self;
 	foreach my $event ($self->get_irc_events) {
 		my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
 		$irc->on($event => sub { $self->$handler(@_) });
 	}
-	$irc->register_default_event_handlers;
-	my $handler = $self->can('irc_rpl_welcome');
-	$irc->on(irc_rpl_welcome => sub { $self->$handler(@_) });
 	$irc->on(close => sub { $self->irc_disconnected($_[0]) });
 	$irc->on(error => sub { $self->logger->error($_[1]); $_[0]->disconnect; });
 	
@@ -234,6 +234,11 @@ sub irc_join {
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
 	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
+	$self->queue_event_future(Future->new->on_done(sub {
+		my ($self, $irc, $user) = @_;
+		my $identity = $user->identity // 'unidentified creature';
+		$irc->write(privmsg => $channel, "Hello, $identity");
+	}), 'whois', $from);
 }
 
 sub irc_kick {
@@ -276,7 +281,6 @@ sub irc_nick {
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
 	$self->user($from)->nick($to);
-	$irc->nick($to) if lc $from eq lc $irc->nick;
 }
 
 sub irc_notice {
@@ -335,7 +339,7 @@ sub irc_rpl_endofmotd { # RPL_ENDOFMOTD
 	my ($self, $irc, $message) = @_;
 }
 
-sub irc_422 { # ERR_NOMOTD
+sub err_nomotd { # ERR_NOMOTD
 	my ($self, $irc, $message) = @_;
 }
 
@@ -353,7 +357,7 @@ sub irc_rpl_topic { # RPL_TOPIC
 	$self->channel($channel)->topic($topic);
 }
 
-sub irc_rpl_topicwhotime { # topic info
+sub irc_rpl_topicwhotime { # RPL_TOPICWHOTIME
 	my ($self, $irc, $message) = @_;
 	my ($to, $channel, $who, $time) = @{$message->{params}};
 	my $time_str = localtime($time);
@@ -401,6 +405,9 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_bot($bot);
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
+	
+	my $futures = $self->get_event_futures('who', $nick);
+	$_->done($self, $irc, $user) for @$futures;
 	
 	$self->irc_identify if lc $nick eq lc $irc->nick and !$reg;
 }
@@ -455,6 +462,9 @@ sub irc_rpl_away { # RPL_AWAY
 	my $user = $self->user($nick);
 	$user->is_away(1);
 	$user->away_message($msg);
+	
+	my $futures = $self->get_event_futures('away', $nick);
+	$_->done($self, $irc, $user) for @$futures;
 }
 
 sub irc_rpl_whoisoperator { # RPL_WHOISOPERATOR
@@ -498,6 +508,11 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my ($self, $irc, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("End of whois reply for $nick");
+	
+	my $user = $self->user($nick);
+	my $futures = $self->get_event_futures('whois', $nick);
+	$_->done($self, $irc, $user) for @$futures;
+	
 	$self->irc_identify if lc $nick eq lc $irc->nick and !$self->user($nick)->is_registered;
 }
 

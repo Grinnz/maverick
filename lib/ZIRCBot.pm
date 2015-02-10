@@ -66,6 +66,13 @@ has 'commands' => (
 	init_arg => undef,
 );
 
+has 'futures' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 has 'logger' => (
 	is => 'lazy',
 	init_arg => undef,
@@ -127,6 +134,7 @@ sub sig_reload {
 
 sub user_access_level {
 	my ($self, $user) = @_;
+	croak 'No user nick specified' unless defined $user;
 	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
 	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
 		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
@@ -135,6 +143,31 @@ sub user_access_level {
 		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
 	}
 	return ACCESS_NONE;
+}
+
+sub queue_event_future {
+	my ($self, $future, $event, $key) = @_;
+	croak 'No future given' unless defined $future;
+	croak 'No event given' unless defined $event;
+	my $futures = $self->futures->{$event} //= {};
+	my $future_list = defined $key
+		? ($futures->{by_key}{lc $key} //= [])
+		: ($futures->{list} //= []);
+	push @$future_list, ref $future eq 'ARRAY' ? @$future : $future;
+	return $self;
+}
+
+sub get_event_futures {
+	my ($self, $event, $key) = @_;
+	croak 'No event given' unless defined $event;
+	return undef unless exists $self->futures->{$event};
+	my $futures = $self->futures->{$event};
+	my $future_list = defined $key
+		? delete $futures->{by_key}{lc $key}
+		: delete $futures->{list};
+	delete $self->futures->{$event} unless exists $futures->{list}
+		or keys %{$futures->{by_key}};
+	return $future_list // [];
 }
 
 sub _build_config {
