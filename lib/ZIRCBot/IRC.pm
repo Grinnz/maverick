@@ -16,12 +16,12 @@ use warnings NONFATAL => 'all';
 
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
-my @irc_events = qw/irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
-	irc_rpl_notopic irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply
-	irc_rpl_whoreply irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels
-	irc_rpl_away irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle
-	irc_rpl_endofwhois irc_notice irc_public irc_privmsg irc_invite irc_kick
-	irc_join irc_part irc_quit irc_nick irc_mode irc_default/;
+my @irc_events = qw/irc_default irc_invite irc_join irc_kick irc_mode irc_nick
+	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_motdstart
+	irc_rpl_endofmotd irc_rpl_notopic irc_rpl_topic irc_rpl_topicwhotime
+	irc_rpl_namreply irc_rpl_whoreply irc_rpl_endofwho irc_rpl_whoisuser
+	irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
+	irc_rpl_whoisaccount irc_rpl_whoisidle irc_rpl_endofwhois irc_335 irc_422/;
 sub get_irc_events { @irc_events }
 
 has 'channels' => (
@@ -216,6 +216,109 @@ sub irc_default {
 	$self->logger->debug("[$command] <$from> [ $params_str ]");
 }
 
+sub irc_invite {
+	my ($self, $irc, $message) = @_;
+	my ($to, $channel) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from has invited $to to $channel");
+}
+
+sub irc_join {
+	my ($self, $irc, $message) = @_;
+	my ($channel) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from joined $channel");
+	if ($from eq $irc->nick) {
+		$self->channel($channel);
+	}
+	$self->channel($channel)->add_user($from);
+	$self->user($from)->add_channel($channel);
+	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
+}
+
+sub irc_kick {
+	my ($self, $irc, $message) = @_;
+	my ($channel, $to) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from has kicked $to from $channel");
+	$self->channel($channel)->remove_user($to);
+	$self->user($to)->remove_channel($channel);
+	if (lc $to eq lc $irc->nick and any { lc $_ eq lc $channel }
+			split /[\s,]+/, $self->config->{channels}{autojoin}) {
+		$irc->write(join => $channel);
+	}
+}
+
+sub irc_mode {
+	my ($self, $irc, $message) = @_;
+	my ($to, $mode, @params) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	my $params_str = join ' ', @params;
+	if ($to =~ /^#/) {
+		my $channel = $to;
+		$self->logger->debug("User $from changed mode of $channel to $mode $params_str");
+		if (@params and $mode =~ /[qaohvbe]/) {
+			if ($mode =~ /[qaohv]/) {
+				$irc->write('who', '+cn', $channel, $_)
+					for grep { lc $_ ne lc $irc->nick } @params;
+			}
+		}
+	} else {
+		my $user = $to;
+		$self->logger->debug("User $from changed mode of $user to $mode $params_str");
+	}
+}
+
+sub irc_nick {
+	my ($self, $irc, $message) = @_;
+	my ($to) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from changed nick to $to");
+	$_->rename_user($from => $to) foreach values %{$self->channels};
+	$self->user($from)->nick($to);
+	$irc->nick($to) if lc $from eq lc $irc->nick;
+}
+
+sub irc_notice {
+	my ($self, $irc, $message) = @_;
+	my ($to, $msg) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->info("[notice $to] <$from> $msg") if $self->config->{main}{echo};
+}
+
+sub irc_part {
+	my ($self, $irc, $message) = @_;
+	my ($channel) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from parted $channel");
+	if ($from eq $irc->nick) {
+	}
+	$self->channel($channel)->remove_user($from);
+	$self->user($from)->remove_channel($channel);
+}
+
+sub irc_privmsg {
+	my ($self, $irc, $message) = @_;
+	my ($to, $msg) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->info("[private] <$from> $msg") if $self->config->{main}{echo};
+}
+
+sub irc_public {
+	my ($self, $irc, $message) = @_;
+	my ($channel, $msg) = @{$message->{params}};
+	my $from = parse_user($message->{prefix});
+	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
+}
+
+sub irc_quit {
+	my ($self, $irc, $message) = @_;
+	my $from = parse_user($message->{prefix});
+	$self->logger->debug("User $from has quit");
+	$_->remove_user($from) foreach values %{$self->channels};
+	$self->user($from)->clear_channels;
+}
+
 sub irc_rpl_welcome {
 	my ($self, $irc, $message) = @_;
 	my ($to) = @{$message->{params}};
@@ -396,109 +499,6 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("End of whois reply for $nick");
 	$self->irc_identify if lc $nick eq lc $irc->nick and !$self->user($nick)->is_registered;
-}
-
-sub irc_notice {
-	my ($self, $irc, $message) = @_;
-	my ($to, $msg) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->info("[notice $to] <$from> $msg") if $self->config->{main}{echo};
-}
-
-sub irc_public {
-	my ($self, $irc, $message) = @_;
-	my ($channel, $msg) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
-}
-
-sub irc_privmsg {
-	my ($self, $irc, $message) = @_;
-	my ($to, $msg) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->info("[private] <$from> $msg") if $self->config->{main}{echo};
-}
-
-sub irc_invite {
-	my ($self, $irc, $message) = @_;
-	my ($to, $channel) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from has invited $to to $channel");
-}
-
-sub irc_kick {
-	my ($self, $irc, $message) = @_;
-	my ($channel, $to) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from has kicked $to from $channel");
-	$self->channel($channel)->remove_user($to);
-	$self->user($to)->remove_channel($channel);
-	if (lc $to eq lc $irc->nick and any { lc $_ eq lc $channel }
-			split /[\s,]+/, $self->config->{channels}{autojoin}) {
-		$irc->write(join => $channel);
-	}
-}
-
-sub irc_join {
-	my ($self, $irc, $message) = @_;
-	my ($channel) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from joined $channel");
-	if ($from eq $irc->nick) {
-		$self->channel($channel);
-	}
-	$self->channel($channel)->add_user($from);
-	$self->user($from)->add_channel($channel);
-	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
-}
-
-sub irc_part {
-	my ($self, $irc, $message) = @_;
-	my ($channel) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from parted $channel");
-	if ($from eq $irc->nick) {
-	}
-	$self->channel($channel)->remove_user($from);
-	$self->user($from)->remove_channel($channel);
-}
-
-sub irc_quit {
-	my ($self, $irc, $message) = @_;
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from has quit");
-	$_->remove_user($from) foreach values %{$self->channels};
-	$self->user($from)->clear_channels;
-}
-
-sub irc_nick {
-	my ($self, $irc, $message) = @_;
-	my ($to) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("User $from changed nick to $to");
-	$_->rename_user($from => $to) foreach values %{$self->channels};
-	$self->user($from)->nick($to);
-	$irc->nick($to) if lc $from eq lc $irc->nick;
-}
-
-sub irc_mode {
-	my ($self, $irc, $message) = @_;
-	my ($to, $mode, @params) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	my $params_str = join ' ', @params;
-	if ($to =~ /^#/) {
-		my $channel = $to;
-		$self->logger->debug("User $from changed mode of $channel to $mode $params_str");
-		if (@params and $mode =~ /[qaohvbe]/) {
-			if ($mode =~ /[qaohv]/) {
-				$irc->write('who', '+cn', $channel, $_)
-					for grep { lc $_ ne lc $irc->nick } @params;
-			}
-		}
-	} else {
-		my $user = $to;
-		$self->logger->debug("User $from changed mode of $user to $mode $params_str");
-	}
 }
 
 1;
