@@ -1,7 +1,5 @@
 package ZIRCBot::User;
 
-use strict;
-use warnings;
 use Carp;
 use ZIRCBot::Access;
 
@@ -118,8 +116,8 @@ has 'signon_time' => (
 has 'bot_access' => (
 	is => 'rw',
 	lazy => 1,
-	default => ACCESS_NONE,
 	init_arg => undef,
+	predicate => 1,
 	clearer => 1,
 );
 

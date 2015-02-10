@@ -1,29 +1,52 @@
 package ZIRCBot::Command;
 
+use Carp;
 use ZIRCBot::Access;
-use Scalar::Util 'blessed';
 
-use Moo::Role;
+use Moo;
 use warnings NONFATAL => 'all';
+use namespace::clean;
 
-requires 'name', 'strip_special', 'default_access', 'default_enabled';
+our @CARP_NOT = qw(ZIRCBot ZIRCBot::IRC Moo);
+
+has 'name' => (
+	is => 'ro',
+	isa => sub { croak "Invalid command name $_[0]"
+		unless defined $_[0] and $_[0] =~ /^\w+$/ },
+	required => 1,
+);
+
+has 'on_run' => (
+	is => 'ro',
+	isa => sub { croak "Invalid on_run subroutine $_[0]"
+		unless defined $_[0] and ref $_[0] eq 'CODE' },
+	required => 1,
+);
 
 has 'required_access' => (
 	is => 'rw',
-	isa => sub { die 'Invalid access level' unless ZIRCBot::Access::valid_access_level($_[0]) },
-	builder => 'default_access',
+	isa => sub { croak "Invalid access level $_[0]"
+		unless ZIRCBot::Access::valid_access_level($_[0]) },
+	lazy => 1,
+	default => ACCESS_NONE,
+);
+
+has 'strip_formatting' => (
+	is => 'ro',
+	coerce => sub { $_[0] ? 1 : 0 },
+	lazy => 1,
+	default => 1,
 );
 
 has 'is_enabled' => (
 	is => 'rw',
 	coerce => sub { $_[0] ? 1 : 0 },
-	builder => 'default_enabled',
+	lazy => 1,
+	default => 1,
 );
 
-has 'bot' => (
+has 'help_text' => (
 	is => 'ro',
-	isa => sub { die 'Invalid ZIRCBot reference' unless defined $_[0] and blessed $_[0] and $_[0]->isa('ZIRCBot') },
-	weak_ref => 1,
 );
 
 1;

@@ -206,6 +206,53 @@ sub irc_split_msg {
 	return \@returns;
 }
 
+sub irc_check_command {
+	my ($self, $irc, $sender, $channel, $message) = @_;
+	my ($command, @args) = $self->parse_command($irc, $sender, $channel, $message);
+	return unless defined $command;
+	
+	my $check = $self->check_command_access($irc, $sender, $channel, $command);
+	unless (defined $check) {
+		$self->logger->debug("Don't know identity of $sender; rechecking after whois");
+		$self->queue_event_future(Future->new->on_done(sub {
+			my ($self, $irc, $user) = @_;
+			my $check = $self->check_command_access($irc, $sender, $channel, $command);
+			my $cmd_name = $command->name;
+			if ($check) {
+				$self->logger->debug("$sender has access to run command $cmd_name");
+				$self->irc_run_command($irc, $sender, $channel, $command, @args);
+			} else {
+				$self->logger->debug("$sender does not have access to run command $cmd_name");
+				my $channel_str = defined $channel ? " in $channel" : '';
+				$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
+			}
+		}), 'whois', $sender);
+		$irc->write(whois => $sender);
+		return;
+	}
+	my $cmd_name = $command->name;
+	if ($check) {
+		$self->logger->debug("$sender has access to run command $cmd_name");
+		$self->irc_run_command($irc, $sender, $channel, $command, @args);
+	} else {
+		$self->logger->debug("$sender does not have access to run command $cmd_name");
+		my $channel_str = defined $channel ? " in $channel" : '';
+		$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
+	}
+}
+
+sub irc_run_command {
+	my ($self, $irc, $sender, $channel, $command, @args) = @_;
+	local $@;
+	eval { $command->on_run->($self, $irc, $sender, $channel, @args); 1 };
+	if ($@) {
+		my $err = $@;
+		chomp $err;
+		my $cmd_name = $command->name;
+		warn "Error running command $cmd_name: $err\n";
+	}
+}
+
 # IRC event callbacks
 
 sub irc_default {
@@ -234,11 +281,6 @@ sub irc_join {
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
 	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
-	$self->queue_event_future(Future->new->on_done(sub {
-		my ($self, $irc, $user) = @_;
-		my $identity = $user->identity // 'unidentified creature';
-		$irc->write(privmsg => $channel, "Hello, $identity");
-	}), 'whois', $from);
 }
 
 sub irc_kick {
@@ -306,6 +348,7 @@ sub irc_privmsg {
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->{main}{echo};
+	$self->irc_check_command($irc, $from, undef, $msg);
 }
 
 sub irc_public {
@@ -313,6 +356,7 @@ sub irc_public {
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
+	$self->irc_check_command($irc, $from, $channel, $msg);
 }
 
 sub irc_quit {
@@ -513,7 +557,7 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my $futures = $self->get_event_futures('whois', $nick);
 	$_->done($self, $irc, $user) for @$futures;
 	
-	$self->irc_identify if lc $nick eq lc $irc->nick and !$self->user($nick)->is_registered;
+	$self->irc_identify if lc $nick eq lc $irc->nick and !$user->is_registered;
 }
 
 1;

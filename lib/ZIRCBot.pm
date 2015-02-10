@@ -6,17 +6,19 @@ use Carp;
 use Config::IniFiles;
 use File::Spec;
 use File::Path 'make_path';
+use IRC::Utils;
 use List::Util 'any';
 use Mojo::IOLoop;
 use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
+use Scalar::Util 'blessed';
 use ZIRCBot::Access;
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 sub bot_version { return $VERSION }
 
 with 'ZIRCBot::DNS';
@@ -24,7 +26,7 @@ with 'ZIRCBot::DNS';
 has 'irc_role' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'Freenode',
+	default => 'ZIRCBot::IRC',
 );
 
 has 'config_dir' => (
@@ -59,7 +61,21 @@ has 'db' => (
 	init_arg => undef,
 );
 
+has 'plugins' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 has 'commands' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
+has 'command_prefixes' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -100,9 +116,9 @@ sub BUILD {
 	
 	$self->_load_config($self->config);
 	
-	my $irc_role = $self->irc_role // die 'Invalid IRC handler';
-	require Role::Tiny;
+	my $irc_role = $self->irc_role;
 	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /::/;
+	require Role::Tiny;
 	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
 
@@ -132,22 +148,10 @@ sub sig_reload {
 	$self->_reload_config;
 }
 
-sub user_access_level {
-	my ($self, $user) = @_;
-	croak 'No user nick specified' unless defined $user;
-	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
-	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
-		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
-	}
-	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
-		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
-	}
-	return ACCESS_NONE;
-}
-
 sub queue_event_future {
 	my ($self, $future, $event, $key) = @_;
 	croak 'No future given' unless defined $future;
+	croak "Invalid future object $future" unless blessed $future and $future->isa('Future');
 	croak 'No event given' unless defined $event;
 	my $futures = $self->futures->{$event} //= {};
 	my $future_list = defined $key
@@ -168,6 +172,161 @@ sub get_event_futures {
 	delete $self->futures->{$event} unless exists $futures->{list}
 		or keys %{$futures->{by_key}};
 	return $future_list // [];
+}
+
+sub get_plugin_classes {
+	my $self = shift;
+	return keys %{$self->plugins};
+}
+
+sub has_plugin {
+	my ($self, $class) = @_;
+	return undef unless defined $class;
+	return exists $self->plugins->{$class};
+}
+
+sub get_plugin {
+	my ($self, $class) = @_;
+	return undef unless defined $class and exists $self->plugins->{$class};
+	return $self->plugins->{$class};
+}
+
+sub register_plugin {
+	my ($self, $class) = @_;
+	croak "Plugin class not defined" unless defined $class;
+	return $self if $self->has_plugin($class);
+	eval "require $class; 1";
+	croak $@ if $@;
+	require Role::Tiny;
+	croak "$class does not do role ZIRCBot::Plugin"
+		unless Role::Tiny::does_role($class, 'ZIRCBot::Plugin');
+	my $plugin = $class->new;
+	$plugin->register($self);
+	$self->plugins->{$class} = $plugin;
+	return $self;
+}
+
+sub get_command_names {
+	my $self = shift;
+	return keys %{$self->commands};
+}
+
+sub get_command {
+	my ($self, $name) = @_;
+	return undef unless defined $name and exists $self->commands->{lc $name};
+	return $self->commands->{lc $name};
+}
+
+sub get_commands_by_prefix {
+	my ($self, $prefix) = @_;
+	return [] unless defined $prefix and exists $self->command_prefixes->{lc $prefix};
+	return $self->command_prefixes->{lc $prefix};
+}
+
+sub add_command {
+	my ($self, $command) = @_;
+	croak "Command object not defined" unless defined $command;
+	croak "$command is not a ZIRCBot::Command object" unless blessed $command
+		and $command->isa('ZIRCBot::Command');
+	my $name = $command->name;
+	croak "Command $name already exists" if exists $self->commands->{lc $name};
+	$self->commands->{lc $name} = $command;
+	$self->add_command_prefixes($name);
+	return $self;
+}
+
+sub add_command_prefixes {
+	my ($self, $name) = @_;
+	croak "Command name not defined" unless defined $name;
+	$name = lc $name;
+	foreach my $len (1..length $name) {
+		my $prefix = substr $name, 0, $len;
+		my $prefixes = $self->command_prefixes->{$prefix} //= [];
+		push @$prefixes, $name;
+	}
+	return $self;
+}
+
+sub parse_command {
+	my ($self, $irc, $sender, $channel, $message) = @_;
+	my $trigger = $self->config->{commands}{trigger};
+	my $by_nick = $self->config->{commands}{by_nick};
+	my $bot_nick = $irc->nick;
+	
+	my ($cmd_name, $args_str);
+	if ($trigger and $message =~ /^\Q$trigger\E(\w+)\s*(.*?)$/i) {
+		($cmd_name, $args_str) = ($1, $2);
+	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
+		($cmd_name, $args_str) = ($1, $2);
+	} elsif (!defined $channel and $message =~ /^(\w+)\s*(.*?)$/) {
+		($cmd_name, $args_str) = ($1, $2);
+	} else {
+		return undef;
+	}
+	
+	my $command = $self->get_command($cmd_name);
+	if (!defined $command and $self->config->{commands}{prefixes}) {
+		my $cmds = $self->get_commands_by_prefix($cmd_name);
+		return undef unless $cmds and @$cmds;
+		if (@$cmds > 1) {
+			my $suggestions = join ', ', sort @$cmds;
+			$irc->write(privmsg => $channel // $sender,
+				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
+			return undef;
+		}
+		$command = $self->get_command($cmds->[0]) // return undef;
+	}
+	
+	return undef unless defined $command;
+	
+	$cmd_name = $command->name;
+	unless ($command->is_enabled) {
+		$irc->write(privmsg => $sender, "Command $cmd_name is currently disabled.");
+		return undef;
+	}
+	
+	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
+	$args_str =~ s/^\s+//;
+	$args_str =~ s/\s+$//;
+	my @args = split /\s+/, $args_str;
+	
+	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
+	
+	return ($command, @args);
+}
+
+sub check_command_access {
+	my ($self, $irc, $sender, $channel, $command) = @_;
+	my $required = $command->required_access;
+	$self->logger->debug("Required access is $required");
+	return 1 if $required == ACCESS_NONE;
+	
+	my $user = $self->user($sender);
+	# Check for sufficient channel access
+	my $channel_access = $user->channel_access($channel);
+	$self->logger->debug("$sender has channel access $channel_access");
+	return 1 if $channel_access >= $required;
+	
+	# Check for sufficient bot access
+	my $bot_access = $user->bot_access // return undef;
+	$self->logger->debug("$sender has bot access $bot_access");
+	return 1 if $bot_access >= $required;
+	
+	$self->logger->debug("$sender does not have access to run the command");
+	return 0;
+}
+
+sub user_access_level {
+	my ($self, $user) = @_;
+	croak 'No user nick specified' unless defined $user;
+	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
+	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
+		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
+	}
+	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
+		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
+	}
+	return ACCESS_NONE;
 }
 
 sub _build_config {
@@ -213,6 +372,8 @@ sub _default_config {
 	};
 	$config_hr->{commands} = {
 		'trigger' => '!',
+		'by_name' => 1,
+		'prefixes' => 1,
 	};
 	$config_hr->{users} = {
 		'master' => '',

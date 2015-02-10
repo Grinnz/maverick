@@ -1,7 +1,5 @@
 package ZIRCBot::Channel;
 
-use strict;
-use warnings;
 use Carp;
 
 use Moo;
