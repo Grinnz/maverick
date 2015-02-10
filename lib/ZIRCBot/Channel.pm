@@ -17,6 +17,13 @@ has 'topic' => (
 	is => 'rw',
 );
 
+has 'topic_info' => (
+	is => 'rw',
+	lazy => 1,
+	default => sub { [] },
+	init_arg => undef,
+);
+
 has 'users' => (
 	is => 'ro',
 	lazy => 1,

@@ -16,12 +16,12 @@ use warnings NONFATAL => 'all';
 
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
-my @irc_events = qw/irc_333 irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
-	irc_rpl_notopic irc_rpl_topic irc_rpl_namreply irc_rpl_whoreply irc_rpl_endofwho
-	irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away irc_rpl_whoisoperator
-	irc_rpl_whoisaccount irc_rpl_whoisidle irc_rpl_endofwhois
-	irc_notice irc_public irc_privmsg irc_invite irc_kick irc_join
-	irc_part irc_quit irc_nick irc_mode irc_default/;
+my @irc_events = qw/irc_335 irc_422 irc_rpl_motdstart irc_rpl_endofmotd
+	irc_rpl_notopic irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply
+	irc_rpl_whoreply irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels
+	irc_rpl_away irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle
+	irc_rpl_endofwhois irc_notice irc_public irc_privmsg irc_invite irc_kick
+	irc_join irc_part irc_quit irc_nick irc_mode irc_default/;
 sub get_irc_events { @irc_events }
 
 has 'channels' => (
@@ -250,11 +250,12 @@ sub irc_rpl_topic { # RPL_TOPIC
 	$self->channel($channel)->topic($topic);
 }
 
-sub irc_333 { # topic info
+sub irc_rpl_topicwhotime { # topic info
 	my ($self, $irc, $message) = @_;
-	my ($to, $channel, $changed_by, $changed_at) = @{$message->{params}};
-	my $changed_at_str = localtime($changed_at);
-	$self->logger->debug("Topic for $channel was changed at $changed_at_str by $changed_by");
+	my ($to, $channel, $who, $time) = @{$message->{params}};
+	my $time_str = localtime($time);
+	$self->logger->debug("Topic for $channel was changed at $time_str by $who");
+	$self->channel($channel)->topic_info([$time, $who]);
 }
 
 sub irc_rpl_namreply { # RPL_NAMREPLY
