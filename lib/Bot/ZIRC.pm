@@ -4,6 +4,7 @@ use Net::DNS::Native; # load early to avoid threading issues
 
 use Carp;
 use Config::IniFiles;
+use Exporter;
 use File::Spec;
 use File::Path 'make_path';
 use IRC::Utils;
@@ -12,11 +13,19 @@ use Mojo::IOLoop;
 use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
 use Scalar::Util 'blessed';
-use Bot::ZIRC::Access;
+use Bot::ZIRC::Access qw/:access ACCESS_LEVELS/;
+use Bot::ZIRC::Command;
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
+
+use Exporter 'import';
+
+our @EXPORT_OK = keys %{ACCESS_LEVELS()};
+our %EXPORT_TAGS = (
+	access => [keys %{ACCESS_LEVELS()}],
+);
 
 our $VERSION = '0.05';
 sub bot_version { return $VERSION }
@@ -323,27 +332,6 @@ sub parse_command {
 	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
 	
 	return ($command, @args);
-}
-
-sub check_command_access {
-	my ($self, $irc, $sender, $channel, $command) = @_;
-	my $required = $command->required_access;
-	$self->logger->debug("Required access is $required");
-	return 1 if $required == ACCESS_NONE;
-	
-	my $user = $self->user($sender);
-	# Check for sufficient channel access
-	my $channel_access = $user->channel_access($channel);
-	$self->logger->debug("$sender has channel access $channel_access");
-	return 1 if $channel_access >= $required;
-	
-	# Check for sufficient bot access
-	my $bot_access = $user->bot_access // return undef;
-	$self->logger->debug("$sender has bot access $bot_access");
-	return 1 if $bot_access >= $required;
-	
-	$self->logger->debug("$sender does not have access to run the command");
-	return 0;
 }
 
 sub _build_config {

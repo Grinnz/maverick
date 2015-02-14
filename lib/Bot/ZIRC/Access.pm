@@ -2,7 +2,7 @@ package Bot::ZIRC::Access;
 
 use strict;
 use warnings;
-use Exporter qw/import/;
+use Exporter 'import';
 
 use constant ACCESS_LEVELS => {
 	ACCESS_NONE => 0,
@@ -17,8 +17,11 @@ use constant ACCESS_LEVELS => {
 };
 use constant ACCESS_LEVELS();
 
-our @EXPORT = (keys %{ACCESS_LEVELS()},
-	qw/access_levels valid_access_level channel_access_level/);
+our @EXPORT = keys %{ACCESS_LEVELS()};
+our @EXPORT_OK = qw/ACCESS_LEVELS access_levels valid_access_level channel_access_level/;
+our %EXPORT_TAGS = (
+	access => [keys %{ACCESS_LEVELS()}],
+);
 
 my %level_nums = map { $_ => 1 } values %{ACCESS_LEVELS()};
 my %channel_access = (

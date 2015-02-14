@@ -1,7 +1,7 @@
 package Bot::ZIRC::Command;
 
 use Carp;
-use Bot::ZIRC::Access;
+use Bot::ZIRC::Access qw/:access valid_access_level/;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -26,7 +26,7 @@ has 'on_run' => (
 has 'required_access' => (
 	is => 'rw',
 	isa => sub { croak "Invalid access level $_[0]"
-		unless Bot::ZIRC::Access::valid_access_level($_[0]) },
+		unless valid_access_level($_[0]) },
 	lazy => 1,
 	default => ACCESS_NONE,
 );
@@ -93,6 +93,29 @@ sub set_config {
 	}
 	$self->bot->_store_db;
 	return $self;
+}
+
+sub check_access {
+	my ($self, $irc, $sender, $channel) = @_;
+	my $bot = $self->bot;
+	
+	my $required = $self->required_access;
+	$bot->logger->debug("Required access is $required");
+	return 1 if $required == ACCESS_NONE;
+	
+	my $user = $bot->user($sender);
+	# Check for sufficient channel access
+	my $channel_access = $user->channel_access($channel);
+	$bot->logger->debug("$sender has channel access $channel_access");
+	return 1 if $channel_access >= $required;
+	
+	# Check for sufficient bot access
+	my $bot_access = $user->bot_access // return undef;
+	$bot->logger->debug("$sender has bot access $bot_access");
+	return 1 if $bot_access >= $required;
+	
+	$bot->logger->debug("$sender does not have access to run the command");
+	return 0;
 }
 
 sub prepare_config {

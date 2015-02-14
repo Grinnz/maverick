@@ -1,7 +1,6 @@
 package Bot::ZIRC::Plugin::Default;
 
 use Bot::ZIRC::Access;
-use Bot::ZIRC::Command;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -32,6 +31,7 @@ sub register {
 		},
 		help_text => 'This is the help command. Type ${trigger}help <command> to get help with a specific command.',
 		config => { foo => 'bar' },
+		required_access => ACCESS_BOT_ADMIN,
 	);
 }
 

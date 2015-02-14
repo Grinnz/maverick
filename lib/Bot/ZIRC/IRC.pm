@@ -8,7 +8,7 @@ use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
 use Scalar::Util qw(looks_like_number weaken);
-use Bot::ZIRC::Access;
+use Bot::ZIRC::Access qw/:access channel_access_level/;
 use Bot::ZIRC::Channel;
 use Bot::ZIRC::User;
 
@@ -219,26 +219,22 @@ sub irc_check_command {
 	my ($command, @args) = $self->parse_command($irc, $sender, $channel, $message);
 	return unless defined $command;
 	
-	my $check = $self->check_command_access($irc, $sender, $channel, $command);
-	unless (defined $check) {
-		$self->logger->debug("Don't know identity of $sender; rechecking after whois");
-		$self->irc_after_whois($irc, $sender, sub {
-			my ($self, $irc, $user) = @_;
-			my $check = $self->check_command_access($irc, $sender, $channel, $command);
-			my $cmd_name = $command->name;
-			if ($check) {
-				$self->logger->debug("$sender has access to run command $cmd_name");
-				$command->run($irc, $sender, $channel, @args);
-			} else {
-				$self->logger->debug("$sender does not have access to run command $cmd_name");
-				my $channel_str = defined $channel ? " in $channel" : '';
-				$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
-			}
-		});
-		return;
-	}
+	my $result = $command->check_access($irc, $sender, $channel);
+	return $self->irc_check_command_result($command, $result, $irc, $sender, $channel, @args)
+		if defined $result;
+	
+	$self->logger->debug("Don't know identity of $sender; rechecking after whois");
+	$self->irc_after_whois($irc, $sender, sub {
+		my ($self, $irc, $user) = @_;
+		my $result = $command->check_access($irc, $sender, $channel);
+		$self->irc_check_command_result($command, $result, $irc, $sender, $channel, @args);
+	});
+}
+
+sub irc_check_command_result {
+	my ($self, $command, $result, $irc, $sender, $channel, @args) = @_;
 	my $cmd_name = $command->name;
-	if ($check) {
+	if ($result) {
 		$self->logger->debug("$sender has access to run command $cmd_name");
 		$command->run($irc, $sender, $channel, @args);
 	} else {
@@ -246,6 +242,7 @@ sub irc_check_command {
 		my $channel_str = defined $channel ? " in $channel" : '';
 		$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
 	}
+	return 1;
 }
 
 # IRC event callbacks
