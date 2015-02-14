@@ -45,9 +45,90 @@ has 'is_enabled' => (
 	default => 1,
 );
 
+has 'default_config' => (
+	is => 'ro',
+	isa => sub { croak "Invalid config $_[0], must be a hash ref"
+		unless defined $_[0] and ref $_[0] eq 'HASH' },
+	lazy => 1,
+	default => sub { {} },
+	init_arg => 'config',
+);
+
 has 'help_text' => (
 	is => 'ro',
 );
 
-1;
+# Accessors for use in on_run
 
+has 'config' => (
+	is => 'rwp',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+	clearer => 1,
+);
+
+has 'bot' => (
+	is => 'rwp',
+	weak_ref => 1,
+);
+
+has 'irc' => (
+	is => 'rwp',
+	init_arg => undef,
+	clearer => 1,
+);
+
+# Methods
+
+sub set_config {
+	my ($self, $channel, $key, $value) = @_;
+	croak "Undefined config key" unless defined $key;
+	croak "Config value must be simple scalar" if ref $value;
+	my $db_config = $self->bot->db->{commands}{$self->name}{config} //= {};
+	if (defined $channel) {
+		$db_config->{channel}{lc $channel}{$key} = $value;
+	} else {
+		$db_config->{global}{$key} = $value;
+	}
+	$self->bot->_store_db;
+	return $self;
+}
+
+sub prepare_config {
+	my ($self, $channel) = @_;
+	my $default_config = $self->default_config // {};
+	my $db_config = $self->bot->db->{commands}{$self->name}{config};
+	my ($bot_config, $channel_config) = ({}, {});
+	if (defined $db_config) {
+		$bot_config = $db_config->{global} // {};
+		if (defined $channel) {
+			$channel_config = $db_config->{channel}{lc $channel} // {};
+		}
+	}
+	my %config = (%$default_config, %$bot_config, %$channel_config);
+	# Config values must be simple scalars
+	delete $config{$_} for grep { ref $config{$_} } keys %config;
+	$self->_set_config(\%config);
+	return $self;
+}
+
+sub run {
+	my ($self, $irc, $sender, $channel, @args) = @_;
+	$self->_set_irc($irc);
+	$self->prepare_config($channel);
+	my $on_run = $self->on_run;
+	local $@;
+	eval { $self->$on_run($sender, $channel, @args); 1 };
+	if ($@) {
+		my $err = $@;
+		chomp $err;
+		my $cmd_name = $self->name;
+		warn "Error running command $cmd_name: $err\n";
+	}
+	$self->clear_config;
+	$self->clear_irc;
+	return $self;
+}
+
+1;

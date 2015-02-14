@@ -80,6 +80,7 @@ has 'command_prefixes' => (
 	lazy => 1,
 	default => sub { {} },
 	init_arg => undef,
+	clearer => 1,
 );
 
 has 'futures' => (
@@ -148,14 +149,30 @@ sub sig_reload {
 	$self->_reload_config;
 }
 
+sub user_access_level {
+	my ($self, $user) = @_;
+	croak 'No user nick specified' unless defined $user;
+	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
+	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
+		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
+	}
+	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
+		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
+	}
+	return ACCESS_NONE;
+}
+
 sub queue_event_future {
-	my ($self, $future, $event, $key) = @_;
-	croak 'No future given' unless defined $future;
-	croak "Invalid future object $future" unless blessed $future and $future->isa('Future');
+	my $self = shift;
+	my $future = pop;
+	croak "Invalid Future/coderef $future" unless defined $future and
+		(ref $future eq 'CODE' or blessed $future and $future->isa('Future'));
+	$future = Future->new->on_done($future) if ref $future eq 'CODE';
+	my ($event, $key) = @_;
 	croak 'No event given' unless defined $event;
 	my $futures = $self->futures->{$event} //= {};
 	my $future_list = defined $key
-		? ($futures->{by_key}{lc $key} //= [])
+		? ($futures->{by_key}{$key} //= [])
 		: ($futures->{list} //= []);
 	push @$future_list, ref $future eq 'ARRAY' ? @$future : $future;
 	return $self;
@@ -167,7 +184,7 @@ sub get_event_futures {
 	return undef unless exists $self->futures->{$event};
 	my $futures = $self->futures->{$event};
 	my $future_list = defined $key
-		? delete $futures->{by_key}{lc $key}
+		? delete $futures->{by_key}{$key}
 		: delete $futures->{list};
 	delete $self->futures->{$event} unless exists $futures->{list}
 		or keys %{$futures->{by_key}};
@@ -224,14 +241,21 @@ sub get_commands_by_prefix {
 }
 
 sub add_command {
-	my ($self, $command) = @_;
-	croak "Command object not defined" unless defined $command;
-	croak "$command is not a Bot::ZIRC::Command object" unless blessed $command
-		and $command->isa('Bot::ZIRC::Command');
+	my $self = shift;
+	my $command;
+	if (blessed $_[0] and $_[0]->isa('Bot::ZIRC::Command')) {
+		$command = shift;
+		$command->_set_bot($self);
+	} elsif (!ref $_[0] or ref $_[0] eq 'HASH') {
+		my %params = ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
+		$command = Bot::ZIRC::Command->new(%params, bot => $self);
+	} else {
+		croak "$_[0] is not a Bot::ZIRC::Command object";
+	}
 	my $name = $command->name;
 	croak "Command $name already exists" if exists $self->commands->{lc $name};
 	$self->commands->{lc $name} = $command;
-	$self->add_command_prefixes($name);
+	$self->add_command_prefixes($name) if $self->config->{commands}{prefixes};
 	return $self;
 }
 
@@ -245,6 +269,12 @@ sub add_command_prefixes {
 		push @$prefixes, $name;
 	}
 	return $self;
+}
+
+sub reload_command_prefixes {
+	my $self = shift;
+	$self->clear_command_prefixes;
+	$self->add_command_prefixes($_) for $self->get_command_names;
 }
 
 sub parse_command {
@@ -314,19 +344,6 @@ sub check_command_access {
 	
 	$self->logger->debug("$sender does not have access to run the command");
 	return 0;
-}
-
-sub user_access_level {
-	my ($self, $user) = @_;
-	croak 'No user nick specified' unless defined $user;
-	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
-	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
-		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
-	}
-	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
-		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
-	}
-	return ACCESS_NONE;
 }
 
 sub _build_config {

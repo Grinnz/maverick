@@ -222,42 +222,29 @@ sub irc_check_command {
 	my $check = $self->check_command_access($irc, $sender, $channel, $command);
 	unless (defined $check) {
 		$self->logger->debug("Don't know identity of $sender; rechecking after whois");
-		$self->queue_event_future(Future->new->on_done(sub {
+		$self->irc_after_whois($irc, $sender, sub {
 			my ($self, $irc, $user) = @_;
 			my $check = $self->check_command_access($irc, $sender, $channel, $command);
 			my $cmd_name = $command->name;
 			if ($check) {
 				$self->logger->debug("$sender has access to run command $cmd_name");
-				$self->irc_run_command($irc, $sender, $channel, $command, @args);
+				$command->run($irc, $sender, $channel, @args);
 			} else {
 				$self->logger->debug("$sender does not have access to run command $cmd_name");
 				my $channel_str = defined $channel ? " in $channel" : '';
 				$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
 			}
-		}), 'whois', $sender);
-		$irc->write(whois => $sender);
+		});
 		return;
 	}
 	my $cmd_name = $command->name;
 	if ($check) {
 		$self->logger->debug("$sender has access to run command $cmd_name");
-		$self->irc_run_command($irc, $sender, $channel, $command, @args);
+		$command->run($irc, $sender, $channel, @args);
 	} else {
 		$self->logger->debug("$sender does not have access to run command $cmd_name");
 		my $channel_str = defined $channel ? " in $channel" : '';
 		$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
-	}
-}
-
-sub irc_run_command {
-	my ($self, $irc, $sender, $channel, $command, @args) = @_;
-	local $@;
-	eval { $command->on_run->($self, $irc, $sender, $channel, @args); 1 };
-	if ($@) {
-		my $err = $@;
-		chomp $err;
-		my $cmd_name = $command->name;
-		warn "Error running command $cmd_name: $err\n";
 	}
 }
 
@@ -458,7 +445,7 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
 	
-	my $futures = $self->get_event_futures('who', $nick);
+	my $futures = $self->get_event_futures(who => lc $nick);
 	$_->done($self, $irc, $user) for @$futures;
 	
 	$self->irc_identify if lc $nick eq lc $irc->nick and !$reg;
@@ -514,9 +501,6 @@ sub irc_rpl_away { # RPL_AWAY
 	my $user = $self->user($nick);
 	$user->is_away(1);
 	$user->away_message($msg);
-	
-	my $futures = $self->get_event_futures('away', $nick);
-	$_->done($self, $irc, $user) for @$futures;
 }
 
 sub irc_rpl_whoisoperator { # RPL_WHOISOPERATOR
@@ -562,10 +546,24 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	$self->logger->debug("End of whois reply for $nick");
 	
 	my $user = $self->user($nick);
-	my $futures = $self->get_event_futures('whois', $nick);
+	my $futures = $self->get_event_futures(whois => lc $nick);
 	$_->done($self, $irc, $user) for @$futures;
 	
 	$self->irc_identify if lc $nick eq lc $irc->nick and !$user->is_registered;
+}
+
+# Queue future events
+
+sub irc_after_who {
+	my ($self, $irc, $nick, $cb) = @_;
+	$self->queue_event_future(who => lc $nick, $cb);
+	$irc->write(who => $nick);
+}
+
+sub irc_after_whois {
+	my ($self, $irc, $nick, $cb) = @_;
+	$self->queue_event_future(whois => lc $nick, $cb);
+	$irc->write(whois => $nick);
 }
 
 1;
