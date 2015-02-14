@@ -1,4 +1,4 @@
-zircbot
-=======
+Bot::ZIRC
+=========
 
-Perl POE IRC Bot framework
+Perl Mojo::IRC Bot framework

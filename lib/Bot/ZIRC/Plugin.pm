@@ -1,4 +1,4 @@
-package ZIRCBot::Plugin;
+package Bot::ZIRC::Plugin;
 
 use Moo::Role;
 use warnings NONFATAL => 'all';

@@ -1,9 +1,9 @@
-package ZIRCBot::IRC::SocialGamer;
+package Bot::ZIRC::IRC::SocialGamer;
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
-with 'ZIRCBot::IRC';
+with 'Bot::ZIRC::IRC';
 
 my @irc_events = qw/irc_320/;
 

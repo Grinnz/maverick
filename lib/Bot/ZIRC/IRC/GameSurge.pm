@@ -1,9 +1,9 @@
-package ZIRCBot::IRC::GameSurge;
+package Bot::ZIRC::IRC::GameSurge;
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
 
-with 'ZIRCBot::IRC';
+with 'Bot::ZIRC::IRC';
 
 sub irc_identify {
 	my ($self, $irc) = @_;

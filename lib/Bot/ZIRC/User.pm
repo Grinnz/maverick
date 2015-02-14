@@ -1,7 +1,7 @@
-package ZIRCBot::User;
+package Bot::ZIRC::User;
 
 use Carp;
-use ZIRCBot::Access;
+use Bot::ZIRC::Access;
 
 use Moo;
 use warnings NONFATAL => 'all';

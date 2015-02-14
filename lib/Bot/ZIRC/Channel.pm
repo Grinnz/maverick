@@ -1,4 +1,4 @@
-package ZIRCBot::Channel;
+package Bot::ZIRC::Channel;
 
 use Carp;
 

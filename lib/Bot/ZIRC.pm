@@ -1,4 +1,4 @@
-package ZIRCBot;
+package Bot::ZIRC;
 
 use Net::DNS::Native; # load early to avoid threading issues
 
@@ -12,7 +12,7 @@ use Mojo::IOLoop;
 use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
 use Scalar::Util 'blessed';
-use ZIRCBot::Access;
+use Bot::ZIRC::Access;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -21,25 +21,25 @@ use namespace::clean;
 our $VERSION = '0.05';
 sub bot_version { return $VERSION }
 
-with 'ZIRCBot::DNS';
+with 'Bot::ZIRC::DNS';
 
 has 'irc_role' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'ZIRCBot::IRC',
+	default => 'Bot::ZIRC::IRC',
 );
 
 has 'config_dir' => (
 	is => 'ro',
 	lazy => 1,
 	trigger => sub { my ($self, $path) = @_; make_path($path); },
-	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zircbot'); make_path($path); return $path },
+	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zirc'); make_path($path); return $path },
 );
 
 has 'config_file' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'zircbot.conf',
+	default => 'zirc.conf',
 );
 
 has 'config' => (
@@ -51,7 +51,7 @@ has 'config' => (
 has 'db_file' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'zircbot.db',
+	default => 'zirc.db',
 );
 
 has 'db' => (
@@ -117,7 +117,7 @@ sub BUILD {
 	$self->_load_config($self->config);
 	
 	my $irc_role = $self->irc_role;
-	$irc_role = "ZIRCBot::IRC::$irc_role" unless $irc_role =~ /::/;
+	$irc_role = "Bot::ZIRC::IRC::$irc_role" unless $irc_role =~ /::/;
 	require Role::Tiny;
 	Role::Tiny->apply_roles_to_object($self, $irc_role);
 }
@@ -198,8 +198,8 @@ sub register_plugin {
 	eval "require $class; 1";
 	croak $@ if $@;
 	require Role::Tiny;
-	croak "$class does not do role ZIRCBot::Plugin"
-		unless Role::Tiny::does_role($class, 'ZIRCBot::Plugin');
+	croak "$class does not do role Bot::ZIRC::Plugin"
+		unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
 	my $plugin = $class->new;
 	$plugin->register($self);
 	$self->plugins->{$class} = $plugin;
@@ -226,8 +226,8 @@ sub get_commands_by_prefix {
 sub add_command {
 	my ($self, $command) = @_;
 	croak "Command object not defined" unless defined $command;
-	croak "$command is not a ZIRCBot::Command object" unless blessed $command
-		and $command->isa('ZIRCBot::Command');
+	croak "$command is not a Bot::ZIRC::Command object" unless blessed $command
+		and $command->isa('Bot::ZIRC::Command');
 	my $name = $command->name;
 	croak "Command $name already exists" if exists $self->commands->{lc $name};
 	$self->commands->{lc $name} = $command;

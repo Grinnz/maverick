@@ -1,4 +1,4 @@
-package ZIRCBot::Access;
+package Bot::ZIRC::Access;
 
 use strict;
 use warnings;

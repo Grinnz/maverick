@@ -1,4 +1,4 @@
-package ZIRCBot::IRC;
+package Bot::ZIRC::IRC;
 
 use Carp;
 use Future;
@@ -8,9 +8,9 @@ use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
 use Scalar::Util qw(looks_like_number weaken);
-use ZIRCBot::Access;
-use ZIRCBot::Channel;
-use ZIRCBot::User;
+use Bot::ZIRC::Access;
+use Bot::ZIRC::Channel;
+use Bot::ZIRC::User;
 
 use Moo::Role;
 use warnings NONFATAL => 'all';
@@ -36,7 +36,7 @@ has 'channels' => (
 sub channel {
 	my $self = shift;
 	my $name = shift // croak "No channel name provided";
-	return $self->channels->{lc $name} //= ZIRCBot::Channel->new(name => $name);
+	return $self->channels->{lc $name} //= Bot::ZIRC::Channel->new(name => $name);
 }
 
 has 'users' => (
@@ -49,7 +49,7 @@ has 'users' => (
 sub user {
 	my $self = shift;
 	my $nick = shift // croak "No user nick provided";
-	return $self->users->{lc $nick} //= ZIRCBot::User->new(nick => $nick);
+	return $self->users->{lc $nick} //= Bot::ZIRC::User->new(nick => $nick);
 }
 
 has 'irc' => (
@@ -71,7 +71,7 @@ sub _connect_options {
 	die "IRC server is not configured\n" unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
 	$nick //= 'ZIRCBot',
-	$realname = sprintf 'ZIRCBot %s by %s', $self->bot_version, 'Grinnz'
+	$realname = sprintf 'Bot::ZIRC %s by %s', $self->bot_version, 'Grinnz'
 		unless defined $realname and length $realname;
 	my %options = (
 		server => $server,

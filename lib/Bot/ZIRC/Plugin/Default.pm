@@ -1,18 +1,18 @@
-package ZIRCBot::Plugin::Default;
+package Bot::ZIRC::Plugin::Default;
 
-use ZIRCBot::Access;
-use ZIRCBot::Command;
+use Bot::ZIRC::Access;
+use Bot::ZIRC::Command;
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-with 'ZIRCBot::Plugin';
+with 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_command(ZIRCBot::Command->new(
+	$bot->add_command(Bot::ZIRC::Command->new(
 		name => 'help',
 		on_run => sub {
 			my ($bot, $irc, $sender, $channel, $name) = @_;

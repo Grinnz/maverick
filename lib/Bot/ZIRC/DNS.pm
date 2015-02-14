@@ -1,4 +1,4 @@
-package ZIRCBot::DNS;
+package Bot::ZIRC::DNS;
 
 use Mojo::IOLoop;
 use Net::DNS::Native;

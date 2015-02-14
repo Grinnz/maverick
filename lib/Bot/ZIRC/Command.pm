@@ -1,13 +1,13 @@
-package ZIRCBot::Command;
+package Bot::ZIRC::Command;
 
 use Carp;
-use ZIRCBot::Access;
+use Bot::ZIRC::Access;
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-our @CARP_NOT = qw(ZIRCBot ZIRCBot::IRC Moo);
+our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::IRC Moo);
 
 has 'name' => (
 	is => 'ro',
@@ -26,7 +26,7 @@ has 'on_run' => (
 has 'required_access' => (
 	is => 'rw',
 	isa => sub { croak "Invalid access level $_[0]"
-		unless ZIRCBot::Access::valid_access_level($_[0]) },
+		unless Bot::ZIRC::Access::valid_access_level($_[0]) },
 	lazy => 1,
 	default => ACCESS_NONE,
 );
