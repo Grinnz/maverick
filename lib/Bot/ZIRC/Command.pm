@@ -81,6 +81,15 @@ has 'irc' => (
 
 # Methods
 
+sub get_config {
+	my ($self, $channel, $key) = @_;
+	croak "Undefined config key" unless defined $key;
+	$self->prepare_config($channel);
+	my $value = $self->config->{$key};
+	$self->clear_config;
+	return $value;
+}
+
 sub set_config {
 	my ($self, $channel, $key, $value) = @_;
 	croak "Undefined config key" unless defined $key;

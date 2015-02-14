@@ -220,6 +220,7 @@ sub get_plugin {
 sub register_plugin {
 	my ($self, $class) = @_;
 	croak "Plugin class not defined" unless defined $class;
+	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
 	eval "require $class; 1";
 	croak $@ if $@;

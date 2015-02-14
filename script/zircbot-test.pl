@@ -9,5 +9,5 @@ my $bot = Bot::ZIRC->new(irc_role => 'SocialGamer', config => {
 	irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
 	channels => { autojoin => '#bots' },
 });
-$bot->register_plugin('Bot::ZIRC::Plugin::Default');
+$bot->register_plugin('Default');
 $bot->start;
