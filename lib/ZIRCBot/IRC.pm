@@ -7,7 +7,7 @@ use IRC::Utils 'parse_user';
 use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
-use Scalar::Util 'weaken';
+use Scalar::Util qw(looks_like_number weaken);
 use ZIRCBot::Access;
 use ZIRCBot::Channel;
 use ZIRCBot::User;
@@ -123,10 +123,31 @@ sub irc_connected {
 	my ($self, $irc, $err) = @_;
 	if ($err) {
 		$self->logger->error($err);
+		my $delay = $self->config->{irc}{reconnect_delay};
+		$delay = 10 unless defined $delay and looks_like_number $delay;
+		Mojo::IOLoop->timer($delay => sub { $self->irc_reconnect($irc) });
 	} else {
 		$self->irc_identify($irc);
 		$self->irc_autojoin($irc);
 		$self->irc_check_recurring($irc);
+	}
+}
+
+sub irc_disconnected {
+	my ($self, $irc) = @_;
+	$self->logger->debug("Disconnected from server");
+	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
+	$self->clear_check_recurring_timer;
+	$self->irc_reconnect($irc);
+}
+
+sub irc_reconnect {
+	my ($self, $irc) = @_;
+	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
+		my $server = $irc->server;
+		$self->logger->debug("Reconnecting to $server");
+		weaken $self;
+		$irc->connect(sub { $self->irc_connected(@_) });
 	}
 }
 
@@ -167,19 +188,6 @@ sub irc_check {
 		$irc->write(whois => $desired);
 	} else {
 		$irc->write(whois => $irc->nick);
-	}
-}
-
-sub irc_disconnected {
-	my ($self, $irc) = @_;
-	$self->logger->debug("Disconnected from server");
-	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
-	$self->clear_check_recurring_timer;
-	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
-		my $server = $irc->server;
-		$self->logger->debug("Reconnecting to $server");
-		weaken $self;
-		$irc->connect(sub { $self->irc_connected(@_) });
 	}
 }
 
