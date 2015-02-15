@@ -3,10 +3,8 @@ package Bot::ZIRC;
 use Net::DNS::Native; # load early to avoid threading issues
 
 use Carp;
-use Config::IniFiles;
 use Exporter;
 use File::Spec;
-use File::Path 'make_path';
 use IRC::Utils;
 use List::Util 'any';
 use Mojo::IOLoop;
@@ -15,6 +13,7 @@ use Mojo::Log;
 use Scalar::Util 'blessed';
 use Bot::ZIRC::Access qw/:access ACCESS_LEVELS/;
 use Bot::ZIRC::Command;
+use Bot::ZIRC::Config;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -27,22 +26,38 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 sub bot_version { return $VERSION }
 
 with 'Bot::ZIRC::DNS';
 
-has 'irc_role' => (
+has 'networks' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'Bot::ZIRC::IRC',
+	default => sub { {} },
+);
+
+has 'db' => (
+	is => 'rwp',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
+has 'init_config' => (
+	is => 'ro',
+	isa => sub { croak "Invalid configuration hash $_[0]"
+		unless defined $_[0] and ref $_[0] eq 'HASH' },
+	lazy => 1,
+	default => sub { {} },
+	init_arg => 'config',
 );
 
 has 'config_dir' => (
 	is => 'ro',
 	lazy => 1,
-	trigger => sub { my ($self, $path) = @_; make_path($path); },
-	default => sub { my $path = File::Spec->catfile($ENV{HOME}, '.zirc'); make_path($path); return $path },
+	coerce => sub { defined $_[0] ? $_[0] : '' },
+	default => '',
 );
 
 has 'config_file' => (
@@ -51,24 +66,38 @@ has 'config_file' => (
 	default => 'zirc.conf',
 );
 
+sub config_defaults {
+	{
+		main => {
+			debug => 1,
+			echo => 1,
+		},
+		apis => {},
+	};
+}
+
 has 'config' => (
-	is => 'rwp',
-	lazy => 1,
-	default => sub { {} },
-);
-
-has 'db_file' => (
-	is => 'ro',
-	lazy => 1,
-	default => 'zirc.db',
-);
-
-has 'db' => (
-	is => 'rwp',
-	lazy => 1,
-	builder => 1,
+	is => 'lazy',
+	handles => {
+		config_reload => 'reload',
+		config_store  => 'store',
+		config_set    => 'set',
+		config_get    => 'get',
+		config_hash   => 'config',
+	},
 	init_arg => undef,
 );
+
+sub _build_config {
+	my $self = shift;
+	my $config = Bot::ZIRC::Config->new(
+		dir => $self->config_dir,
+		file => $self->config_file,
+		defaults => $self->config_defaults,
+	);
+	$config->apply($self->init_config)->store if %{$self->init_config};
+	return $config;
+}
 
 has 'plugins' => (
 	is => 'ro',
@@ -92,13 +121,6 @@ has 'command_prefixes' => (
 	clearer => 1,
 );
 
-has 'futures' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-);
-
 has 'logger' => (
 	is => 'lazy',
 	init_arg => undef,
@@ -107,9 +129,9 @@ has 'logger' => (
 
 sub _build_logger {
 	my $self = shift;
-	my $path = $self->config->{main}{logfile} || undef;
+	my $path = $self->config_get('logfile') || undef;
 	my $logger = Mojo::Log->new(path => $path);
-	$logger->level('info') unless $self->config->{main}{debug};
+	$logger->level('info') unless $self->config_get('debug');
 	return $logger;
 }
 
@@ -123,26 +145,49 @@ has 'is_stopping' => (
 
 sub BUILD {
 	my $self = shift;
-	
-	$self->_load_config($self->config);
-	
-	my $irc_role = $self->irc_role;
-	$irc_role = "Bot::ZIRC::IRC::$irc_role" unless $irc_role =~ /::/;
-	require Role::Tiny;
-	Role::Tiny->apply_roles_to_object($self, $irc_role);
+	my $networks = $self->networks;
+	croak "No networks have been specified" unless keys %$networks;
+	$networks->{$_} = $self->build_network($_ => $networks->{$_}) for keys %$networks;
 }
+
+sub add_network {
+	my ($self, $name, $config) = @_;
+	croak "Network name is unspecified" unless defined $name;
+	croak "Network $name already exists" if exists $self->networks->{$name};
+	$self->networks->{$name} = $self->build_network($name => $config);
+	return $self;
+}
+
+sub build_network {
+	my ($self, $name, $config) = @_;
+	
+	# Instantiated object was passed
+	if (blessed $config and $config->isa('Bot::ZIRC::Network')) {
+		$config->_set_name($name);
+		$config->_set_bot($self);
+		return $config;
+	}
+	
+	# Network config was passed
+	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
+	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
+	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
+	eval "require $class; 1" or croak $@;
+	my $network = $class->new(name => $name, bot => $self, config => $config);
+	return $network;
+}
+
+# Bot actions
 
 sub start {
 	my $self = shift;
+	$self->logger->debug("Starting bot");
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
+	$_->start for values %{$self->networks};
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
-}
-
-sub stop {
-	my $self = shift;
-	$self->is_stopping(1);
+	return $self;
 }
 
 sub sig_stop {
@@ -154,51 +199,27 @@ sub sig_stop {
 sub sig_reload {
 	my ($self, $signal) = @_;
 	$self->logger->debug("Received signal SIG$signal, reloading");
-	$self->clear_logger;
-	$self->_reload_config;
+	$self->reload;
 }
 
-sub user_access_level {
-	my ($self, $user) = @_;
-	croak 'No user nick specified' unless defined $user;
-	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->{users}{master}//'');
-	if (my @admins = split /[\s,]+/, $self->config->{users}{admin}) {
-		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
-	}
-	if (my @voices = split /[\s,]+/, $self->config->{users}{voice}) {
-		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
-	}
-	return ACCESS_NONE;
-}
-
-sub queue_event_future {
+sub stop {
 	my $self = shift;
-	my $future = pop;
-	croak "Invalid Future/coderef $future" unless defined $future and
-		(ref $future eq 'CODE' or blessed $future and $future->isa('Future'));
-	$future = Future->new->on_done($future) if ref $future eq 'CODE';
-	my ($event, $key) = @_;
-	croak 'No event given' unless defined $event;
-	my $futures = $self->futures->{$event} //= {};
-	my $future_list = defined $key
-		? ($futures->{by_key}{$key} //= [])
-		: ($futures->{list} //= []);
-	push @$future_list, ref $future eq 'ARRAY' ? @$future : $future;
+	$self->logger->debug("Stopping bot");
+	$self->is_stopping(1);
+	$_->stop for values %{$self->networks};
 	return $self;
 }
 
-sub get_event_futures {
-	my ($self, $event, $key) = @_;
-	croak 'No event given' unless defined $event;
-	return undef unless exists $self->futures->{$event};
-	my $futures = $self->futures->{$event};
-	my $future_list = defined $key
-		? delete $futures->{by_key}{$key}
-		: delete $futures->{list};
-	delete $self->futures->{$event} unless exists $futures->{list}
-		or keys %{$futures->{by_key}};
-	return $future_list // [];
+sub reload {
+	my $self = shift;
+	$self->clear_logger;
+	$self->logger->debug("Reloading bot");
+	$self->config_reload;
+	$_->reload for values %{$self->networks};
+	return $self;
 }
+
+# Plugins
 
 sub get_plugin_classes {
 	my $self = shift;
@@ -222,8 +243,7 @@ sub register_plugin {
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
-	eval "require $class; 1";
-	croak $@ if $@;
+	eval "require $class; 1" or croak $@;
 	require Role::Tiny;
 	croak "$class does not do role Bot::ZIRC::Plugin"
 		unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
@@ -232,6 +252,8 @@ sub register_plugin {
 	$self->plugins->{$class} = $plugin;
 	return $self;
 }
+
+# Commands
 
 sub get_command_names {
 	my $self = shift;
@@ -265,7 +287,7 @@ sub add_command {
 	my $name = $command->name;
 	croak "Command $name already exists" if exists $self->commands->{lc $name};
 	$self->commands->{lc $name} = $command;
-	$self->add_command_prefixes($name) if $self->config->{commands}{prefixes};
+	$self->add_command_prefixes($name);
 	return $self;
 }
 
@@ -285,172 +307,6 @@ sub reload_command_prefixes {
 	my $self = shift;
 	$self->clear_command_prefixes;
 	$self->add_command_prefixes($_) for $self->get_command_names;
-}
-
-sub parse_command {
-	my ($self, $irc, $sender, $channel, $message) = @_;
-	my $trigger = $self->config->{commands}{trigger};
-	my $by_nick = $self->config->{commands}{by_nick};
-	my $bot_nick = $irc->nick;
-	
-	my ($cmd_name, $args_str);
-	if ($trigger and $message =~ /^\Q$trigger\E(\w+)\s*(.*?)$/i) {
-		($cmd_name, $args_str) = ($1, $2);
-	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
-		($cmd_name, $args_str) = ($1, $2);
-	} elsif (!defined $channel and $message =~ /^(\w+)\s*(.*?)$/) {
-		($cmd_name, $args_str) = ($1, $2);
-	} else {
-		return undef;
-	}
-	
-	my $command = $self->get_command($cmd_name);
-	if (!defined $command and $self->config->{commands}{prefixes}) {
-		my $cmds = $self->get_commands_by_prefix($cmd_name);
-		return undef unless $cmds and @$cmds;
-		if (@$cmds > 1) {
-			my $suggestions = join ', ', sort @$cmds;
-			$irc->write(privmsg => $channel // $sender,
-				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
-			return undef;
-		}
-		$command = $self->get_command($cmds->[0]) // return undef;
-	}
-	
-	return undef unless defined $command;
-	
-	$cmd_name = $command->name;
-	unless ($command->is_enabled) {
-		$irc->write(privmsg => $sender, "Command $cmd_name is currently disabled.");
-		return undef;
-	}
-	
-	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
-	$args_str =~ s/^\s+//;
-	$args_str =~ s/\s+$//;
-	my @args = split /\s+/, $args_str;
-	
-	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
-	
-	return ($command, @args);
-}
-
-sub _build_config {
-	my $self = shift;
-	my $config_file = File::Spec->catfile($self->config_dir, $self->config_file);
-	my %config;
-	tie %config, 'Config::IniFiles', (
-		-fallback => 'main',
-		-nocase => 1,
-		-allowcontinue => 1,
-		-nomultiline => 1,
-		-handle_trailing_comment => 1,
-	);
-	tied(%config)->SetFileName($config_file);
-	if (-e $config_file) {
-		tied(%config)->ReadConfig;
-	} else {
-		$self->_default_config(\%config);
-		tied(%config)->WriteConfig($config_file);
-	}
-	
-	return \%config;
-}
-
-sub _default_config {
-	my $self = shift;
-	my $config_hr = shift;
-	%$config_hr = ();
-	$config_hr->{main} = {
-		'debug' => 1,
-		'echo' => 1,
-	};
-	$config_hr->{irc} = {
-		'server' => '',
-		'server_pass' => '',
-		'port' => 6667,
-		'ssl' => 0,
-		'realname' => '',
-		'nick' => 'ZIRCBot',
-		'password' => '',
-		'away_msg' => 'I am a bot. Say !help in a channel or in PM for help.',
-		'reconnect' => 1,
-	};
-	$config_hr->{commands} = {
-		'trigger' => '!',
-		'by_name' => 1,
-		'prefixes' => 1,
-	};
-	$config_hr->{users} = {
-		'master' => '',
-	};
-	$config_hr->{channels} = {
-		'autojoin' => '',
-	};
-	$config_hr->{apis} = {};
-	return 1;
-}
-
-sub _load_config {
-	my $self = shift;
-	my $override_config = shift // {};
-	croak "Invalid configuration override" unless ref $override_config eq 'HASH';
-	$self->_set_config($self->_build_config);
-	return 1 unless keys %$override_config;
-	foreach my $section (keys %$override_config) {
-		$self->config->{$section} //= {};
-		next unless ref $override_config->{$section} eq 'HASH';
-		foreach my $param (keys %{$override_config->{$section}}) {
-			$self->config->{$section}{$param} = $override_config->{$section}{$param};
-		}
-	}
-	$self->_store_config;
-}
-
-sub _reload_config {
-	my $self = shift;
-	tied(%{$self->config})->ReadConfig;
-}
-
-sub _store_config {
-	my $self = shift;
-	tied(%{$self->config})->RewriteConfig;
-}
-
-sub _build_db {
-	my $self = shift;
-	my $db_file = File::Spec->catfile($self->config_dir, $self->db_file);
-	my $db;
-	if (-e $db_file) {
-		open my $db_fh, '<', $db_file or die $!;
-		local $/;
-		my $db_json = <$db_fh>;
-		close $db_fh;
-		$db = eval { decode_json $db_json };
-		die "Invalid database file $db_file: $@\n" if $@;
-	} else {
-		$db = {};
-		my $db_json = encode_json $db;
-		open my $db_fh, '>', $db_file or die $!;
-		print $db_fh $db_json;
-		close $db_fh;
-	}
-	return $db;
-}
-
-sub _load_db {
-	my $self = shift;
-	$self->_set_db($self->_build_db);
-}
-
-sub _store_db {
-	my $self = shift;
-	my $db_file = File::Spec->catfile($self->config_dir, $self->db_file);
-	my $db_json = encode_json $self->db;
-	open my $db_fh, '>', $db_file or die $!;
-	print $db_fh $db_json;
-	close $db_fh;
-	return 1;
 }
 
 1;

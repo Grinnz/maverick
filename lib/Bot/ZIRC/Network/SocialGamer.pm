@@ -1,9 +1,10 @@
-package Bot::ZIRC::IRC::SocialGamer;
+package Bot::ZIRC::Network::SocialGamer;
 
-use Moo::Role;
+use Moo;
 use warnings NONFATAL => 'all';
+use namespace::clean;
 
-with 'Bot::ZIRC::IRC';
+extends 'Bot::ZIRC::Network';
 
 my @irc_events = qw/irc_320/;
 
@@ -14,7 +15,7 @@ around 'get_irc_events' => sub {
 };
 
 sub irc_320 { # RPL_WHOISIDENTIFIED
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $lia) = @{$message->{params}};
 	if ($lia =~ /is logged in as ([[:graph:]]+)/) {
 		my $identity = $1;

@@ -1,4 +1,4 @@
-package Bot::ZIRC::IRC;
+package Bot::ZIRC::Network;
 
 use Carp;
 use Future;
@@ -7,13 +7,14 @@ use IRC::Utils 'parse_user';
 use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
-use Scalar::Util qw(looks_like_number weaken);
+use Scalar::Util qw/blessed looks_like_number weaken/;
 use Bot::ZIRC::Access qw/:access channel_access_level/;
 use Bot::ZIRC::Channel;
 use Bot::ZIRC::User;
 
-use Moo::Role;
+use Moo;
 use warnings NONFATAL => 'all';
+use namespace::clean;
 
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
@@ -25,6 +26,105 @@ my @irc_events = qw/irc_default irc_invite irc_join irc_kick irc_mode irc_nick
 	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
 	irc_rpl_endofwhois/;
 sub get_irc_events { @irc_events }
+
+has 'name' => (
+	is => 'rwp',
+	required => 1,
+);
+
+has 'bot' => (
+	is => 'rwp',
+	required => 1,
+	isa => sub { croak "Invalid bot" unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
+	weak_ref => 1,
+	handles => [qw/bot_version is_stopping/],
+);
+
+has 'init_config' => (
+	is => 'ro',
+	isa => sub { croak "Invalid configuration hash $_[0]"
+		unless defined $_[0] and ref $_[0] eq 'HASH' },
+	lazy => 1,
+	default => sub { {} },
+	init_arg => 'config',
+);
+
+has 'config_file' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { my $name = shift->name; return "zirc-$name.conf" },
+);
+
+sub config_defaults {
+	{
+		main => {
+			server => '',
+			server_pass => '',
+			port => 6667,
+			ssl => 0,
+			realname => '',
+			nick => 'ZIRCBot',
+			password => '',
+			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
+			reconnect => 1,
+		},
+		users => {
+			master => '',
+		},
+		channels => {
+			autojoin => '',
+		},
+		commands => {
+			prefixes => 1,
+			trigger => '!',
+			by_nick => 1,
+		},
+	};
+}
+
+has 'config' => (
+	is => 'lazy',
+	handles => {
+		config_reload => 'reload',
+		config_store  => 'store',
+		config_set    => 'set',
+		config_get    => 'get',
+		config_hash   => 'config',
+	},
+	init_arg => undef,
+);
+
+sub _build_config {
+	my $self = shift;
+	my $config = Bot::ZIRC::Config->new(
+		dir => $self->bot->config_dir,
+		file => $self->config_file,
+		defaults => $self->config_defaults,
+	);
+	$config->apply($self->init_config)->store if %{$self->init_config};
+	return $config;
+}
+
+has 'futures' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
+has 'logger' => (
+	is => 'lazy',
+	init_arg => undef,
+	clearer => 1,
+);
+
+sub _build_logger {
+	my $self = shift;
+	my $path = $self->config_get('logfile') || undef;
+	my $logger = Mojo::Log->new(path => $path);
+	$logger->level('info') unless $self->config_get('debug');
+	return $logger;
+}
 
 has 'channels' => (
 	is => 'ro',
@@ -55,6 +155,7 @@ sub user {
 has 'irc' => (
 	is => 'lazy',
 	init_arg => undef,
+	handles => [qw/nick server write/],
 );
 
 sub _build_irc {
@@ -67,8 +168,9 @@ sub _build_irc {
 sub _connect_options {
 	my $self = shift;
 	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
-		@{$self->config->{irc}}{qw/server port server_pass ssl nick realname/};
-	die "IRC server is not configured\n" unless defined $server and length $server;
+		@{$self->config_hash->{main}}{qw/server port server_pass ssl nick realname/};
+	die "IRC server for network ".$self->name." is not configured\n"
+		unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
 	$nick //= 'ZIRCBot',
 	$realname = sprintf 'Bot::ZIRC %s by %s', $self->bot_version, 'Grinnz'
@@ -91,7 +193,7 @@ has 'check_recurring_timer' => (
 	clearer => 1,
 );
 
-before 'start' => sub {
+sub start {
 	my $self = shift;
 	my $irc = $self->irc;
 	
@@ -99,112 +201,138 @@ before 'start' => sub {
 	weaken $self;
 	foreach my $event ($self->get_irc_events) {
 		my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
-		$irc->on($event => sub { $self->$handler(@_) });
+		$irc->on($event => sub { shift; $self->$handler(@_) });
 	}
-	$irc->on(close => sub { $self->irc_disconnected($_[0]) });
-	$irc->on(error => sub { $self->logger->error($_[1]); $_[0]->disconnect; });
+	$irc->on(close => sub { $self->on_disconnect });
+	$irc->on(error => sub { $self->logger->error($_[1]); $self->disconnect; });
 	
-	my $server = $irc->server;
+	my $server = $self->server;
 	$self->logger->debug("Connecting to $server");
-	$irc->connect(sub { $self->irc_connected(@_) });
-};
+	$self->connect;
+	return $self;
+}
 
-before 'stop' => sub {
+sub stop {
 	my $self = shift;
-	my $irc = $self->irc;
-	
-	$self->logger->debug("Disconnecting from server");
-	$irc->disconnect(sub {});
-};
+	my $server = $self->server;
+	$self->logger->debug("Disconnecting from $server");
+	$self->disconnect;
+	return $self;
+}
+
+sub reload {
+	my $self = shift;
+	$self->clear_logger;
+	my $name = $self->name;
+	$self->logger->debug("Reloading network $name");
+	$self->config_reload;
+	return $self;
+}
 
 # IRC methods
 
-sub irc_connected {
-	my ($self, $irc, $err) = @_;
+sub on_connect {
+	my ($self, $err) = @_;
 	if ($err) {
 		$self->logger->error($err);
-		my $delay = $self->config->{irc}{reconnect_delay};
+		return unless $self->config_get('reconnect')//1;
+		my $delay = $self->config_get('reconnect_delay');
 		$delay = 10 unless defined $delay and looks_like_number $delay;
-		Mojo::IOLoop->timer($delay => sub { $self->irc_reconnect($irc) });
+		Mojo::IOLoop->timer($delay => sub { $self->reconnect });
 	} else {
-		$self->irc_identify($irc);
-		$self->irc_autojoin($irc);
-		$self->irc_check_recurring($irc);
+		$self->identify;
+		$self->autojoin;
+		$self->check_recurring;
 	}
 }
 
-sub irc_disconnected {
-	my ($self, $irc) = @_;
+sub on_disconnect {
+	my $self = shift;
 	$self->logger->debug("Disconnected from server");
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
 	$self->clear_check_recurring_timer;
-	$self->irc_reconnect($irc);
+	$self->reconnect if $self->config_get('reconnect')//1;
 }
 
-sub irc_reconnect {
-	my ($self, $irc) = @_;
-	if (!$self->is_stopping and ($self->config->{irc}{reconnect}//1)) {
-		my $server = $irc->server;
+sub connect {
+	my $self = shift;
+	weaken $self;
+	$self->irc->connect(sub { shift; $self->on_connect(@_) });
+}
+
+sub disconnect {
+	my $self = shift;
+	$self->irc->disconnect(sub {});
+}
+
+sub reconnect {
+	my $self = shift;
+	if (!$self->is_stopping) {
+		my $server = $self->server;
 		$self->logger->debug("Reconnecting to $server");
-		weaken $self;
-		$irc->connect(sub { $self->irc_connected(@_) });
+		$self->connect;
 	}
 }
 
-sub irc_identify {
-	my ($self, $irc) = @_;
-	my $nick = $self->config->{irc}{nick};
-	my $pass = $self->config->{irc}{password};
+sub identify {
+	my $self = shift;
+	my $nick = $self->config_get('nick');
+	my $pass = $self->config_get('password');
 	if (defined $nick and length $nick and defined $pass and length $pass) {
-		$self->("Identifying with NickServ as $nick");
-		$irc->write(quote => "NICKSERV identify $nick $pass");
+		$self->do_identify($nick, $pass);
 	}
 }
 
-sub irc_autojoin {
-	my ($self, $irc) = @_;
-	my @channels = split /[\s,]+/, $self->config->{channels}{autojoin};
+sub do_identify {
+	my ($self, $nick, $pass) = @_;
+	$self->logger->debug("Identifying with NickServ as $nick");
+	$self->write(quote => "NICKSERV identify $nick $pass");
+}
+
+sub autojoin {
+	my $self = shift;
+	my @channels = split /[\s,]+/, $self->config_get('channels','autojoin') // '';
 	return unless @channels;
 	my $channels_str = join ', ', @channels;
 	$self->logger->debug("Joining channels: $channels_str");
 	while (my @chunk = splice @channels, 0, 10) {
-		$irc->write(join => join(',', @chunk));
+		$self->write(join => join(',', @chunk));
 	}
 }
 
-sub irc_check_recurring {
-	my ($self, $irc) = @_;
+sub check_recurring {
+	my $self = shift;
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
 	weaken $self;
-	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->irc_check($irc) });
+	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->check_nick });
 	$self->check_recurring_timer($timer_id);
 }
 
-sub irc_check {
-	my ($self, $irc) = @_;
-	my $desired = $self->config->{irc}{nick};
-	unless (lc $desired eq lc substr $irc->nick, 0, length $desired) {
-		$irc->write(nick => $desired);
-		$irc->write(whois => $desired);
+sub check_nick {
+	my $self = shift;
+	my $desired = $self->config_get('nick');
+	unless (lc $desired eq lc substr $self->nick, 0, length $desired) {
+		$self->write(nick => $desired);
+		$self->write(whois => $desired);
 	} else {
-		$irc->write(whois => $irc->nick);
+		$self->write(whois => $self->nick);
 	}
 }
 
-sub irc_limit_msg {
+sub limit_msg {
 	my ($self, @args) = @_;
 	my $msg = pop @args;
-	my $hostmask = $self->user($self->irc->nick)->hostmask;
+	my $hostmask = $self->user($self->nick)->hostmask;
 	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
 	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
 	$msg = substr($msg, 0, ($allowed_len-3)).'...' if length $msg > $allowed_len;
 	return (@args, $msg);
 }
 
-sub irc_split_msg {
+sub split_msg {
 	my ($self, @args) = @_;
 	my $msg = pop @args;
-	my $hostmask = $self->user($self->irc->nick)->hostmask;
+	my $hostmask = $self->user($self->nick)->hostmask;
 	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
 	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
 	my @returns;
@@ -214,41 +342,165 @@ sub irc_split_msg {
 	return \@returns;
 }
 
-sub irc_check_command {
-	my ($self, $irc, $sender, $channel, $message) = @_;
-	my ($command, @args) = $self->parse_command($irc, $sender, $channel, $message);
+sub user_access_level {
+	my ($self, $user) = @_;
+	croak 'No user nick specified' unless defined $user;
+	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config_get('users','master')//'');
+	if (my @admins = split /[\s,]+/, $self->config_get('users','admin')//'') {
+		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
+	}
+	if (my @voices = split /[\s,]+/, $self->config_get('users','voice')//'') {
+		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
+	}
+	return ACCESS_NONE;
+}
+
+# Command parsing
+
+sub check_command {
+	my ($self, $sender, $channel, $message) = @_;
+	my ($command, @args) = $self->parse_command($sender, $channel, $message);
 	return unless defined $command;
 	
-	my $result = $command->check_access($irc, $sender, $channel);
-	return $self->irc_check_command_result($command, $result, $irc, $sender, $channel, @args)
+	my $result = $command->check_access($self, $sender, $channel);
+	return $self->check_command_result($command, $result, $sender, $channel, @args)
 		if defined $result;
 	
 	$self->logger->debug("Don't know identity of $sender; rechecking after whois");
-	$self->irc_after_whois($irc, $sender, sub {
-		my ($self, $irc, $user) = @_;
-		my $result = $command->check_access($irc, $sender, $channel);
-		$self->irc_check_command_result($command, $result, $irc, $sender, $channel, @args);
+	$self->after_whois($sender, sub {
+		my ($self, $user) = @_;
+		my $result = $command->check_access($self, $sender, $channel);
+		$self->check_command_result($command, $result, $sender, $channel, @args);
 	});
 }
 
-sub irc_check_command_result {
-	my ($self, $command, $result, $irc, $sender, $channel, @args) = @_;
+sub parse_command {
+	my ($self, $sender, $channel, $message) = @_;
+	my $trigger = $self->config_get('commands','trigger');
+	my $by_nick = $self->config_get('commands','by_nick');
+	my $bot_nick = $self->nick;
+	
+	my ($cmd_name, $args_str);
+	if ($trigger and $message =~ /^\Q$trigger\E(\w+)\s*(.*?)$/i) {
+		($cmd_name, $args_str) = ($1, $2);
+	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
+		($cmd_name, $args_str) = ($1, $2);
+	} elsif (!defined $channel and $message =~ /^(\w+)\s*(.*?)$/) {
+		($cmd_name, $args_str) = ($1, $2);
+	} else {
+		return undef;
+	}
+	
+	my $command = $self->bot->get_command($cmd_name);
+	if (!defined $command and $self->config_get('commands','prefixes')) {
+		my $cmds = $self->bot->get_commands_by_prefix($cmd_name);
+		return undef unless $cmds and @$cmds;
+		if (@$cmds > 1) {
+			my $suggestions = join ', ', sort @$cmds;
+			$self->write(privmsg => $channel // $sender,
+				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
+			return undef;
+		}
+		$command = $self->bot->get_command($cmds->[0]) // return undef;
+	}
+	
+	return undef unless defined $command;
+	
+	$cmd_name = $command->name;
+	unless ($command->is_enabled) {
+		$self->write(privmsg => $sender, "Command $cmd_name is currently disabled.");
+		return undef;
+	}
+	
+	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
+	$args_str =~ s/^\s+//;
+	$args_str =~ s/\s+$//;
+	my @args = split /\s+/, $args_str;
+	
+	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
+	
+	return ($command, @args);
+}
+
+sub check_command_result {
+	my ($self, $command, $result, $sender, $channel, @args) = @_;
 	my $cmd_name = $command->name;
 	if ($result) {
 		$self->logger->debug("$sender has access to run command $cmd_name");
-		$command->run($irc, $sender, $channel, @args);
+		$command->run($self, $sender, $channel, @args);
 	} else {
 		$self->logger->debug("$sender does not have access to run command $cmd_name");
 		my $channel_str = defined $channel ? " in $channel" : '';
-		$irc->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
+		$self->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
 	}
 	return 1;
+}
+
+# Queue future events
+
+sub after_who {
+	my ($self, $nick, $cb) = @_;
+	$self->queue_event_future(who => lc $nick, $cb);
+	$self->write(who => $nick);
+	return $self;
+}
+
+sub run_after_who {
+	my ($self, $nick) = @_;
+	my $user = $self->user($nick);
+	my $futures = $self->get_event_futures(who => lc $nick);
+	$_->done($self, $user) for @$futures;
+	return $self;
+}
+
+sub after_whois {
+	my ($self, $nick, $cb) = @_;
+	$self->queue_event_future(whois => lc $nick, $cb);
+	$self->write(whois => $nick);
+	return $self;
+}
+
+sub run_after_whois {
+	my ($self, $nick) = @_;
+	my $user = $self->user($nick);
+	my $futures = $self->get_event_futures(whois => lc $nick);
+	$_->done($self, $user) for @$futures;
+	return $self;
+}
+
+sub queue_event_future {
+	my $self = shift;
+	my $future = pop;
+	croak "Invalid Future/coderef $future" unless defined $future and
+		(ref $future eq 'CODE' or blessed $future and $future->isa('Future'));
+	$future = Future->new->on_done($future) if ref $future eq 'CODE';
+	my ($event, $key) = @_;
+	croak 'No event given' unless defined $event;
+	my $futures = $self->futures->{$event} //= {};
+	my $future_list = defined $key
+		? ($futures->{by_key}{$key} //= [])
+		: ($futures->{list} //= []);
+	push @$future_list, ref $future eq 'ARRAY' ? @$future : $future;
+	return $self;
+}
+
+sub get_event_futures {
+	my ($self, $event, $key) = @_;
+	croak 'No event given' unless defined $event;
+	return undef unless exists $self->futures->{$event};
+	my $futures = $self->futures->{$event};
+	my $future_list = defined $key
+		? delete $futures->{by_key}{$key}
+		: delete $futures->{list};
+	delete $self->futures->{$event} unless exists $futures->{list}
+		or keys %{$futures->{by_key}};
+	return $future_list // [];
 }
 
 # IRC event callbacks
 
 sub irc_default {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my $command = $message->{command} // '';
 	my $params_str = join ', ', map { "'$_'" } @{$message->{params}};
 	my $from = parse_user($message->{prefix});
@@ -256,40 +508,40 @@ sub irc_default {
 }
 
 sub irc_invite {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $channel) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has invited $to to $channel");
 }
 
 sub irc_join {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($channel) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from joined $channel");
-	if ($from eq $irc->nick) {
+	if ($from eq $self->nick) {
 		$self->channel($channel);
 	}
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
-	$irc->write(whois => $from) unless lc $from eq lc $irc->nick;
+	$self->write(whois => $from) unless lc $from eq lc $self->nick;
 }
 
 sub irc_kick {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($channel, $to) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has kicked $to from $channel");
 	$self->channel($channel)->remove_user($to);
 	$self->user($to)->remove_channel($channel);
-	if (lc $to eq lc $irc->nick and any { lc $_ eq lc $channel }
+	if (lc $to eq lc $self->nick and any { lc $_ eq lc $channel }
 			split /[\s,]+/, $self->config->{channels}{autojoin}) {
-		$irc->write(join => $channel);
+		$self->write(join => $channel);
 	}
 }
 
 sub irc_mode {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $mode, @params) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	my $params_str = join ' ', @params;
@@ -298,8 +550,9 @@ sub irc_mode {
 		$self->logger->debug("User $from changed mode of $channel to $mode $params_str");
 		if (@params and $mode =~ /[qaohvbe]/) {
 			if ($mode =~ /[qaohv]/) {
-				$irc->write('who', '+cn', $channel, $_)
-					for grep { lc $_ ne lc $irc->nick } @params;
+				my $bot_nick = $self->nick;
+				$self->write('who', '+cn', $channel, $_)
+					for grep { lc $_ ne lc $bot_nick } @params;
 			}
 		}
 	} else {
@@ -309,7 +562,7 @@ sub irc_mode {
 }
 
 sub irc_nick {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from changed nick to $to");
@@ -318,41 +571,41 @@ sub irc_nick {
 }
 
 sub irc_notice {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[notice $to] <$from> $msg") if $self->config->{main}{echo};
 }
 
 sub irc_part {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($channel) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from parted $channel");
-	if ($from eq $irc->nick) {
+	if ($from eq $self->nick) {
 	}
 	$self->channel($channel)->remove_user($from);
 	$self->user($from)->remove_channel($channel);
 }
 
 sub irc_privmsg {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->{main}{echo};
-	$self->irc_check_command($irc, $from, undef, $msg);
+	$self->check_command($from, undef, $msg);
 }
 
 sub irc_public {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->{main}{echo};
-	$self->irc_check_command($irc, $from, $channel, $msg);
+	$self->check_command($from, $channel, $msg);
 }
 
 sub irc_quit {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from has quit");
 	$_->remove_user($from) foreach values %{$self->channels};
@@ -360,41 +613,41 @@ sub irc_quit {
 }
 
 sub irc_rpl_welcome {
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to) = @{$message->{params}};
 	$self->logger->debug("Set nick to $to");
-	$irc->nick($to);
-	$irc->write(whois => $irc->nick);
+	$self->nick($to);
+	$self->write(whois => $to);
 }
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 }
 
 sub irc_rpl_endofmotd { # RPL_ENDOFMOTD
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 }
 
 sub err_nomotd { # ERR_NOMOTD
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 }
 
 sub irc_rpl_notopic { # RPL_NOTOPIC
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($channel) = @{$message->{params}};
 	$self->logger->debug("No topic set for $channel");
 	$self->channel($channel)->topic(undef);
 }
 
 sub irc_rpl_topic { # RPL_TOPIC
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $channel, $topic) = @{$message->{params}};
 	$self->logger->debug("Topic for $channel: $topic");
 	$self->channel($channel)->topic($topic);
 }
 
 sub irc_rpl_topicwhotime { # RPL_TOPICWHOTIME
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $channel, $who, $time) = @{$message->{params}};
 	my $time_str = localtime($time);
 	$self->logger->debug("Topic for $channel was changed at $time_str by $who");
@@ -402,7 +655,7 @@ sub irc_rpl_topicwhotime { # RPL_TOPICWHOTIME
 }
 
 sub irc_rpl_namreply { # RPL_NAMREPLY
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $sym, $channel, $nicks) = @{$message->{params}};
 	$self->logger->debug("Received names for $channel: $nicks");
 	foreach my $nick (split /\s+/, $nicks) {
@@ -418,7 +671,7 @@ sub irc_rpl_namreply { # RPL_NAMREPLY
 }
 
 sub irc_rpl_whoreply { # RPL_WHOREPLY
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $channel, $username, $host, $server, $nick, $state, $realname) = @{$message->{params}};
 	$realname =~ s/^\d+\s+//;
 	
@@ -442,18 +695,16 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
 	
-	my $futures = $self->get_event_futures(who => lc $nick);
-	$_->done($self, $irc, $user) for @$futures;
-	
-	$self->irc_identify if lc $nick eq lc $irc->nick and !$reg;
+	$self->run_after_who($nick);
+	$self->identify if lc $nick eq lc $self->nick and !$reg;
 }
 
 sub irc_rpl_endofwho { # RPL_ENDOFWHO
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 }
 
 sub irc_rpl_whoisuser { # RPL_WHOISUSER
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $username, $host, $star, $realname) = @{$message->{params}};
 	$self->logger->debug("Received user info for $nick!$username\@$host: $realname");
 	my $user = $self->user($nick);
@@ -475,7 +726,7 @@ sub irc_rpl_whoisuser { # RPL_WHOISUSER
 }
 
 sub irc_rpl_whoischannels { # RPL_WHOISCHANNELS
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $channels) = @{$message->{params}};
 	$self->logger->debug("Received channels for $nick: $channels");
 	my $user = $self->user($nick);
@@ -491,7 +742,7 @@ sub irc_rpl_whoischannels { # RPL_WHOISCHANNELS
 }
 
 sub irc_rpl_away { # RPL_AWAY
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my $msg = pop @{$message->{params}};
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("Received away message for $nick: $msg");
@@ -501,7 +752,7 @@ sub irc_rpl_away { # RPL_AWAY
 }
 
 sub irc_rpl_whoisoperator { # RPL_WHOISOPERATOR
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $msg) = @{$message->{params}};
 	$self->logger->debug("Received IRC Operator privileges for $nick: $msg");
 	my $user = $self->user($nick);
@@ -510,7 +761,7 @@ sub irc_rpl_whoisoperator { # RPL_WHOISOPERATOR
 }
 
 sub irc_rpl_whoisaccount { # RPL_WHOISACCOUNT
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $identity) = @{$message->{params}};
 	$self->logger->debug("Received identity for $nick: $identity");
 	my $user = $self->user($nick);
@@ -520,7 +771,7 @@ sub irc_rpl_whoisaccount { # RPL_WHOISACCOUNT
 }
 
 sub irc_335 { # whois bot string
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("Received bot status for $nick");
 	my $user = $self->user($nick);
@@ -528,7 +779,7 @@ sub irc_335 { # whois bot string
 }
 
 sub irc_rpl_whoisidle { # RPL_WHOISIDLE
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick, $seconds, $signon) = @{$message->{params}};
 	$self->logger->debug("Received idle status for $nick: $seconds, $signon");
 	my $user = $self->user($nick);
@@ -538,29 +789,12 @@ sub irc_rpl_whoisidle { # RPL_WHOISIDLE
 }
 
 sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
-	my ($self, $irc, $message) = @_;
+	my ($self, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("End of whois reply for $nick");
 	
-	my $user = $self->user($nick);
-	my $futures = $self->get_event_futures(whois => lc $nick);
-	$_->done($self, $irc, $user) for @$futures;
-	
-	$self->irc_identify if lc $nick eq lc $irc->nick and !$user->is_registered;
-}
-
-# Queue future events
-
-sub irc_after_who {
-	my ($self, $irc, $nick, $cb) = @_;
-	$self->queue_event_future(who => lc $nick, $cb);
-	$irc->write(who => $nick);
-}
-
-sub irc_after_whois {
-	my ($self, $irc, $nick, $cb) = @_;
-	$self->queue_event_future(whois => lc $nick, $cb);
-	$irc->write(whois => $nick);
+	$self->run_after_whois($nick);
+	$self->identify if lc $nick eq lc $self->nick and !$self->user($nick)->is_registered;
 }
 
 1;

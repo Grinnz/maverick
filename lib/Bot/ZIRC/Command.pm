@@ -1,13 +1,14 @@
 package Bot::ZIRC::Command;
 
-use Carp;
 use Bot::ZIRC::Access qw/:access valid_access_level/;
+use Carp;
+use Scalar::Util 'blessed';
 
 use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::IRC Moo);
+our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Moo);
 
 has 'name' => (
 	is => 'ro',
@@ -70,13 +71,9 @@ has 'config' => (
 
 has 'bot' => (
 	is => 'rwp',
+	isa => sub { croak "Invalid bot reference $_[0]"
+		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
 	weak_ref => 1,
-);
-
-has 'irc' => (
-	is => 'rwp',
-	init_arg => undef,
-	clearer => 1,
 );
 
 # Methods
@@ -105,30 +102,29 @@ sub set_config {
 }
 
 sub check_access {
-	my ($self, $irc, $sender, $channel) = @_;
-	my $bot = $self->bot;
+	my ($self, $network, $sender, $channel) = @_;
 	
 	my $required = $self->required_access;
-	$bot->logger->debug("Required access is $required");
+	$network->logger->debug("Required access is $required");
 	return 1 if $required == ACCESS_NONE;
 	
-	my $user = $bot->user($sender);
+	my $user = $network->user($sender);
 	# Check for sufficient channel access
 	my $channel_access = $user->channel_access($channel);
-	$bot->logger->debug("$sender has channel access $channel_access");
+	$network->logger->debug("$sender has channel access $channel_access");
 	return 1 if $channel_access >= $required;
 	
 	# Check for sufficient bot access
 	my $bot_access = $user->bot_access // return undef;
-	$bot->logger->debug("$sender has bot access $bot_access");
+	$network->logger->debug("$sender has bot access $bot_access");
 	return 1 if $bot_access >= $required;
 	
-	$bot->logger->debug("$sender does not have access to run the command");
+	$network->logger->debug("$sender does not have access to run the command");
 	return 0;
 }
 
 sub prepare_config {
-	my ($self, $channel) = @_;
+	my ($self, $network, $channel) = @_;
 	my $default_config = $self->default_config // {};
 	my $db_config = $self->bot->db->{commands}{$self->name}{config};
 	my ($bot_config, $channel_config) = ({}, {});
@@ -146,20 +142,19 @@ sub prepare_config {
 }
 
 sub run {
-	my ($self, $irc, $sender, $channel, @args) = @_;
-	$self->_set_irc($irc);
-	$self->prepare_config($channel);
+	my ($self, $network, $sender, $channel, @args) = @_;
+	$self->prepare_config($network, $channel);
 	my $on_run = $self->on_run;
 	local $@;
-	eval { $self->$on_run($sender, $channel, @args); 1 };
+	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $network->logger->warn($msg) };
+	eval { $self->$on_run($network, $sender, $channel, @args); 1 };
 	if ($@) {
 		my $err = $@;
 		chomp $err;
 		my $cmd_name = $self->name;
-		warn "Error running command $cmd_name: $err\n";
+		$network->logger->error("Error running command $cmd_name: $err");
 	}
 	$self->clear_config;
-	$self->clear_irc;
 	return $self;
 }
 
