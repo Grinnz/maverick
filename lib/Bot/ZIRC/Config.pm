@@ -49,6 +49,11 @@ has 'fallback' => (
 	default => 'main',
 );
 
+sub BUILD {
+	my $self = shift;
+	$self->fix_fallback($self->defaults);
+}
+
 sub _build_config {
 	my $self = shift;
 	my $dir = $self->dir;
@@ -119,13 +124,9 @@ sub store {
 sub apply {
 	my ($self, $apply) = @_;
 	return $self unless defined $apply and keys %$apply;
+	$self->fix_fallback($apply);
 	foreach my $section_name (keys %$apply) {
-		my $section = $apply->{$section_name};
-		next unless defined $section;
-		if (!ref $section) {
-			$section = { $section_name => $section };
-			$section_name = $self->fallback;
-		}
+		my $section = $apply->{$section_name} // next;
 		croak "Invalid configuration section $section; must be a hash reference"
 			unless ref $section eq 'HASH';
 		$self->set($section_name, $_, $section->{$_}) for keys %$section;
@@ -183,21 +184,22 @@ sub hash {
 
 sub defaults_hash {
 	my $self = shift;
-	if ($self->has_defaults_config) {
-		return $self->defaults_config->hash;
-	} else {
-		my %defaults_hash;
-		my $defaults = $self->defaults;
-		foreach my $section_name (keys %$defaults) {
-			my $section = $defaults->{$section_name};
-			unless (ref $section eq 'HASH') {
-				$section = {$section_name => $section};
-				$section_name = $self->fallback;
-			}
-			$defaults_hash{$section_name}{$_} = $section->{$_} for keys %$section;
-		}
-		return \%defaults_hash;
+	return $self->has_defaults_config ? $self->defaults_config->hash : $self->defaults;
+}
+
+sub fix_fallback {
+	my ($self, $config) = @_;
+	my $fallback_name = $self->fallback;
+	my %fallback_section;
+	foreach my $key (keys %$config) {
+		my $value = $config->{$key} // next;
+		next if ref $value eq 'HASH'; # skip actual config sections
+		croak "Invalid configuration value $value for $key; " .
+			"must be a simple scalar" if ref $value;
+		$fallback_section{$key} = $value;
 	}
+	$config->{$fallback_name}{$_} = $fallback_section{$_} for keys %fallback_section;
+	return $config;
 }
 
 1;
