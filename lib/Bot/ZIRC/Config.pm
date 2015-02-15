@@ -4,6 +4,7 @@ use Carp;
 use Config::IniFiles;
 use File::Path 'make_path';
 use File::Spec;
+use Scalar::Util 'blessed';
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -15,6 +16,13 @@ has 'defaults' => (
 		unless defined $_[0] and ref $_[0] eq 'HASH' },
 	lazy => 1,
 	default => sub { {} },
+);
+
+has 'defaults_config' => (
+	is => 'ro',
+	isa => sub { croak "Invalid default configuration $_[0]"
+		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC::Config') },
+	predicate => 1,
 );
 
 has 'config' => (
@@ -41,11 +49,6 @@ has 'fallback' => (
 	default => 'main',
 );
 
-sub BUILD {
-	my $self = shift;
-	$self->apply_defaults($self->defaults);
-}
-
 sub _build_config {
 	my $self = shift;
 	my $dir = $self->dir;
@@ -59,6 +62,7 @@ sub _build_config {
 		-fallback => $self->fallback,
 		-nocase => 1,
 		-allowcontinue => 1,
+		-allowempty => 1,
 		-nomultiline => 1,
 		-commentchar => ';',
 		-allowedcommentchars => ';',
@@ -104,7 +108,7 @@ sub _rewrite_config {
 
 sub reload {
 	my $self = shift;
-	$self->_read_config($self->config)->apply_defaults($self->defaults);
+	$self->_read_config($self->config);
 }
 
 sub store {
@@ -112,13 +116,8 @@ sub store {
 	$self->_rewrite_config($self->config);
 }
 
-sub apply_defaults {
-	my ($self, $defaults) = @_;
-	$self->apply($defaults, 1);
-}
-
 sub apply {
-	my ($self, $apply, $no_overwrite) = @_;
+	my ($self, $apply) = @_;
 	return $self unless defined $apply and keys %$apply;
 	foreach my $section_name (keys %$apply) {
 		my $section = $apply->{$section_name};
@@ -129,14 +128,7 @@ sub apply {
 		}
 		croak "Invalid configuration section $section; must be a hash reference"
 			unless ref $section eq 'HASH';
-		foreach my $key (keys %$section) {
-			my $value = $section->{$key};
-			croak "Invalid configuration value $value for $key in section $section; " .
-				"must be a simple scalar" if ref $value;
-			$self->config->{$section_name} //= {};
-			next if defined $self->config->{$section_name}{$key} and $no_overwrite;
-			$self->config->{$section_name}{$key} = $value;
-		}
+		$self->set($section_name, $_, $section->{$_}) for keys %$section;
 	}
 	return $self;
 }
@@ -152,6 +144,8 @@ sub set {
 	}
 	croak "Section and parameter name must be specified"
 		unless defined $section and defined $key;
+	croak "Invalid configuration value $value for $key in section $section; " .
+		"must be a simple scalar" if ref $value;
 	$self->config->{$section} //= {};
 	$self->config->{$section}{$key} = $value;
 	return $self;
@@ -168,9 +162,42 @@ sub get {
 	}
 	croak "Section and parameter name must be specified"
 		unless defined $section and defined $key;
-	return undef unless exists $self->config->{$section}
-		and exists $self->config->{$section}{$key};
-	return $self->config->{$section}{$key};
+	return $self->config->{$section}{$key} // $self->defaults_hash->{$section}{$key};
+}
+
+sub hash {
+	my $self = shift;
+	my %config_hash;
+	my $config = $self->config;
+	foreach my $section_name (keys %$config) {
+		my $section = $config->{$section_name} // next;
+		$config_hash{$section_name}{$_} = $section->{$_} for keys %$section;
+	}
+	my $defaults = $self->defaults_hash;
+	foreach my $section_name (keys %$defaults) {
+		my $section = $defaults->{$section_name} // next;
+		$config_hash{$section_name}{$_} //= $section->{$_} for keys %$section;
+	}
+	return \%config_hash;
+}
+
+sub defaults_hash {
+	my $self = shift;
+	if ($self->has_defaults_config) {
+		return $self->defaults_config->hash;
+	} else {
+		my %defaults_hash;
+		my $defaults = $self->defaults;
+		foreach my $section_name (keys %$defaults) {
+			my $section = $defaults->{$section_name};
+			unless (ref $section eq 'HASH') {
+				$section = {$section_name => $section};
+				$section_name = $self->fallback;
+			}
+			$defaults_hash{$section_name}{$_} = $section->{$_} for keys %$section;
+		}
+		return \%defaults_hash;
+	}
 }
 
 1;

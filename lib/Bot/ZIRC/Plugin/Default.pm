@@ -38,10 +38,11 @@ sub register {
 		on_run => sub {
 			my ($self, $network, $sender, $channel, @args) = @_;
 			my $name = $network->name;
-			$network->reload->write(privmsg => $channel // $sender, "Reloaded configuration for $name");
+			$self->bot->reload;
+			$network->write(privmsg => $channel // $sender, "Reloaded configuration");
 		},
-		help_text => 'Reload network configuration. Usage: ${trigger}reload',
-		required_access => ACCESS_BOT_ADMIN,
+		help_text => 'Reload bot configuration. Usage: ${trigger}reload',
+		required_access => ACCESS_BOT_MASTER,
 	);
 	
 	$bot->add_command(
@@ -103,7 +104,7 @@ sub register {
 
 sub parse_help_text {
 	my ($network, $text) = @_;
-	my $trigger = $network->config_get('commands','trigger') || $network->nick . ': ';
+	my $trigger = $network->config->get('commands','trigger') || $network->nick . ': ';
 	$text =~ s/\$(?:{trigger}|trigger\b)/$trigger/g;
 	return $text;
 }

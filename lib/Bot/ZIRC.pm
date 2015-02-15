@@ -72,19 +72,34 @@ sub config_defaults {
 			debug => 1,
 			echo => 1,
 		},
+		irc => {
+			server => '',
+			server_pass => '',
+			port => 6667,
+			ssl => 0,
+			realname => '',
+			nick => 'ZIRCBot',
+			password => '',
+			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
+			reconnect => 1,
+		},
+		users => {
+			master => '',
+		},
+		channels => {
+			autojoin => '',
+		},
+		commands => {
+			prefixes => 1,
+			trigger => '!',
+			by_nick => 1,
+		},
 		apis => {},
 	};
 }
 
 has 'config' => (
 	is => 'lazy',
-	handles => {
-		config_reload => 'reload',
-		config_store  => 'store',
-		config_set    => 'set',
-		config_get    => 'get',
-		config_hash   => 'config',
-	},
 	init_arg => undef,
 );
 
@@ -129,9 +144,9 @@ has 'logger' => (
 
 sub _build_logger {
 	my $self = shift;
-	my $path = $self->config_get('logfile') || undef;
+	my $path = $self->config->get('logfile') || undef;
 	my $logger = Mojo::Log->new(path => $path);
-	$logger->level('info') unless $self->config_get('debug');
+	$logger->level('info') unless $self->config->get('debug');
 	return $logger;
 }
 
@@ -172,6 +187,7 @@ sub build_network {
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
 	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
+	local $@;
 	eval "require $class; 1" or croak $@;
 	my $network = $class->new(name => $name, bot => $self, config => $config);
 	return $network;
@@ -214,7 +230,7 @@ sub reload {
 	my $self = shift;
 	$self->clear_logger;
 	$self->logger->debug("Reloading bot");
-	$self->config_reload;
+	$self->config->reload;
 	$_->reload for values %{$self->networks};
 	return $self;
 }
@@ -243,6 +259,7 @@ sub register_plugin {
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
+	local $@;
 	eval "require $class; 1" or croak $@;
 	require Role::Tiny;
 	croak "$class does not do role Bot::ZIRC::Plugin"
