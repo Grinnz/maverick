@@ -181,6 +181,7 @@ sub get_channel {
 	my ($channel, $key) = @_;
 	croak "Channel and parameter name must be specified"
 		unless defined $channel and defined $key;
+	return $self->get('network', $key) if lc $channel eq 'network';
 	croak "Invalid channel name $channel" unless $channel =~ /^#/;
 	return $self->get($channel, $key) // $self->get('network', $key);
 }

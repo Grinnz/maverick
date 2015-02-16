@@ -143,7 +143,7 @@ sub channel_access {
 	if (@_) {
 		$self->channels->{lc $channel}{access} = shift;
 	}
-	return undef unless exists $self->channels->{lc $channel};
+	return ACCESS_NONE unless exists $self->channels->{lc $channel};
 	return $self->channels->{lc $channel}{access} // ACCESS_NONE;
 }
 
@@ -162,7 +162,10 @@ sub bot_access {
 }
 
 sub check_access {
-	my ($self, $required, $channel, $cb) = @_;
+	my $self = shift;
+	my $cb = pop // croak "No callback specified for check_access";
+	my $required = shift // return $self->$cb(0);
+	my $channel = shift;
 	
 	my $nick = $self->nick;
 	my $network = $self->network;

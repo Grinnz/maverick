@@ -53,14 +53,32 @@ sub register {
 		name => 'leave',
 		help_text => 'Leave a channel',
 		usage_text => '[<channel> ...] [<message>]',
-		required_access => ACCESS_BOT_ADMIN,
 		on_run => sub {
 			my ($network, $sender, $channel, @channels) = @_;
 			my $message = 'Leaving';
-			$message = pop if @channels and $channels[-1] !~ /^#/;
+			$message = pop @channels if @channels and $channels[-1] !~ /^#/;
 			return 'usage' unless $channel or @channels;
-			push @channels, $channel unless @channels;
-			$network->write(part => $_, $message) for @channels;
+			if (@channels) {
+				$sender->check_access(ACCESS_BOT_ADMIN, sub {
+					my ($sender, $has_access) = @_;
+					if ($has_access) {
+						$sender->network->write(part => $_, $message) for @channels;
+					} else {
+						$sender->network->reply($sender, $channel,
+							"You must be a bot administrator to run this command.");
+					}
+				});
+			} else {
+				$sender->check_access(ACCESS_CHANNEL_OP, $channel, sub {
+					my ($sender, $has_access) = @_;
+					if ($has_access) {
+						$sender->network->write(part => $channel, $message);
+					} else {
+						$sender->network->reply($sender, $channel,
+							"You must be a channel operator to run this command.");
+					}
+				});
+			}
 		},
 	);
 	
@@ -97,8 +115,22 @@ sub register {
 		tokenize => 0,
 		on_run => sub {
 			my ($network, $sender, $channel, $message) = @_;
-			return 'usage' unless length $message;
-			$network->reply($sender, $channel, $message);
+			if ($message =~ s/^(#\w+)//) {
+				my $in_channel = $1;
+				return 'usage' unless length $message;
+				$sender->check_access(ACCESS_BOT_ADMIN, sub {
+					my ($sender, $has_access) = @_;
+					if ($has_access) {
+						$sender->network->write(privmsg => $in_channel, $message);
+					} else {
+						$sender->network->reply($sender, $channel,
+							"You must be a bot administrator to run this command.");
+					}
+				});
+			} else {
+				return 'usage' unless length $message;
+				$network->reply($sender, $channel, $message);
+			}
 		},
 	);
 	
@@ -106,7 +138,7 @@ sub register {
 		name => 'set',
 		help_text => 'Get/set network or channel-specific bot configuration',
 		usage_text => '[network|<channel>] <name> [<value>]',
-		required_access => ACCESS_BOT_ADMIN,
+		required_access => ACCESS_CHANNEL_OP,
 		on_run => sub {
 			my ($network, $sender, $channel, @args) = @_;
 			my $scope = $channel;
@@ -116,14 +148,23 @@ sub register {
 			
 			my ($name, $value) = @args;
 			return 'usage' unless $name;
-			if (defined $value) {
-				$network->config->set_channel($scope, $name, $value);
-				$network->reply($sender, $channel, "Set $scope configuration option $name to $value");
-			} else {
-				my $value = $network->config->get_channel($scope, $name);
-				my $set_str = defined $value ? "is set to $value" : "is not set";
-				$network->reply($sender, $channel, "$scope configuration option $name $set_str");
-			}
+			my @required = lc $scope eq 'network' ? (ACCESS_BOT_ADMIN) : (ACCESS_CHANNEL_OP, $scope);
+			$sender->check_access(@required, sub {
+				my ($sender, $has_access) = @_;
+				my $network = $sender->network;
+				if ($has_access) {
+					if (defined $value) {
+						$network->config->set_channel($scope, $name, $value);
+						$network->reply($sender, $channel, "Set $scope configuration option $name to $value");
+					} else {
+						my $value = $network->config->get_channel($scope, $name);
+						my $set_str = defined $value ? "is set to $value" : "is not set";
+						$network->reply($sender, $channel, "$scope configuration option $name $set_str");
+					}
+				} else {
+					$network->reply($sender, $channel, "You must be an operator to run this command.");
+				}
+			});
 		},
 	);
 }
