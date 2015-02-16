@@ -35,11 +35,25 @@ has 'networks' => (
 	default => sub { {} },
 );
 
-has 'db' => (
-	is => 'rwp',
+has 'plugins' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+);
+
+has 'commands' => (
+	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
 	init_arg => undef,
+);
+
+has 'command_prefixes' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+	clearer => 1,
 );
 
 has 'init_config' => (
@@ -83,6 +97,7 @@ sub config_defaults {
 		},
 		users => {
 			master => '',
+			ircop_admin_override => 1,
 		},
 		channels => {
 			autojoin => '',
@@ -112,28 +127,6 @@ sub _build_config {
 	return $config;
 }
 
-has 'plugins' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-);
-
-has 'commands' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-);
-
-has 'command_prefixes' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-	clearer => 1,
-);
-
 has 'logger' => (
 	is => 'lazy',
 	init_arg => undef,
@@ -158,86 +151,41 @@ has 'is_stopping' => (
 
 sub BUILD {
 	my $self = shift;
+	
 	my $networks = $self->networks;
+	croak "Networks must be specified as a hash reference"
+		unless ref $networks eq 'HASH';
 	croak "No networks have been specified" unless keys %$networks;
-	$networks->{$_} = $self->build_network($_ => $networks->{$_}) for keys %$networks;
-	$self->register_plugin('Core');
+	$self->add_network($_ => delete $networks->{$_}) for keys %$networks;
+	
+	my $plugins = $self->plugins;
+	%$plugins = map { ($_ => 1) } @$plugins if ref $plugins eq 'ARRAY';
+	croak "Plugins must be specified as a hash or array reference"
+		unless ref $plugins eq 'HASH';
+	$plugins->{Core} //= 1;
+	foreach my $plugin_class (keys %$plugins) {
+		my $args = delete $plugins->{$plugin_class};
+		$self->register_plugin($plugin_class => $args) if $args;
+	}
+}
+
+# Networks
+
+sub get_network_names {
+	my $self = shift;
+	return keys %{$self->networks};
 }
 
 sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
 	croak "Network $name already exists" if exists $self->networks->{$name};
-	$self->networks->{$name} = $self->build_network($name => $config);
-	return $self;
-}
-
-sub build_network {
-	my ($self, $name, $config) = @_;
-	
-	# Instantiated object was passed
-	if (blessed $config and $config->isa('Bot::ZIRC::Network')) {
-		$config->_set_name($name);
-		$config->_set_bot($self);
-		return $config;
-	}
-	
-	# Network config was passed
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
 	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
 	local $@;
 	eval "require $class; 1" or croak $@;
-	my $network = $class->new(name => $name, bot => $self, config => $config);
-	return $network;
-}
-
-# Bot actions
-
-sub start {
-	my $self = shift;
-	$self->logger->debug("Starting bot");
-	$self->is_stopping(0);
-	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
-	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
-	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
-	$_->start for values %{$self->networks};
-	$_->start for values %{$self->plugins};
-	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
-	return $self;
-}
-
-sub sig_stop {
-	my ($self, $signal) = @_;
-	$self->logger->debug("Received signal SIG$signal, stopping");
-	$self->stop;
-}
-
-sub sig_reload {
-	my ($self, $signal) = @_;
-	$self->logger->debug("Received signal SIG$signal, reloading");
-	$self->reload;
-}
-
-sub stop {
-	my ($self, $message) = @_;
-	$self->logger->debug("Stopping bot");
-	$self->is_stopping(1);
-	$_->stop for values %{$self->plugins};
-	Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		$_->stop($message, $delay->begin) for values %{$self->networks};
-	}, sub { Mojo::IOLoop->stop });
-	return $self;
-}
-
-sub reload {
-	my $self = shift;
-	$self->clear_logger;
-	$self->logger->debug("Reloading bot");
-	$self->config->reload;
-	$_->reload for values %{$self->networks};
-	$_->reload for values %{$self->plugins};
+	$self->networks->{$name} = $class->new(name => $name, bot => $self, config => $config);
 	return $self;
 }
 
@@ -261,7 +209,7 @@ sub get_plugin {
 }
 
 sub register_plugin {
-	my ($self, $class) = @_;
+	my ($self, $class, $config) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
@@ -271,7 +219,7 @@ sub register_plugin {
 	croak "$class does not do role Bot::ZIRC::Plugin"
 		unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
 	my $plugin = $class->new;
-	$plugin->register($self);
+	$plugin->register($self, $config);
 	$self->plugins->{$class} = $plugin;
 	return $self;
 }
@@ -330,6 +278,55 @@ sub reload_command_prefixes {
 	my $self = shift;
 	$self->clear_command_prefixes;
 	$self->add_command_prefixes($_) for $self->get_command_names;
+}
+
+# Bot actions
+
+sub start {
+	my $self = shift;
+	$self->logger->debug("Starting bot");
+	$self->is_stopping(0);
+	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
+	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
+	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
+	$_->start for values %{$self->networks};
+	$_->start for values %{$self->plugins};
+	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
+	return $self;
+}
+
+sub stop {
+	my ($self, $message) = @_;
+	$self->logger->debug("Stopping bot");
+	$self->is_stopping(1);
+	$_->stop for values %{$self->plugins};
+	Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		$_->stop($message, $delay->begin) for values %{$self->networks};
+	}, sub { Mojo::IOLoop->stop });
+	return $self;
+}
+
+sub reload {
+	my $self = shift;
+	$self->clear_logger;
+	$self->logger->debug("Reloading bot");
+	$self->config->reload;
+	$_->reload for values %{$self->networks};
+	$_->reload for values %{$self->plugins};
+	return $self;
+}
+
+sub sig_stop {
+	my ($self, $signal) = @_;
+	$self->logger->debug("Received signal SIG$signal, stopping");
+	$self->stop;
+}
+
+sub sig_reload {
+	my ($self, $signal) = @_;
+	$self->logger->debug("Received signal SIG$signal, reloading");
+	$self->reload;
 }
 
 1;

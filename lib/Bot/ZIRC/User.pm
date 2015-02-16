@@ -152,6 +152,8 @@ sub bot_access {
 	my $network = $self->network;
 	my $identity = $self->identity // return ACCESS_NONE;
 	return ACCESS_BOT_MASTER if lc $identity eq lc ($network->config->get('users','master')//'');
+	return ACCESS_BOT_ADMIN if $self->is_ircop
+		and $network->config->get('users','ircop_admin_override');
 	if (my @admins = split /[\s,]+/, $network->config->get('users','admin')//'') {
 		return ACCESS_BOT_ADMIN if any { lc $identity eq lc $_ } @admins;
 	}
@@ -181,8 +183,8 @@ sub check_access {
 	}
 	
 	# Check for sufficient bot access
-	unless ($self->has_identity) {
-		$self->logger->debug("Don't know identity of $nick; rechecking after whois");
+	unless ($self->has_identity or $self->has_bot_access($required)) {
+		$self->logger->debug("Rechecking access for $nick after whois");
 		return $network->after_whois($nick, sub {
 			my ($network, $self) = @_;
 			$self->$cb($self->has_bot_access($required));
