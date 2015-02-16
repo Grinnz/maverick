@@ -182,7 +182,7 @@ sub stop {
 	my $self = shift;
 	my $server = $self->server;
 	$self->logger->debug("Disconnecting from $server");
-	$self->disconnect;
+	$self->disconnect(@_);
 	return $self;
 }
 
@@ -201,7 +201,7 @@ sub on_connect {
 	my ($self, $err) = @_;
 	if ($err) {
 		$self->logger->error($err);
-		return unless $self->config->get('irc','reconnect')//1;
+		return if $self->is_stopping or !($self->config->get('irc','reconnect')//1);
 		my $delay = $self->config->get('irc','reconnect_delay');
 		$delay = 10 unless defined $delay and looks_like_number $delay;
 		Mojo::IOLoop->timer($delay => sub { $self->reconnect });
@@ -214,30 +214,35 @@ sub on_connect {
 
 sub on_disconnect {
 	my $self = shift;
-	$self->logger->debug("Disconnected from server");
+	my $server = $self->server;
+	$self->logger->debug("Disconnected from $server");
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
 	$self->clear_check_recurring_timer;
-	$self->reconnect if $self->config->get('irc','reconnect')//1;
+	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect')//1;
 }
 
 sub connect {
 	my $self = shift;
+	my $server = $self->server;
+	$self->logger->debug("Connected to $server");
 	weaken $self;
 	$self->irc->connect(sub { shift; $self->on_connect(@_) });
 }
 
 sub disconnect {
 	my $self = shift;
-	$self->irc->disconnect(sub {});
+	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
+	my $message = shift;
+	if (defined $message) {
+		$self->write(quit => $message, sub { shift->disconnect($cb) });
+	} else { $self->irc->disconnect($cb) }
 }
 
 sub reconnect {
 	my $self = shift;
-	if (!$self->is_stopping) {
-		my $server = $self->server;
-		$self->logger->debug("Reconnecting to $server");
-		$self->connect;
-	}
+	my $server = $self->server;
+	$self->logger->debug("Reconnecting to $server");
+	$self->connect;
 }
 
 sub identify {
@@ -285,6 +290,15 @@ sub check_nick {
 	}
 }
 
+sub reply {
+	my ($self, $sender, $channel, $message) = @_;
+	if (defined $channel) {
+		$self->write($self->limit_msg(privmsg => $channel, "$sender: $message"));
+	} else {
+		$self->write(@$_) for $self->split_msg(privmsg => $sender, $message);
+	}
+}
+
 sub limit_msg {
 	my ($self, @args) = @_;
 	my $msg = pop @args;
@@ -305,7 +319,7 @@ sub split_msg {
 	while (my $chunk = substr $msg, 0, $allowed_len, '') {
 		push @returns, [@args, $chunk];
 	}
-	return \@returns;
+	return @returns;
 }
 
 sub user_access_level {

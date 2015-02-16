@@ -219,10 +219,13 @@ sub sig_reload {
 }
 
 sub stop {
-	my $self = shift;
+	my ($self, $message) = @_;
 	$self->logger->debug("Stopping bot");
 	$self->is_stopping(1);
-	$_->stop for values %{$self->networks};
+	Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		$_->stop($message, $delay->begin) for values %{$self->networks};
+	}, sub { Mojo::IOLoop->stop });
 	return $self;
 }
 

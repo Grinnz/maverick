@@ -149,7 +149,7 @@ sub set {
 		"must be a simple scalar" if ref $value;
 	$self->config->{$section} //= {};
 	$self->config->{$section}{$key} = $value;
-	return $self;
+	return $self->store;
 }
 
 sub get {
@@ -164,6 +164,25 @@ sub get {
 	croak "Section and parameter name must be specified"
 		unless defined $section and defined $key;
 	return $self->config->{$section}{$key} // $self->defaults_hash->{$section}{$key};
+}
+
+sub set_channel {
+	my $self = shift;
+	my ($channel, $key, $value) = @_;
+	$channel //= 'network';
+	croak "Parameter name must be specified" unless defined $key;
+	croak "Invalid channel name $channel"
+		unless lc $channel eq 'network' or $channel =~ /^#/;
+	return $self->set($channel, $key, $value);
+}
+
+sub get_channel {
+	my $self = shift;
+	my ($channel, $key) = @_;
+	croak "Channel and parameter name must be specified"
+		unless defined $channel and defined $key;
+	croak "Invalid channel name $channel" unless $channel =~ /^#/;
+	return $self->get($channel, $key) // $self->get('network', $key);
 }
 
 sub hash {
