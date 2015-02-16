@@ -26,7 +26,7 @@ sub register {
 		on_run => sub {
 			my ($self, $network, $sender, $channel, $name) = @_;
 			my $help_text;
-			my $command = $self;
+			my $command;
 			if (defined $name) {
 				$command = $self->bot->get_command($name);
 				if (defined $command) {
@@ -37,7 +37,7 @@ sub register {
 			} else {
 				$help_text = 'Type ${trigger}$name <command> to get help with a specific command.'x35;
 			}
-			$help_text = parse_help_text($network, $command, $help_text);
+			$help_text = parse_help_text($network, $command // $self, $help_text);
 			$network->reply($sender, $channel, $help_text);
 		},
 	);
