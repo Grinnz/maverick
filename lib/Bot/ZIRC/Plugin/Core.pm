@@ -1,4 +1,4 @@
-package Bot::ZIRC::Plugin::Default;
+package Bot::ZIRC::Plugin::Core;
 
 use Bot::ZIRC::Access;
 
@@ -21,17 +21,16 @@ sub register {
 			if (defined $name) {
 				$command = $network->bot->get_command($name);
 				if (defined $command) {
-					$help_text = $command->help_text // 'No help text for command $name.';
-					my $usage_text = $command->usage_text;
+					$help_text = $command->help_text // 'No help text for command $name';
 					$help_text .= '.' if $help_text =~ /\w\s*$/;
-					$help_text .= ' Usage: ${trigger}$name';
-					$help_text .= ' ' . $usage_text if defined $usage_text;
+					$help_text .= ' Usage: $trigger$name';
+					$help_text .= ' ' . $command->usage_text if defined $command->usage_text;
 				} else {
 					return $network->reply($sender, $channel, "No such command $name");
 				}
 			} else {
 				$command = $network->bot->get_command('help');
-				$help_text = 'Type ${trigger}$name <command> to get help with a specific command.';
+				$help_text = 'Type $trigger$name <command> to get help with a specific command.';
 			}
 			$help_text = $command->parse_usage_text($network, $help_text);
 			$network->reply($sender, $channel, $help_text);
@@ -69,11 +68,12 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel, @args) = @_;
 			my $scope = $channel;
-			if (lc $args[0] eq 'network' or $args[0] =~ /^#/) {
+			if (defined $args[0] and (lc $args[0] eq 'network' or $args[0] =~ /^#/)) {
 				$scope = shift @args;
 			}
 			
 			my ($name, $value) = @args;
+			return 'usage' unless $name;
 			if (defined $value) {
 				$network->config->set_channel($scope, $name, $value);
 				$network->reply($sender, $channel, "Set $scope configuration option $name to $value");

@@ -92,7 +92,7 @@ sub run {
 		$network->logger->error("Error running command $cmd_name: $err");
 		$network->reply($sender, $channel, "Internal error");
 	} elsif (lc $rc eq 'usage') {
-		my $text = 'Usage: ${trigger}$name';
+		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$network->reply($sender, $channel, $self->parse_usage_text($network, $text));
 	}

@@ -161,6 +161,7 @@ sub BUILD {
 	my $networks = $self->networks;
 	croak "No networks have been specified" unless keys %$networks;
 	$networks->{$_} = $self->build_network($_ => $networks->{$_}) for keys %$networks;
+	$self->register_plugin('Core');
 }
 
 sub add_network {
@@ -200,8 +201,8 @@ sub start {
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
-	$_->start for values %{$self->plugins};
 	$_->start for values %{$self->networks};
+	$_->start for values %{$self->plugins};
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 	return $self;
 }
@@ -236,6 +237,7 @@ sub reload {
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
 	$_->reload for values %{$self->networks};
+	$_->reload for values %{$self->plugins};
 	return $self;
 }
 
