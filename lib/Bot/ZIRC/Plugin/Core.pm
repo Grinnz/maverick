@@ -38,13 +38,41 @@ sub register {
 	);
 	
 	$bot->add_command(
+		name => 'join',
+		help_text => 'Join a channel',
+		usage_text => '<channel> [<channel> ...]',
+		required_access => ACCESS_BOT_ADMIN,
+		on_run => sub {
+			my ($network, $sender, $channel, @channels) = @_;
+			return 'usage' unless @channels;
+			$network->write(join => $_) for @channels;
+		},
+	);
+	
+	$bot->add_command(
+		name => 'leave',
+		help_text => 'Leave a channel',
+		usage_text => '[<channel> ...] [<message>]',
+		required_access => ACCESS_BOT_ADMIN,
+		on_run => sub {
+			my ($network, $sender, $channel, @channels) = @_;
+			my $message = 'Leaving';
+			$message = pop if @channels and $channels[-1] !~ /^#/;
+			return 'usage' unless $channel or @channels;
+			push @channels, $channel unless @channels;
+			$network->write(part => $_, $message) for @channels;
+		},
+	);
+	
+	$bot->add_command(
 		name => 'quit',
-		help_text => 'Tell the bot to quit',
+		help_text => 'Quit IRC and shutdown',
 		usage_text => '[<message>]',
 		required_access => ACCESS_BOT_MASTER,
 		on_run => sub {
-			my ($network, $sender, $channel, $message) = @_;
-			$message //= 'Goodbye';
+			my ($network, $sender, $channel, @message) = @_;
+			my $message = join ' ', @message;
+			$message ||= 'Goodbye';
 			$network->bot->stop($message);
 		},
 	);
@@ -57,6 +85,20 @@ sub register {
 			my ($network, $sender, $channel) = @_;
 			$network->bot->reload;
 			$network->reply($sender, $channel, "Reloaded configuration");
+		},
+	);
+	
+	$bot->add_command(
+		name => 'say',
+		help_text => 'Echo a message',
+		usage_text => '<message>',
+		required_access => ACCESS_CHANNEL_VOICE,
+		strip_formatting => 0,
+		tokenize => 0,
+		on_run => sub {
+			my ($network, $sender, $channel, $message) = @_;
+			return 'usage' unless length $message;
+			$network->reply($sender, $channel, $message);
 		},
 	);
 	

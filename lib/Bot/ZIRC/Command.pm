@@ -39,6 +39,13 @@ has 'strip_formatting' => (
 	default => 1,
 );
 
+has 'tokenize' => (
+	is => 'ro',
+	coerce => sub { $_[0] ? 1 : 0 },
+	lazy => 1,
+	default => 1,
+);
+
 has 'is_enabled' => (
 	is => 'rw',
 	coerce => sub { $_[0] ? 1 : 0 },
@@ -64,10 +71,12 @@ sub check_access {
 	return 1 if $required == ACCESS_NONE;
 	
 	my $user = $network->user($sender);
-	# Check for sufficient channel access
-	my $channel_access = $user->channel_access($channel);
-	$network->logger->debug("$sender has channel access $channel_access");
-	return 1 if $channel_access >= $required;
+	if (defined $channel) {
+		# Check for sufficient channel access
+		my $channel_access = $user->channel_access($channel);
+		$network->logger->debug("$sender has channel access $channel_access");
+		return 1 if $channel_access >= $required;
+	}
 	
 	# Check for sufficient bot access
 	my $bot_access = $user->bot_access // return undef;

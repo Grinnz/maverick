@@ -201,7 +201,7 @@ sub on_connect {
 	my ($self, $err) = @_;
 	if ($err) {
 		$self->logger->error($err);
-		return if $self->is_stopping or !($self->config->get('irc','reconnect')//1);
+		return if $self->is_stopping or !$self->config->get('irc','reconnect');
 		my $delay = $self->config->get('irc','reconnect_delay');
 		$delay = 10 unless defined $delay and looks_like_number $delay;
 		Mojo::IOLoop->timer($delay => sub { $self->reconnect });
@@ -218,7 +218,7 @@ sub on_disconnect {
 	$self->logger->debug("Disconnected from $server");
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
 	$self->clear_check_recurring_timer;
-	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect')//1;
+	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect');
 }
 
 sub connect {
@@ -235,7 +235,9 @@ sub disconnect {
 	my $message = shift;
 	if (defined $message) {
 		$self->write(quit => $message, sub { shift->disconnect($cb) });
-	} else { $self->irc->disconnect($cb) }
+	} else {
+		$self->irc->disconnect($cb);
+	}
 }
 
 sub reconnect {
@@ -395,7 +397,7 @@ sub parse_command {
 	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
 	$args_str =~ s/^\s+//;
 	$args_str =~ s/\s+$//;
-	my @args = split /\s+/, $args_str;
+	my @args = $command->tokenize ? (split /\s+/, $args_str) : $args_str;
 	
 	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
 	
