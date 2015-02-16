@@ -46,60 +46,15 @@ has 'is_enabled' => (
 	default => 1,
 );
 
-has 'default_config' => (
-	is => 'ro',
-	isa => sub { croak "Invalid config $_[0], must be a hash ref"
-		unless defined $_[0] and ref $_[0] eq 'HASH' },
-	lazy => 1,
-	default => sub { {} },
-	init_arg => 'config',
-);
-
 has 'help_text' => (
 	is => 'ro',
 );
 
-# Accessors for use in on_run
-
-has 'config' => (
-	is => 'rwp',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-	clearer => 1,
-);
-
-has 'bot' => (
-	is => 'rwp',
-	isa => sub { croak "Invalid bot reference $_[0]"
-		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
-	weak_ref => 1,
+has 'usage_text' => (
+	is => 'ro',
 );
 
 # Methods
-
-sub get_config {
-	my ($self, $channel, $key) = @_;
-	croak "Undefined config key" unless defined $key;
-	$self->prepare_config($channel);
-	my $value = $self->config->{$key};
-	$self->clear_config;
-	return $value;
-}
-
-sub set_config {
-	my ($self, $channel, $key, $value) = @_;
-	croak "Undefined config key" unless defined $key;
-	croak "Config value must be simple scalar" if ref $value;
-	my $db_config = $self->bot->db->{commands}{$self->name}{config} //= {};
-	if (defined $channel) {
-		$db_config->{channel}{lc $channel}{$key} = $value;
-	} else {
-		$db_config->{global}{$key} = $value;
-	}
-	$self->bot->_store_db;
-	return $self;
-}
 
 sub check_access {
 	my ($self, $network, $sender, $channel) = @_;
@@ -123,39 +78,34 @@ sub check_access {
 	return 0;
 }
 
-sub prepare_config {
-	my ($self, $network, $channel) = @_;
-	my $default_config = $self->default_config // {};
-	my $db_config = $self->bot->db->{commands}{$self->name}{config};
-	my ($bot_config, $channel_config) = ({}, {});
-	if (defined $db_config) {
-		$bot_config = $db_config->{global} // {};
-		if (defined $channel) {
-			$channel_config = $db_config->{channel}{lc $channel} // {};
-		}
-	}
-	my %config = (%$default_config, %$bot_config, %$channel_config);
-	# Config values must be simple scalars
-	delete $config{$_} for grep { ref $config{$_} } keys %config;
-	$self->_set_config(\%config);
-	return $self;
-}
-
 sub run {
 	my ($self, $network, $sender, $channel, @args) = @_;
-	$self->prepare_config($network, $channel);
 	my $on_run = $self->on_run;
 	local $@;
 	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $network->logger->warn($msg) };
-	eval { $self->$on_run($network, $sender, $channel, @args); 1 };
+	my $rc;
+	eval { $rc = $on_run->($network, $sender, $channel, @args); 1 };
 	if ($@) {
 		my $err = $@;
 		chomp $err;
 		my $cmd_name = $self->name;
 		$network->logger->error("Error running command $cmd_name: $err");
+		$network->reply($sender, $channel, "Internal error");
+	} elsif (lc $rc eq 'usage') {
+		my $text = 'Usage: ${trigger}$name';
+		$text .= ' ' . $self->usage_text if defined $self->usage_text;
+		$network->reply($sender, $channel, $self->parse_usage_text($network, $text));
 	}
-	$self->clear_config;
 	return $self;
+}
+
+sub parse_usage_text {
+	my ($self, $network, $text) = @_;
+	my $trigger = $network->config->get('commands','trigger') || $network->nick . ': ';
+	my $name = $self->name;
+	$text =~ s/\$(?:{trigger}|trigger\b)/$trigger/g;
+	$text =~ s/\$(?:{name}|name\b)/$name/g;
+	return $text;
 }
 
 1;

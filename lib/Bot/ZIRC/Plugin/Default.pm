@@ -8,69 +8,66 @@ use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';
 
-sub parse_help_text {
-	my ($network, $command, $text) = @_;
-	my $trigger = $network->config->get('commands','trigger') || $network->nick . ': ';
-	my $name = $command->name;
-	$text =~ s/\$(?:{trigger}|trigger\b)/$trigger/g;
-	$text =~ s/\$(?:{name}|name\b)/$name/g;
-	return $text;
-}
-
 sub register {
 	my ($self, $bot) = @_;
 	
 	$bot->add_command(
 		name => 'help',
-		help_text => 'This is the help command. Usage: ${trigger}$name [<command>]',
+		help_text => 'This is the help command',
+		usage_text => '[<command>]',
 		on_run => sub {
-			my ($self, $network, $sender, $channel, $name) = @_;
-			my $help_text;
-			my $command;
+			my ($network, $sender, $channel, $name) = @_;
+			my ($help_text, $command);
 			if (defined $name) {
-				$command = $self->bot->get_command($name);
+				$command = $network->bot->get_command($name);
 				if (defined $command) {
-					$help_text = $command->help_text // 'No help text for command $name';
+					$help_text = $command->help_text // 'No help text for command $name.';
+					my $usage_text = $command->usage_text;
+					$help_text .= '.' if $help_text =~ /\w\s*$/;
+					$help_text .= ' Usage: ${trigger}$name';
+					$help_text .= ' ' . $usage_text if defined $usage_text;
 				} else {
-					$help_text = "No such command $name";
+					return $network->reply($sender, $channel, "No such command $name");
 				}
 			} else {
-				$help_text = 'Type ${trigger}$name <command> to get help with a specific command.'x35;
+				$command = $network->bot->get_command('help');
+				$help_text = 'Type ${trigger}$name <command> to get help with a specific command.';
 			}
-			$help_text = parse_help_text($network, $command // $self, $help_text);
+			$help_text = $command->parse_usage_text($network, $help_text);
 			$network->reply($sender, $channel, $help_text);
 		},
 	);
 	
 	$bot->add_command(
 		name => 'quit',
-		help_text => 'Tell the bot to quit. Usage: ${trigger}$name [<message>]',
+		help_text => 'Tell the bot to quit',
+		usage_text => '[<message>]',
 		required_access => ACCESS_BOT_MASTER,
 		on_run => sub {
-			my ($self, $network, $sender, $channel, $message) = @_;
+			my ($network, $sender, $channel, $message) = @_;
 			$message //= 'Goodbye';
-			$self->bot->stop($message);
+			$network->bot->stop($message);
 		},
 	);
 	
 	$bot->add_command(
 		name => 'reload',
-		help_text => 'Reload bot configuration. Usage: ${trigger}$name',
+		help_text => 'Reload bot configuration',
 		required_access => ACCESS_BOT_MASTER,
 		on_run => sub {
-			my ($self, $network, $sender, $channel) = @_;
-			$self->bot->reload;
+			my ($network, $sender, $channel) = @_;
+			$network->bot->reload;
 			$network->reply($sender, $channel, "Reloaded configuration");
 		},
 	);
 	
 	$bot->add_command(
 		name => 'set',
-		help_text => 'Get/set network or channel-specific bot configuration. ' .
-			'Usage: ${trigger}$name [network|<channel>] <name> [<value>]',
+		help_text => 'Get/set network or channel-specific bot configuration',
+		usage_text => '[network|<channel>] <name> [<value>]',
 		required_access => ACCESS_BOT_ADMIN,
 		on_run => sub {
-			my ($self, $network, $sender, $channel, @args) = @_;
+			my ($network, $sender, $channel, @args) = @_;
 			my $scope = $channel;
 			if (lc $args[0] eq 'network' or $args[0] =~ /^#/) {
 				$scope = shift @args;
@@ -90,4 +87,3 @@ sub register {
 }
 
 1;
-

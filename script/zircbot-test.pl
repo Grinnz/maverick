@@ -11,4 +11,5 @@ my $bot = Bot::ZIRC->new(networks => { socialgamer => {
 	channels => { autojoin => '#bots' },
 }});
 $bot->register_plugin('Default');
+$bot->register_plugin('DNS');
 $bot->start;

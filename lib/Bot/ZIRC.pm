@@ -29,8 +29,6 @@ our %EXPORT_TAGS = (
 our $VERSION = '0.06';
 sub bot_version { return $VERSION }
 
-with 'Bot::ZIRC::DNS';
-
 has 'networks' => (
 	is => 'ro',
 	lazy => 1,
@@ -198,9 +196,11 @@ sub build_network {
 sub start {
 	my $self = shift;
 	$self->logger->debug("Starting bot");
+	$self->is_stopping(0);
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
+	$_->start for values %{$self->plugins};
 	$_->start for values %{$self->networks};
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 	return $self;
@@ -222,6 +222,7 @@ sub stop {
 	my ($self, $message) = @_;
 	$self->logger->debug("Stopping bot");
 	$self->is_stopping(1);
+	$_->stop for values %{$self->plugins};
 	Mojo::IOLoop->delay(sub {
 		my $delay = shift;
 		$_->stop($message, $delay->begin) for values %{$self->networks};
