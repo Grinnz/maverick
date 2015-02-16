@@ -1,7 +1,6 @@
 package Bot::ZIRC::Network;
 
 use Carp;
-use Future;
 use List::Util 'any';
 use IRC::Utils 'parse_user';
 use Mojo::IOLoop;
@@ -421,7 +420,7 @@ sub run_after_who {
 	my ($self, $nick) = @_;
 	my $user = $self->user($nick);
 	my $futures = $self->get_event_futures(who => lc $nick);
-	$_->done($self, $user) for @$futures;
+	$self->$_($user) for @$futures;
 	return $self;
 }
 
@@ -436,16 +435,14 @@ sub run_after_whois {
 	my ($self, $nick) = @_;
 	my $user = $self->user($nick);
 	my $futures = $self->get_event_futures(whois => lc $nick);
-	$_->done($self, $user) for @$futures;
+	$self->$_($user) for @$futures;
 	return $self;
 }
 
 sub queue_event_future {
 	my $self = shift;
 	my $future = pop;
-	croak "Invalid Future/coderef $future" unless defined $future and
-		(ref $future eq 'CODE' or blessed $future and $future->isa('Future'));
-	$future = Future->new->on_done($future) if ref $future eq 'CODE';
+	croak "Invalid coderef $future" unless defined $future and ref $future eq 'CODE';
 	my ($event, $key) = @_;
 	croak 'No event given' unless defined $event;
 	my $futures = $self->futures->{$event} //= {};
