@@ -307,7 +307,8 @@ sub reply {
 		foreach my $reply ($self->split_reply(privmsg => $sender, $message)) {
 			push @writes, sub { $self->write(@$reply, shift->begin) };
 		}
-		Mojo::IOLoop->delay(@writes, $cb) if $cb;
+		push @writes, $cb if $cb;
+		Mojo::IOLoop->delay(@writes);
 	}
 	return $self;
 }
@@ -693,7 +694,6 @@ sub irc_rpl_whoisuser { # RPL_WHOISUSER
 	$user->clear_is_ircop;
 	$user->clear_ircop_message;
 	$user->clear_is_bot;
-	$user->clear_is_idle;
 	$user->clear_idle_time;
 	$user->clear_signon_time;
 	$user->clear_channels;
@@ -738,9 +738,7 @@ sub irc_rpl_whoisaccount { # RPL_WHOISACCOUNT
 	my ($self, $message) = @_;
 	my ($to, $nick, $identity) = @{$message->{params}};
 	$self->logger->debug("Received identity for $nick: $identity");
-	my $user = $self->user($nick);
-	$user->is_registered(1);
-	$user->identity($identity);
+	$self->user($nick)->identity($identity);
 }
 
 sub irc_335 { # whois bot string
@@ -756,7 +754,6 @@ sub irc_rpl_whoisidle { # RPL_WHOISIDLE
 	my ($to, $nick, $seconds, $signon) = @{$message->{params}};
 	$self->logger->debug("Received idle status for $nick: $seconds, $signon");
 	my $user = $self->user($nick);
-	$user->is_idle(1);
 	$user->idle_time($seconds);
 	$user->signon_time($signon);
 }
@@ -765,9 +762,11 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my ($self, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("End of whois reply for $nick");
+	my $user = $self->user($nick);
+	$user->identity(undef) unless $user->is_registered;
 	
 	$self->run_after_whois($nick);
-	$self->identify if lc $nick eq lc $self->nick and !$self->user($nick)->is_registered;
+	$self->identify if lc $nick eq lc $self->nick and !$user->is_registered;
 }
 
 1;

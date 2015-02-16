@@ -20,9 +20,7 @@ sub irc_320 { # RPL_WHOISIDENTIFIED
 	if ($lia =~ /is logged in as ([[:graph:]]+)/) {
 		my $identity = $1;
 		$self->logger->debug("Received identity for $nick: $identity");
-		my $user = $self->user($nick);
-		$user->is_registered(1);
-		$user->identity($identity);
+		$self->user($nick)->identity($identity);
 	}
 }
 

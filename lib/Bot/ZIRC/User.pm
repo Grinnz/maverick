@@ -76,6 +76,8 @@ has 'is_registered' => (
 has 'identity' => (
 	is => 'rw',
 	init_arg => undef,
+	trigger => sub { $_[0]->is_registered(defined $_[1]) },
+	predicate => 1,
 	clearer => 1,
 );
 
@@ -99,15 +101,6 @@ has 'is_ircop' => (
 
 has 'ircop_message' => (
 	is => 'rw',
-	init_arg => undef,
-	clearer => 1,
-);
-
-has 'is_idle' => (
-	is => 'rw',
-	lazy => 1,
-	default => 0,
-	coerce => sub { $_[0] ? 1 : 0 },
 	init_arg => undef,
 	clearer => 1,
 );
@@ -185,9 +178,9 @@ sub check_access {
 	}
 	
 	# Check for sufficient bot access
-	unless (defined $self->identity) {
+	unless ($self->has_identity) {
 		$self->logger->debug("Don't know identity of $nick; rechecking after whois");
-		$network->after_whois($nick, sub {
+		return $network->after_whois($nick, sub {
 			my ($network, $self) = @_;
 			$self->$cb($self->has_bot_access($required));
 		});
