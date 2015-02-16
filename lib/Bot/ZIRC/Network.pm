@@ -4,6 +4,7 @@ use Carp;
 use Future;
 use List::Util 'any';
 use IRC::Utils 'parse_user';
+use Mojo::IOLoop;
 use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
@@ -102,7 +103,8 @@ has 'channels' => (
 sub channel {
 	my $self = shift;
 	my $name = shift // croak "No channel name provided";
-	return $self->channels->{lc $name} //= Bot::ZIRC::Channel->new(name => $name);
+	return $name if blessed $name and $name->isa('Bot::ZIRC::Channel');
+	return $self->channels->{lc $name} //= Bot::ZIRC::Channel->new(name => $name, network => $self);
 }
 
 has 'users' => (
@@ -115,7 +117,8 @@ has 'users' => (
 sub user {
 	my $self = shift;
 	my $nick = shift // croak "No user nick provided";
-	return $self->users->{lc $nick} //= Bot::ZIRC::User->new(nick => $nick);
+	return $nick if blessed $nick and $nick->isa('Bot::ZIRC::User');
+	return $self->users->{lc $nick} //= Bot::ZIRC::User->new(nick => $nick, network => $self);
 }
 
 has 'irc' => (
@@ -293,12 +296,20 @@ sub check_nick {
 }
 
 sub reply {
-	my ($self, $sender, $channel, $message) = @_;
+	my ($self, $sender, $channel, $message, $cb) = @_;
+	$sender = $sender->nick if blessed $sender and $sender->isa('Bot::ZIRC::User');
 	if (defined $channel) {
-		$self->write($self->limit_reply(privmsg => $channel, "$sender: $message"));
+		my @reply = $self->limit_reply(privmsg => $channel, "$sender: $message");
+		push @reply, $cb if $cb;
+		$self->write(@reply);
 	} else {
-		$self->write(@$_) for $self->split_reply(privmsg => $sender, $message);
+		my @writes;
+		foreach my $reply ($self->split_reply(privmsg => $sender, $message)) {
+			push @writes, sub { $self->write(@$reply, shift->begin) };
+		}
+		Mojo::IOLoop->delay(@writes, $cb) if $cb;
 	}
+	return $self;
 }
 
 sub limit_reply {
@@ -324,35 +335,29 @@ sub split_reply {
 	return @returns;
 }
 
-sub user_access_level {
-	my ($self, $user) = @_;
-	croak 'No user nick specified' unless defined $user;
-	return ACCESS_BOT_MASTER if lc $user eq lc ($self->config->get('users','master')//'');
-	if (my @admins = split /[\s,]+/, $self->config->get('users','admin')//'') {
-		return ACCESS_BOT_ADMIN if any { lc $user eq lc $_ } @admins;
-	}
-	if (my @voices = split /[\s,]+/, $self->config->get('users','voice')//'') {
-		return ACCESS_BOT_VOICE if any { lc $user eq lc $_ } @voices;
-	}
-	return ACCESS_NONE;
-}
-
 # Command parsing
 
 sub check_command {
 	my ($self, $sender, $channel, $message) = @_;
+	$sender = $self->user($sender);
+	my $nick = $sender->nick;
 	my ($command, @args) = $self->parse_command($sender, $channel, $message);
 	return unless defined $command;
 	
-	my $result = $command->check_access($self, $sender, $channel);
-	return $self->check_command_result($command, $result, $sender, $channel, @args)
-		if defined $result;
-	
-	$self->logger->debug("Don't know identity of $sender; rechecking after whois");
-	$self->after_whois($sender, sub {
-		my ($self, $user) = @_;
-		my $result = $command->check_access($self, $sender, $channel);
-		$self->check_command_result($command, $result, $sender, $channel, @args);
+	my $cmd_name = $command->name;
+	my $args_str = join ' ', @args;
+	$self->logger->debug("<$nick> [command] $cmd_name $args_str");
+		
+	$sender->check_access($command->required_access, $channel, sub {
+		my ($sender, $has_access) = @_;
+		if ($has_access) {
+			$sender->logger->debug("$nick has access to run command $cmd_name");
+			$command->run($sender->network, $sender, $channel, @args);
+		} else {
+			$sender->logger->debug("$nick does not have access to run command $cmd_name");
+			my $channel_str = defined $channel ? " in $channel" : '';
+			$sender->network->reply($sender, undef, "You do not have access to run $cmd_name$channel_str");
+		}
 	});
 }
 
@@ -379,18 +384,18 @@ sub parse_command {
 		return undef unless $cmds and @$cmds;
 		if (@$cmds > 1) {
 			my $suggestions = join ', ', sort @$cmds;
-			$self->write(privmsg => $channel // $sender,
+			$self->reply($sender, $channel,
 				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
 			return undef;
 		}
-		$command = $self->bot->get_command($cmds->[0]) // return undef;
+		$command = $self->bot->get_command($cmds->[0]);
 	}
 	
 	return undef unless defined $command;
 	
 	$cmd_name = $command->name;
 	unless ($command->is_enabled) {
-		$self->write(privmsg => $sender, "Command $cmd_name is currently disabled.");
+		$self->reply($sender, undef, "Command $cmd_name is currently disabled.");
 		return undef;
 	}
 	
@@ -399,23 +404,7 @@ sub parse_command {
 	$args_str =~ s/\s+$//;
 	my @args = $command->tokenize ? (split /\s+/, $args_str) : $args_str;
 	
-	$self->logger->debug("<$sender> [command] $cmd_name $args_str");
-	
 	return ($command, @args);
-}
-
-sub check_command_result {
-	my ($self, $command, $result, $sender, $channel, @args) = @_;
-	my $cmd_name = $command->name;
-	if ($result) {
-		$self->logger->debug("$sender has access to run command $cmd_name");
-		$command->run($self, $sender, $channel, @args);
-	} else {
-		$self->logger->debug("$sender does not have access to run command $cmd_name");
-		my $channel_str = defined $channel ? " in $channel" : '';
-		$self->write(privmsg => $sender, "You do not have access to run $cmd_name$channel_str");
-	}
-	return 1;
 }
 
 # Queue future events
@@ -699,7 +688,6 @@ sub irc_rpl_whoisuser { # RPL_WHOISUSER
 	$user->realname($realname);
 	$user->clear_is_registered;
 	$user->clear_identity;
-	$user->clear_bot_access;
 	$user->clear_is_away;
 	$user->clear_away_message;
 	$user->clear_is_ircop;
@@ -753,7 +741,6 @@ sub irc_rpl_whoisaccount { # RPL_WHOISACCOUNT
 	my $user = $self->user($nick);
 	$user->is_registered(1);
 	$user->identity($identity);
-	$user->bot_access($self->user_access_level($identity));
 }
 
 sub irc_335 { # whois bot string

@@ -63,30 +63,6 @@ has 'usage_text' => (
 
 # Methods
 
-sub check_access {
-	my ($self, $network, $sender, $channel) = @_;
-	
-	my $required = $self->required_access;
-	$network->logger->debug("Required access is $required");
-	return 1 if $required == ACCESS_NONE;
-	
-	my $user = $network->user($sender);
-	if (defined $channel) {
-		# Check for sufficient channel access
-		my $channel_access = $user->channel_access($channel);
-		$network->logger->debug("$sender has channel access $channel_access");
-		return 1 if $channel_access >= $required;
-	}
-	
-	# Check for sufficient bot access
-	my $bot_access = $user->bot_access // return undef;
-	$network->logger->debug("$sender has bot access $bot_access");
-	return 1 if $bot_access >= $required;
-	
-	$network->logger->debug("$sender does not have access to run the command");
-	return 0;
-}
-
 sub run {
 	my ($self, $network, $sender, $channel, @args) = @_;
 	my $on_run = $self->on_run;

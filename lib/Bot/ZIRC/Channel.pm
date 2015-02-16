@@ -1,6 +1,7 @@
 package Bot::ZIRC::Channel;
 
 use Carp;
+use Scalar::Util 'blessed';
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -9,6 +10,15 @@ use namespace::clean;
 has 'name' => (
 	is => 'ro',
 	required => 1,
+);
+
+has 'network' => (
+	is => 'ro',
+	isa => sub { croak "Invalid network object"
+		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC::Network') },
+	required => 1,
+	weak_ref => 1,
+	handles => [qw/logger/],
 );
 
 has 'topic' => (

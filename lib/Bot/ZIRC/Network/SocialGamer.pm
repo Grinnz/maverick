@@ -23,7 +23,6 @@ sub irc_320 { # RPL_WHOISIDENTIFIED
 		my $user = $self->user($nick);
 		$user->is_registered(1);
 		$user->identity($identity);
-		$user->bot_access($self->user_access_level($identity));
 	}
 }
 
