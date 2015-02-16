@@ -29,6 +29,8 @@ our %EXPORT_TAGS = (
 our $VERSION = '0.06';
 sub bot_version { return $VERSION }
 
+our @CARP_NOT = qw(Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
+
 has 'networks' => (
 	is => 'ro',
 	lazy => 1,
@@ -179,6 +181,7 @@ sub get_network_names {
 sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
+	croak "Network name $name contains invalid characters" unless $name =~ /^[-.\w]$/;
 	croak "Network $name already exists" if exists $self->networks->{$name};
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';

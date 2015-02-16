@@ -18,6 +18,8 @@ use namespace::clean;
 
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
+our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
+
 my @irc_events = qw/irc_default irc_invite irc_join irc_kick irc_mode irc_nick
 	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_welcome
 	irc_rpl_motdstart irc_rpl_endofmotd err_nomotd irc_rpl_notopic

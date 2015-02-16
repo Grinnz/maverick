@@ -8,7 +8,7 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
-our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Moo);
+our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::User Bot::ZIRC::Channel Moo);
 
 has 'name' => (
 	is => 'ro',
