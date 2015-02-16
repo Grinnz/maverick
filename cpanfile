@@ -12,5 +12,4 @@ requires 'IRC::Utils', '0.12';
 requires 'Mojolicious', '5.77';
 requires 'Mojo::IRC', '0.16';
 requires 'Moo', '1.007';
-requires 'Net::DNS::Native', '0.15';
 requires 'Parse::IRC', '1.20';

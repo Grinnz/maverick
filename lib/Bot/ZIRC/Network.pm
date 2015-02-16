@@ -295,13 +295,13 @@ sub check_nick {
 sub reply {
 	my ($self, $sender, $channel, $message) = @_;
 	if (defined $channel) {
-		$self->write($self->limit_msg(privmsg => $channel, "$sender: $message"));
+		$self->write($self->limit_reply(privmsg => $channel, "$sender: $message"));
 	} else {
-		$self->write(@$_) for $self->split_msg(privmsg => $sender, $message);
+		$self->write(@$_) for $self->split_reply(privmsg => $sender, $message);
 	}
 }
 
-sub limit_msg {
+sub limit_reply {
 	my ($self, @args) = @_;
 	my $msg = pop @args;
 	my $hostmask = $self->user($self->nick)->hostmask;
@@ -311,7 +311,7 @@ sub limit_msg {
 	return (@args, $msg);
 }
 
-sub split_msg {
+sub split_reply {
 	my ($self, @args) = @_;
 	my $msg = pop @args;
 	my $hostmask = $self->user($self->nick)->hostmask;
@@ -506,7 +506,11 @@ sub irc_join {
 	}
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
-	$self->write(whois => $from) unless lc $from eq lc $self->nick;
+	if (lc $from eq lc $self->nick) {
+		$self->write('who', '+c', $channel);
+	} else {
+		$self->write(whois => $from);
+	}
 }
 
 sub irc_kick {
