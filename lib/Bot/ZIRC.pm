@@ -85,6 +85,7 @@ sub config_defaults {
 		main => {
 			debug => 1,
 			echo => 1,
+			assert_plugins => 1,
 		},
 		irc => {
 			server => '',
@@ -181,7 +182,7 @@ sub get_network_names {
 sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
-	croak "Network name $name contains invalid characters" unless $name =~ /^[-.\w]$/;
+	croak "Network name $name contains invalid characters" unless $name =~ /^[-.\w]+$/;
 	croak "Network $name already exists" if exists $self->networks->{$name};
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
@@ -217,12 +218,24 @@ sub register_plugin {
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
 	local $@;
-	eval "require $class; 1" or croak $@;
-	require Role::Tiny;
-	croak "$class does not do role Bot::ZIRC::Plugin"
-		unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
-	my $plugin = $class->new;
-	$plugin->register($self, $config);
+	my $plugin = eval {
+		eval "require $class; 1" or die $@;
+		require Role::Tiny;
+		die "$class does not do role Bot::ZIRC::Plugin\n"
+			unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
+		my $plugin = $class->new;
+		$plugin->register($self, $config);
+		return $plugin;
+	};
+	if ($@) {
+		my $err = $@;
+		if ($self->config->get('assert_plugins')) {
+			die "Plugin $class could not be registered: $err";
+		} else {
+			warn "Plugin $class could not be registered: $err";
+			return $self;
+		}
+	}
 	$self->plugins->{$class} = $plugin;
 	return $self;
 }
