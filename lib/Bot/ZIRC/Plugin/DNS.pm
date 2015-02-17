@@ -27,7 +27,6 @@ has 'watchers' => (
 
 sub dns_resolve {
 	my ($self, $host, $cb) = @_;
-	
 	my $dns = $self->resolver;
 	my $sock = $dns->getaddrinfo($host);
 	$self->watchers->{fileno $sock} = $sock;
@@ -41,6 +40,8 @@ sub dns_resolve {
 
 sub register {
 	my ($self, $bot) = @_;
+	
+	$bot->add_plugin_method($self, 'dns_resolve');
 	
 	$bot->add_command(
 		name => 'dns',
@@ -56,7 +57,9 @@ sub register {
 			} else {
 				$say_result = $hostname = $target;
 			}
-			$self->dns_resolve($hostname, sub {
+			
+			$network->logger->debug("Resolving $hostname");
+			$network->bot->dns_resolve($hostname, sub {
 				my ($err, @results) = @_;
 				return $network->reply($sender, $channel, "Failed to resolve $hostname: $err") if $err;
 				my %results;

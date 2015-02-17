@@ -21,6 +21,8 @@ use namespace::clean;
 
 use Exporter 'import';
 
+our $AUTOLOAD;
+
 our @EXPORT_OK = keys %{ACCESS_LEVELS()};
 our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
@@ -41,6 +43,13 @@ has 'plugins' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
+);
+
+has 'plugin_methods' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
 );
 
 has 'commands' => (
@@ -245,6 +254,45 @@ sub register_plugin {
 	}
 	$self->plugins->{$class} = $plugin;
 	return $self;
+}
+
+sub has_plugin_method {
+	my ($self, $method) = @_;
+	croak "Unspecified plugin method" unless defined $method;
+	return exists $self->plugin_methods->{$method}
+		or !!$self->can($method);
+}
+
+sub add_plugin_method {
+	my ($self, $plugin, $method) = @_;
+	my $class = blessed $plugin // croak "Invalid plugin $plugin";
+	croak "Invalid plugin method $method"
+		unless defined $method and length $method and !ref $method;
+	croak "Method $method already exists"
+		if exists $self->plugin_methods->{$method} or $self->can($method);
+	croak "Method $method is not implemented by plugin $class"
+		unless $plugin->can($method);
+	$self->plugin_methods->{$method} = $class;
+	return $self;
+}
+
+# Autoload plugin methods
+sub AUTOLOAD {
+	my $self = shift;
+	my $method = $AUTOLOAD;
+	$method =~ s/.*:://;
+	unless (ref $self and exists $self->plugin_methods->{$method}) {
+		# Emulate standard missing method error
+		my ($package, $method) = $AUTOLOAD =~ /^(.*)::([^:]*)/;
+		die sprintf qq(Can't locate object method "%s" via package "%s" at %s line %d.\n),
+			$method, $package, (caller)[1,2];
+	}
+	my $class = $self->plugin_methods->{$method};
+	my $plugin = $self->get_plugin($class) // croak "Plugin $class is not loaded";
+	my $sub = $plugin->can($method)
+		// croak "Plugin $class does not implement method $method";
+	unshift @_, $plugin;
+	goto &$sub;
 }
 
 # Commands
