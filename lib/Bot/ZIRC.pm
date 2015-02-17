@@ -229,7 +229,7 @@ sub get_plugin {
 }
 
 sub register_plugin {
-	my ($self, $class, $config) = @_;
+	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
@@ -240,8 +240,9 @@ sub register_plugin {
 		require Role::Tiny;
 		die "$class does not do role Bot::ZIRC::Plugin\n"
 			unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
-		my $plugin = $class->new;
-		$plugin->register($self, $config);
+		my @params = ref $params eq 'HASH' ? %$params : ();
+		my $plugin = $class->new(@params);
+		$plugin->register($self);
 		return $plugin;
 	};
 	if ($@) {

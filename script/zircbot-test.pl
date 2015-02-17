@@ -10,6 +10,6 @@ my $bot = Bot::ZIRC->new(networks => { socialgamer => {
 		users => { master => 'Grinnz' },
 		channels => { autojoin => '#bots' },
 	}},
-	plugins => [qw/DNSNative LastFM YouTube/],
+	plugins => { DNS => { native => 0 }, LastFM => 1, YouTube => 1 },
 );
 $bot->start;
