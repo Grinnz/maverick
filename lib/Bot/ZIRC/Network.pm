@@ -39,7 +39,7 @@ has 'bot' => (
 	required => 1,
 	isa => sub { croak "Invalid bot" unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
 	weak_ref => 1,
-	handles => [qw/bot_version config_dir is_stopping/],
+	handles => [qw/bot_version config_dir get_hooks is_stopping/],
 );
 
 has 'init_config' => (
@@ -339,28 +339,36 @@ sub split_reply {
 
 # Command parsing
 
-sub check_command {
+sub check_privmsg {
 	my ($self, $sender, $channel, $message) = @_;
 	$sender = $self->user($sender);
 	my $nick = $sender->nick;
 	my ($command, @args) = $self->parse_command($sender, $channel, $message);
-	return unless defined $command;
 	
-	my $cmd_name = $command->name;
-	my $args_str = join ' ', @args;
-	$self->logger->debug("<$nick> [command] $cmd_name $args_str");
-		
-	$sender->check_access($command->required_access, $channel, sub {
-		my ($sender, $has_access) = @_;
-		if ($has_access) {
-			$sender->logger->debug("$nick has access to run command $cmd_name");
-			$command->run($sender->network, $sender, $channel, @args);
-		} else {
-			$sender->logger->debug("$nick does not have access to run command $cmd_name");
-			my $channel_str = defined $channel ? " in $channel" : '';
-			$sender->network->reply($sender, undef, "You do not have access to run $cmd_name$channel_str");
+	if (defined $command) {
+		my $cmd_name = $command->name;
+		my $args_str = join ' ', @args;
+		$self->logger->debug("<$nick> [command] $cmd_name $args_str");
+			
+		$sender->check_access($command->required_access, $channel, sub {
+			my ($sender, $has_access) = @_;
+			if ($has_access) {
+				$sender->logger->debug("$nick has access to run command $cmd_name");
+				$command->run($sender->network, $sender, $channel, @args);
+			} else {
+				$sender->logger->debug("$nick does not have access to run command $cmd_name");
+				my $channel_str = defined $channel ? " in $channel" : '';
+				$sender->network->reply($sender, undef, "You do not have access to run $cmd_name$channel_str");
+			}
+		});
+	} else {
+		my $hooks = $self->get_hooks('privmsg');
+		foreach my $hook (@$hooks) {
+			local $@;
+			eval { $self->$hook($sender, $channel, $message) };
+			$self->logger->error("Error in privmsg hook: $@") if $@;
 		}
-	});
+	}
 }
 
 sub parse_command {
@@ -550,6 +558,16 @@ sub irc_notice {
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[notice $to] <$from> $msg") if $self->config->get('echo');
+	my $hooks = $self->get_hooks('notice');
+	if (@$hooks) {
+		my $sender = $self->user($from);
+		my $channel = lc $to eq lc $self->nick ? undef : $to;
+		foreach my $hook (@$hooks) {
+			local $@;
+			eval { $self->$hook($sender, $channel, $msg) };
+			$self->logger->error("Error in notice hook: $@") if $@;
+		}
+	}
 }
 
 sub irc_part {
@@ -568,7 +586,7 @@ sub irc_privmsg {
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->get('echo');
-	$self->check_command($from, undef, $msg);
+	$self->check_privmsg($from, undef, $msg);
 }
 
 sub irc_public {
@@ -576,7 +594,7 @@ sub irc_public {
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->get('echo');
-	$self->check_command($from, $channel, $msg);
+	$self->check_privmsg($from, $channel, $msg);
 }
 
 sub irc_quit {

@@ -89,7 +89,7 @@ sub register {
 		},
 	);
 	
-	$bot->add_command_hook_after(sub {
+	$bot->add_hook_after_command(sub {
 		my ($command, $network, $sender, $channel) = @_;
 		return unless $command->has_on_more;
 		my $command_name = lc $command->name;

@@ -58,7 +58,7 @@ has 'command_prefixes' => (
 	clearer => 1,
 );
 
-has 'command_hooks' => (
+has 'hooks' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -303,19 +303,25 @@ sub reload_command_prefixes {
 	$self->add_command_prefixes($_) for $self->get_command_names;
 }
 
-sub add_command_hook_before {
-	my ($self, $cb) = @_;
-	croak "Invalid before-command hook $cb" unless ref $cb eq 'CODE';
-	my $before_hooks = $self->command_hooks->{before} //= [];
-	push @$before_hooks, $cb;
+# Hooks
+
+sub get_hooks {
+	my ($self, $type) = @_;
+	return [] unless defined $type;
+	return $self->hooks->{$type} // [];
 }
 
-sub add_command_hook_after {
-	my ($self, $cb) = @_;
-	croak "Invalid after-command hook $cb" unless ref $cb eq 'CODE';
-	my $after_hooks = $self->command_hooks->{after} //= [];
-	push @$after_hooks, $cb;
+sub add_hook {
+	my ($self, $type, $cb) = @_;
+	croak "Unspecified hook type" unless defined $type;
+	croak "Invalid hook callback $cb" unless ref $cb eq 'CODE';
+	push @{$self->hooks->{$type}//=[]}, $cb;
+	return $self;
 }
+
+sub add_hook_before_command { $_[0]->add_hook(before_command => $_[1]) }
+sub add_hook_after_command { $_[0]->add_hook(after_command => $_[1]) }
+sub add_hook_privmsg { $_[0]->add_hook(privmsg => $_[1]) }
 
 # Bot actions
 

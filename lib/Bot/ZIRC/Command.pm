@@ -72,8 +72,8 @@ has 'usage_text' => (
 
 sub run {
 	my ($self, $network, $sender, $channel, @args) = @_;
-	my $before_hooks = $network->bot->command_hooks->{before} // [];
-	my $after_hooks = $network->bot->command_hooks->{after} // [];
+	my $before_hooks = $network->get_hooks('before_command');
+	my $after_hooks = $network->get_hooks('after_command');
 	my $on_run = $self->on_run;
 	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $network->logger->warn($msg) };
 	foreach my $hook (@$before_hooks) {

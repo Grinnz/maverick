@@ -176,6 +176,14 @@ sub set_channel {
 	return $self->set($channel, $key, $value);
 }
 
+sub set_channel_default {
+	my $self = shift;
+	my ($key, $value) = @_;
+	croak "Parameter name must be specified" unless defined $key;
+	return $self if defined $self->get_channel('network', $key);
+	return $self->set('network', $key, $value);
+}
+
 sub get_channel {
 	my $self = shift;
 	my ($channel, $key) = @_;
