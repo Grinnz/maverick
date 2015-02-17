@@ -8,6 +8,8 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
+use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] };
+
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::User Bot::ZIRC::Channel Moo);
 
 has 'name' => (
@@ -86,8 +88,7 @@ sub run {
 	if ($@) {
 		my $err = $@;
 		chomp $err;
-		my $cmd_name = $self->name;
-		$network->logger->error("Error running command $cmd_name: $err");
+		$network->logger->error("Error running command $self: $err");
 		$network->reply($sender, $channel, "Internal error");
 	} elsif (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
@@ -105,9 +106,8 @@ sub run {
 sub parse_usage_text {
 	my ($self, $network, $text) = @_;
 	my $trigger = $network->config->get('commands','trigger') || $network->nick . ': ';
-	my $name = $self->name;
 	$text =~ s/\$(?:{trigger}|trigger\b)/$trigger/g;
-	$text =~ s/\$(?:{name}|name\b)/$name/g;
+	$text =~ s/\$(?:{name}|name\b)/$self/g;
 	return $text;
 }
 

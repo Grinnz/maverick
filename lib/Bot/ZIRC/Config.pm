@@ -173,7 +173,7 @@ sub set_channel {
 	croak "Parameter name must be specified" unless defined $key;
 	croak "Invalid channel name $channel"
 		unless lc $channel eq 'network' or $channel =~ /^#/;
-	return $self->set($channel, $key, $value);
+	return $self->set(lc $channel, $key, $value);
 }
 
 sub set_channel_default {
@@ -191,7 +191,7 @@ sub get_channel {
 		unless defined $channel and defined $key;
 	return $self->get('network', $key) if lc $channel eq 'network';
 	croak "Invalid channel name $channel" unless $channel =~ /^#/;
-	return $self->get($channel, $key) // $self->get('network', $key);
+	return $self->get(lc $channel, $key) // $self->get('network', $key);
 }
 
 sub hash {

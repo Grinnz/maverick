@@ -7,10 +7,13 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
+use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] };
+
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Moo);
 
 has 'name' => (
 	is => 'ro',
+	isa => sub { croak "Unspecified channel name" unless defined $_[0] },
 	required => 1,
 );
 

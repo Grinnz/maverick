@@ -16,6 +16,8 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
+use overload '""' => sub { shift->name };
+
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
@@ -31,6 +33,7 @@ sub get_irc_events { @irc_events }
 
 has 'name' => (
 	is => 'rwp',
+	isa => sub { croak "Unspecified network name" unless defined $_[0] },
 	required => 1,
 );
 
@@ -139,7 +142,7 @@ sub _connect_options {
 	my $self = shift;
 	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
 		@{$self->config->hash->{irc}}{qw/server port server_pass ssl nick realname/};
-	die "IRC server for network ".$self->name." is not configured\n"
+	die "IRC server for network $self is not configured\n"
 		unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
 	$nick //= 'ZIRCBot',
@@ -193,8 +196,7 @@ sub stop {
 sub reload {
 	my $self = shift;
 	$self->clear_logger;
-	my $name = $self->name;
-	$self->logger->debug("Reloading network $name");
+	$self->logger->debug("Reloading network $self");
 	$self->config->reload;
 	return $self;
 }
@@ -298,7 +300,6 @@ sub check_nick {
 
 sub reply {
 	my ($self, $sender, $channel, $message, $cb) = @_;
-	$sender = $sender->nick if blessed $sender and $sender->isa('Bot::ZIRC::User');
 	if (defined $channel) {
 		my @reply = $self->limit_reply(privmsg => $channel, "$sender: $message");
 		push @reply, $cb if $cb;
@@ -342,23 +343,21 @@ sub split_reply {
 sub check_privmsg {
 	my ($self, $sender, $channel, $message) = @_;
 	$sender = $self->user($sender);
-	my $nick = $sender->nick;
 	my ($command, @args) = $self->parse_command($sender, $channel, $message);
 	
 	if (defined $command) {
-		my $cmd_name = $command->name;
 		my $args_str = join ' ', @args;
-		$self->logger->debug("<$nick> [command] $cmd_name $args_str");
+		$self->logger->debug("<$sender> [command] $command $args_str");
 			
 		$sender->check_access($command->required_access, $channel, sub {
 			my ($sender, $has_access) = @_;
 			if ($has_access) {
-				$sender->logger->debug("$nick has access to run command $cmd_name");
+				$sender->logger->debug("$sender has access to run command $command");
 				$command->run($sender->network, $sender, $channel, @args);
 			} else {
-				$sender->logger->debug("$nick does not have access to run command $cmd_name");
+				$sender->logger->debug("$sender does not have access to run command $command");
 				my $channel_str = defined $channel ? " in $channel" : '';
-				$sender->network->reply($sender, undef, "You do not have access to run $cmd_name$channel_str");
+				$sender->network->reply($sender, undef, "You do not have access to run $command$channel_str");
 			}
 		});
 	} else {
@@ -403,9 +402,8 @@ sub parse_command {
 	
 	return undef unless defined $command;
 	
-	$cmd_name = $command->name;
 	unless ($command->is_enabled) {
-		$self->reply($sender, undef, "Command $cmd_name is currently disabled.");
+		$self->reply($sender, undef, "Command $command is currently disabled.");
 		return undef;
 	}
 	
@@ -498,9 +496,6 @@ sub irc_join {
 	my ($channel) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from joined $channel");
-	if ($from eq $self->nick) {
-		$self->channel($channel);
-	}
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
 	if (lc $from eq lc $self->nick) {
@@ -575,7 +570,7 @@ sub irc_part {
 	my ($channel) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from parted $channel");
-	if ($from eq $self->nick) {
+	if (lc $from eq lc $self->nick) {
 	}
 	$self->channel($channel)->remove_user($from);
 	$self->user($from)->remove_channel($channel);

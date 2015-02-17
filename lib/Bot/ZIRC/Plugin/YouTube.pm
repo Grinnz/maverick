@@ -47,7 +47,6 @@ sub register {
 			my $api_key = $network->config->get('apis','youtube_api_key');
 			die YOUTUBE_API_KEY_MISSING unless defined $api_key;
 			
-			my $nick = $sender->nick;
 			my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('search')
 				->query(key => $api_key, part => 'snippet', q => $query,
 					safeSearch => 'strict', type => 'video');
@@ -66,18 +65,16 @@ sub register {
 					unless $results and @$results;
 				
 				my $first_result = shift @$results;
-				my $network_name = $network->name;
-				my $channel_name = lc ($channel // $sender->nick);
-				$self->results_cache->{$network_name}{$channel_name} = $results;
+				my $channel_name = lc ($channel // $sender);
+				$self->results_cache->{$network}{$channel_name} = $results;
 				my $show_more = @$results;
 				display_result($network, $sender, $channel, $first_result, $show_more);
 			});
 		},
 		on_more => sub {
 			my ($network, $sender, $channel) = @_;
-			my $network_name = $network->name;
-			my $channel_name = lc ($channel // $sender->nick);
-			my $results = $self->results_cache->{$network_name}{$channel_name};
+			my $channel_name = lc ($channel // $sender);
+			my $results = $self->results_cache->{$network}{$channel_name};
 			return $network->reply($sender, $channel, "No more results for YouTube search")
 				unless $results and @$results;
 			
@@ -151,8 +148,7 @@ sub display_triggered {
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
 	
 	my $b_code = chr 2;
-	my $nick = $sender->nick;
-	my $response = "YouTube video linked by $nick: $b_code$title$b_code - " .
+	my $response = "YouTube video linked by $sender: $b_code$title$b_code - " .
 		"published by $b_code$ytchannel$b_code - $url";
 	$network->write(privmsg => $channel, $response);
 }

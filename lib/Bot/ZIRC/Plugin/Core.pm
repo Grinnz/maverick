@@ -92,10 +92,8 @@ sub register {
 	$bot->add_hook_after_command(sub {
 		my ($command, $network, $sender, $channel) = @_;
 		return unless $command->has_on_more;
-		my $command_name = lc $command->name;
-		my $network_name = $network->name;
-		my $channel_name = lc ($channel // $sender->nick);
-		$self->more_commands->{$network_name}{$channel_name} = $command_name;
+		my $channel_name = lc ($channel // $sender);
+		$self->more_commands->{$network}{$channel_name} = lc $command->name;
 	});
 	
 	$bot->add_command(
@@ -103,9 +101,8 @@ sub register {
 		help_text => 'Show more results',
 		on_run => sub {
 			my ($network, $sender, $channel, $command_name) = @_;
-			my $network_name = $network->name;
-			my $channel_name = lc ($channel // $sender->nick);
-			$command_name //= $self->more_commands->{$network_name}{$channel_name};
+			my $channel_name = lc ($channel // $sender);
+			$command_name //= $self->more_commands->{$network}{$channel_name};
 			return $network->reply($sender, $channel, "No more to display") unless defined $command_name;
 			my $command = $network->bot->get_command($command_name);
 			return $network->reply($sender, $channel, "No more to display for $command_name")

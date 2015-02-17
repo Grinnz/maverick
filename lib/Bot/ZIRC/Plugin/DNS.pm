@@ -49,7 +49,7 @@ sub register {
 		usage_text => '[<nick>|<hostname>]',
 		on_run => sub {
 			my ($network, $sender, $channel, $target) = @_;
-			$target //= $sender->nick;
+			$target //= "$sender";
 			my ($hostname, $say_result);
 			if (exists $network->users->{lc $target}) {
 				$hostname = $network->user($target)->host || 'unknown';

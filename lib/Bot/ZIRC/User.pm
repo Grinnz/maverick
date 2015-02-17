@@ -9,10 +9,13 @@ use Moo;
 use warnings NONFATAL => 'all';
 use namespace::clean;
 
+use overload '""' => sub { shift->nick }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] };
+
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::Channel Moo);
 
 has 'nick' => (
 	is => 'rw',
+	isa => sub { croak "Unspecified user nick" unless defined $_[0] },
 	required => 1,
 );
 
@@ -47,7 +50,7 @@ sub hostmask {
 
 sub banmask {
 	my $self = shift;
-	my $host = $self->nick // '';
+	my $host = $self->host // '';
 	return "*!*\@$host";
 }
 
@@ -171,7 +174,6 @@ sub check_access {
 	my $required = shift // return $self->$cb(0);
 	my $channel = shift;
 	
-	my $nick = $self->nick;
 	my $network = $self->network;
 	
 	$self->logger->debug("Required access is $required");
@@ -180,14 +182,14 @@ sub check_access {
 	if (defined $channel) {
 		# Check for sufficient channel access
 		my $channel_access = $self->channel_access($channel);
-		$self->logger->debug("$nick has channel access $channel_access");
+		$self->logger->debug("$self has channel access $channel_access");
 		return $self->$cb(1) if $channel_access >= $required;
 	}
 	
 	# Check for sufficient bot access
 	unless ($self->has_identity or $self->has_bot_access($required)) {
-		$self->logger->debug("Rechecking access for $nick after whois");
-		return $network->after_whois($nick, sub {
+		$self->logger->debug("Rechecking access for $self after whois");
+		return $network->after_whois($self->nick, sub {
 			my ($network, $self) = @_;
 			$self->$cb($self->has_bot_access($required));
 		});
@@ -198,10 +200,9 @@ sub check_access {
 
 sub has_bot_access {
 	my ($self, $required) = @_;
-	my $nick = $self->nick;
 	
 	my $bot_access = $self->bot_access;
-	$self->logger->debug("$nick has bot access $bot_access");
+	$self->logger->debug("$self has bot access $bot_access");
 	return $bot_access >= $required ? 1 : 0;
 }
 
