@@ -40,7 +40,7 @@ has 'networks' => (
 );
 
 has 'plugins' => (
-	is => 'ro',
+	is => 'rwp',
 	lazy => 1,
 	default => sub { {} },
 );
@@ -101,7 +101,6 @@ sub config_defaults {
 		main => {
 			debug => 1,
 			echo => 1,
-			assert_plugins => 1,
 		},
 		irc => {
 			server => '',
@@ -178,7 +177,8 @@ sub BUILD {
 	$self->add_network($_ => delete $networks->{$_}) for keys %$networks;
 	
 	my $plugins = $self->plugins;
-	%$plugins = map { ($_ => 1) } @$plugins if ref $plugins eq 'ARRAY';
+	$self->_set_plugins({map { ($_ => 1) } @$plugins}) if ref $plugins eq 'ARRAY';
+	$plugins = $self->plugins;
 	croak "Plugins must be specified as a hash or array reference"
 		unless ref $plugins eq 'HASH';
 	$plugins->{Core} //= 1;
@@ -233,6 +233,7 @@ sub register_plugin {
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
+	$self->plugins->{$class} = undef; # Avoid circular dependency issues
 	local $@;
 	my $plugin = eval {
 		eval "require $class; 1" or die $@;
@@ -245,12 +246,8 @@ sub register_plugin {
 	};
 	if ($@) {
 		my $err = $@;
-		if ($self->config->get('assert_plugins')) {
-			die "Plugin $class could not be registered: $err";
-		} else {
-			warn "Plugin $class could not be registered: $err";
-			return $self;
-		}
+		delete $self->plugins->{$class};
+		croak "Plugin $class could not be registered: $err";
 	}
 	$self->plugins->{$class} = $plugin;
 	return $self;

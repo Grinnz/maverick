@@ -1,7 +1,8 @@
-package Bot::ZIRC::Plugin::DNS;
+package Bot::ZIRC::Plugin::DNSNative;
 
 use Mojo::IOLoop;
-use Socket qw/AF_INET AF_INET6 getaddrinfo inet_ntop unpack_sockaddr_in unpack_sockaddr_in6/;
+use Net::DNS::Native;
+use Socket qw/AF_INET AF_INET6 inet_ntop unpack_sockaddr_in unpack_sockaddr_in6/;
 
 use Moo;
 use warnings NONFATAL => 'all';
@@ -9,9 +10,31 @@ use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';
 
+has 'resolver' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { Net::DNS::Native->new },
+	init_arg => undef,
+);
+
+has 'watchers' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+	clearer => 1,
+);
+
 sub dns_resolve {
 	my ($self, $host, $cb) = @_;
-	$cb->(getaddrinfo($host));
+	my $dns = $self->resolver;
+	my $sock = $dns->getaddrinfo($host);
+	$self->watchers->{fileno $sock} = $sock;
+	Mojo::IOLoop->singleton->reactor->io($sock, sub {
+		Mojo::IOLoop->singleton->reactor->remove($sock);
+		delete $self->watchers->{fileno $sock};
+		$cb->($dns->get_result($sock)) if $cb;
+	})->watch($sock, 1, 0);
 	return $self;
 }
 
@@ -54,6 +77,14 @@ sub register {
 			});
 		},
 	);
+}
+
+sub stop {
+	my $self = shift;
+	foreach my $sock (values %{$self->watchers}) {
+		Mojo::IOLoop->singleton->reactor->remove($sock);
+	}
+	$self->clear_watchers;
 }
 
 1;
