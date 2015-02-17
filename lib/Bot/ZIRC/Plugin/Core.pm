@@ -8,6 +8,13 @@ use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';
 
+has 'more_commands' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 sub register {
 	my ($self, $bot) = @_;
 	
@@ -79,6 +86,31 @@ sub register {
 					}
 				});
 			}
+		},
+	);
+	
+	$bot->add_command_hook_after(sub {
+		my ($command, $network, $sender, $channel) = @_;
+		return unless $command->has_on_more;
+		my $command_name = lc $command->name;
+		my $network_name = $network->name;
+		my $channel_name = lc ($channel // $sender->nick);
+		$self->more_commands->{$network_name}{$channel_name} = $command_name;
+	});
+	
+	$bot->add_command(
+		name => 'more',
+		help_text => 'Show more results',
+		on_run => sub {
+			my ($network, $sender, $channel, $command_name) = @_;
+			my $network_name = $network->name;
+			my $channel_name = lc ($channel // $sender->nick);
+			$command_name //= $self->more_commands->{$network_name}{$channel_name};
+			return $network->reply($sender, $channel, "No more to display") unless defined $command_name;
+			my $command = $network->bot->get_command($command_name);
+			return $network->reply($sender, $channel, "No more to display for $command_name")
+				unless $command and $command->has_on_more;
+			$command->on_more->($network, $sender, $channel);
 		},
 	);
 	

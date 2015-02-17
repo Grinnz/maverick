@@ -24,6 +24,13 @@ has 'on_run' => (
 	required => 1,
 );
 
+has 'on_more' => (
+	is => 'ro',
+	isa => sub { croak "Invalid on_more subroutine $_[0]"
+		unless defined $_[0] and ref $_[0] eq 'CODE' },
+	predicate => 1,
+);
+
 has 'required_access' => (
 	is => 'rw',
 	isa => sub { croak "Invalid access level $_[0]"
@@ -65,21 +72,32 @@ has 'usage_text' => (
 
 sub run {
 	my ($self, $network, $sender, $channel, @args) = @_;
+	my $before_hooks = $network->bot->command_hooks->{before} // [];
+	my $after_hooks = $network->bot->command_hooks->{after} // [];
 	my $on_run = $self->on_run;
-	local $@;
 	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $network->logger->warn($msg) };
-	my $rc;
-	eval { $rc = $on_run->($network, $sender, $channel, @args); 1 };
+	foreach my $hook (@$before_hooks) {
+		local $@;
+		eval { $self->$hook($network, $sender, $channel, @args) };
+		$network->logger->error("Error in before-command hook: $@") if $@;
+	}
+	local $@;
+	my $rc = eval { $on_run->($network, $sender, $channel, @args) };
 	if ($@) {
 		my $err = $@;
 		chomp $err;
 		my $cmd_name = $self->name;
 		$network->logger->error("Error running command $cmd_name: $err");
 		$network->reply($sender, $channel, "Internal error");
-	} elsif (lc $rc eq 'usage') {
+	} elsif (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$network->reply($sender, $channel, $self->parse_usage_text($network, $text));
+	}
+	foreach my $hook (@$after_hooks) {
+		local $@;
+		eval { $self->$hook($network, $sender, $channel, @args) };
+		$network->logger->error("Error in after-command hook: $@") if $@;
 	}
 	return $self;
 }

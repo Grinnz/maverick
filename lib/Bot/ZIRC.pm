@@ -58,6 +58,13 @@ has 'command_prefixes' => (
 	clearer => 1,
 );
 
+has 'command_hooks' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 has 'init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
@@ -294,6 +301,20 @@ sub reload_command_prefixes {
 	my $self = shift;
 	$self->clear_command_prefixes;
 	$self->add_command_prefixes($_) for $self->get_command_names;
+}
+
+sub add_command_hook_before {
+	my ($self, $cb) = @_;
+	croak "Invalid before-command hook $cb" unless ref $cb eq 'CODE';
+	my $before_hooks = $self->command_hooks->{before} //= [];
+	push @$before_hooks, $cb;
+}
+
+sub add_command_hook_after {
+	my ($self, $cb) = @_;
+	croak "Invalid after-command hook $cb" unless ref $cb eq 'CODE';
+	my $after_hooks = $self->command_hooks->{after} //= [];
+	push @$after_hooks, $cb;
 }
 
 # Bot actions
