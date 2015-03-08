@@ -206,6 +206,7 @@ sub BUILD {
 		my $args = delete $plugins->{$plugin_class};
 		$self->register_plugin($plugin_class => $args) if $args;
 	}
+	$self->check_required_methods;
 }
 
 # Networks
@@ -279,6 +280,18 @@ sub has_plugin_method {
 	croak "Unspecified plugin method" unless defined $method;
 	return exists $self->plugin_methods->{$method}
 		or !!$self->can($method);
+}
+
+sub check_required_methods {
+	my $self = shift;
+	foreach my $class ($self->get_plugin_classes) {
+		my $plugin = $self->get_plugin($class);
+		foreach my $method ($plugin->require_methods) {
+			die "Plugin $class requires method $method but it has not been loaded\n"
+				unless $self->has_plugin_method($method);
+		}
+	}
+	return $self;
 }
 
 sub add_plugin_method {
