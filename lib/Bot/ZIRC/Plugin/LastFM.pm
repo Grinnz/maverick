@@ -37,14 +37,14 @@ sub register {
 			if (lc $args[0] eq 'set') {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
-				# add username to db
-				return $network->reply("Set Last.fm username of $sender to $username");
+				$network->storage->data->{lastfm}{usernames}{lc $sender} = $username;
+				$network->storage->store;
+				return $network->reply($sender, $channel, "Set Last.fm username of $sender to $username");
 			}
 			
 			my $username = shift @args;
 			unless (defined $username) {
-				# get username from db
-				$username = $sender->nick;
+				$username = $network->storage->data->{lastfm}{usernames}{lc $sender} // $sender->nick;
 			}
 			
 			my $api_key = $network->config->get('apis','lastfm_api_key');
@@ -60,12 +60,12 @@ sub register {
 						? "$err->{code} response: $err->{message}"
 						: "Connection error: $err->{message}";
 					return $network->reply($sender, $channel,
-						"Error retrieving Last.fm user data: $err");
+						"Error retrieving Last.fm user data for $username: $err");
 				}
 				my $response = $tx->res->json;
 				if ($response->{error}) {
 					return $network->reply($sender, $channel,
-						"Error retrieving Last.fm user data: $response->{message}");
+						"Error retrieving Last.fm user data for $username: $response->{message}");
 				}
 				
 				my $track = $response->{recenttracks}{track};

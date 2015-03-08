@@ -3,6 +3,7 @@ package Bot::ZIRC::Storage;
 use Carp;
 use File::Path 'make_path';
 use File::Spec;
+use Mojo::JSON qw/decode_json encode_json/;
 
 use Moo 2;
 use namespace::clean;
@@ -50,6 +51,7 @@ sub reload {
 }
 
 sub store {
+	my $self = shift;
 	my $dir = $self->dir;
 	my $storage_file = $self->file;
 	$storage_file = File::Spec->catfile($dir, $storage_file) if defined $dir and length $dir;

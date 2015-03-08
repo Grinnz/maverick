@@ -33,7 +33,6 @@ has 'watchers' => (
 
 sub BUILD {
 	my $self = shift;
-	warn $self->native;
 	return unless $self->native;
 	eval { require Net::DNS::Native };
 	if ($@) {
