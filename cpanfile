@@ -10,5 +10,5 @@ requires 'Config::IniFiles', '2.83';
 requires 'IRC::Utils', '0.12';
 requires 'Mojolicious', '5.77';
 requires 'Mojo::IRC', '0.16';
-requires 'Moo', '1.007';
+requires 'Moo', '2.000';
 requires 'Parse::IRC', '1.20';

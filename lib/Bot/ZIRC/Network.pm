@@ -12,8 +12,7 @@ use Bot::ZIRC::Access qw/:access channel_access_level/;
 use Bot::ZIRC::Channel;
 use Bot::ZIRC::User;
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 use overload '""' => sub { shift->name };

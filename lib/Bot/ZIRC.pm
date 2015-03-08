@@ -14,9 +14,9 @@ use Scalar::Util 'blessed';
 use Bot::ZIRC::Access qw/:access ACCESS_LEVELS/;
 use Bot::ZIRC::Command;
 use Bot::ZIRC::Config;
+use Bot::ZIRC::Storage;
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 use Exporter 'import';
@@ -143,6 +143,26 @@ sub _build_config {
 	);
 	$config->apply($self->init_config)->store if %{$self->init_config};
 	return $config;
+}
+
+has 'storage_file' => (
+	is => 'ro',
+	lazy => 1,
+	default => 'zirc.json',
+);
+
+has 'storage' => (
+	is => 'lazy',
+	init_arg => undef,
+);
+
+sub _build_storage {
+	my $self = shift;
+	my $storage = Bot::ZIRC::Storage->new(
+		dir => $self->config_dir,
+		file => $self->storage_file,
+	);
+	return $storage;
 }
 
 has 'logger' => (

@@ -2,8 +2,7 @@ package Bot::ZIRC::Plugin::Core;
 
 use Bot::ZIRC::Access;
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';

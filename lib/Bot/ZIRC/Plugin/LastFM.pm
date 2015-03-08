@@ -5,8 +5,7 @@ use Mojo::URL;
 use Mojo::UserAgent;
 use Time::Duration 'ago';
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';

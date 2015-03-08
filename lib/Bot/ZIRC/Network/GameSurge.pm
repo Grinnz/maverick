@@ -1,7 +1,6 @@
 package Bot::ZIRC::Network::GameSurge;
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 extends 'Bot::ZIRC::Network';

@@ -3,8 +3,7 @@ package Bot::ZIRC::Channel;
 use Carp;
 use Scalar::Util 'blessed';
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] };

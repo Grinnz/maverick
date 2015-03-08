@@ -5,8 +5,7 @@ use Mojo::URL;
 use Mojo::UserAgent;
 use Time::Duration 'ago';
 
-use Moo;
-use warnings NONFATAL => 'all';
+use Moo 2;
 use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';

@@ -1,7 +1,6 @@
 package Bot::ZIRC::Plugin;
 
-use Moo::Role;
-use warnings NONFATAL => 'all';
+use Moo::Role 2;
 
 requires 'register';
 
