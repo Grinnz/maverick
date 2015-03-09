@@ -498,7 +498,7 @@ sub irc_join {
 	$self->channel($channel)->add_user($from);
 	$self->user($from)->add_channel($channel);
 	if (lc $from eq lc $self->nick) {
-		$self->write('who', '+c', $channel);
+		#$self->write('who', '+c', $channel);
 	} else {
 		$self->write(whois => $from);
 	}
@@ -645,7 +645,8 @@ sub irc_rpl_namreply { # RPL_NAMREPLY
 	my ($self, $message) = @_;
 	my ($to, $sym, $channel, $nicks) = @{$message->{params}};
 	$self->logger->debug("Received names for $channel: $nicks");
-	foreach my $nick (split /\s+/, $nicks) {
+	my @nicks = split /\s+/, $nicks;
+	foreach my $nick (@nicks) {
 		my $access = ACCESS_NONE;
 		if ($nick =~ s/^([-~&@%+])//) {
 			$access = channel_access_level($1);
@@ -655,6 +656,7 @@ sub irc_rpl_namreply { # RPL_NAMREPLY
 		$user->channel_access($channel => $access);
 		$self->channel($channel)->add_user($nick);
 	}
+	$self->write(whois => join ',', @nicks) if @nicks;
 }
 
 sub irc_rpl_whoreply { # RPL_WHOREPLY
@@ -771,13 +773,15 @@ sub irc_rpl_whoisidle { # RPL_WHOISIDLE
 
 sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	my ($self, $message) = @_;
-	my ($to, $nick) = @{$message->{params}};
-	$self->logger->debug("End of whois reply for $nick");
-	my $user = $self->user($nick);
-	$user->identity(undef) unless $user->is_registered;
-	
-	$self->run_after_whois($nick);
-	$self->identify if lc $nick eq lc $self->nick and !$user->is_registered;
+	my ($to, $nicks) = @{$message->{params}};
+	$self->logger->debug("End of whois reply for $nicks");
+	my @nicks = split ',', $nicks;
+	foreach my $nick (@nicks) {
+		my $user = $self->user($nick);
+		$user->identity(undef) unless $user->is_registered;
+		$self->run_after_whois($nick);
+		$self->identify if lc $nick eq lc $self->nick and !$user->is_registered;
+	}
 }
 
 1;

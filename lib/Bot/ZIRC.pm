@@ -187,6 +187,13 @@ has 'is_stopping' => (
 	init_arg => undef,
 );
 
+has 'watch_timer' => (
+	is => 'rwp',
+	predicate => 1,
+	clearer => 1,
+	init_arg => undef,
+);
+
 sub BUILD {
 	my $self = shift;
 	
@@ -262,7 +269,7 @@ sub register_plugin {
 		die "$class does not do role Bot::ZIRC::Plugin\n"
 			unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
 		my @params = ref $params eq 'HASH' ? %$params : ();
-		my $plugin = $class->new(@params);
+		my $plugin = $class->new(@params, bot => $self);
 		$plugin->register($self);
 		return $plugin;
 	};
@@ -411,8 +418,12 @@ sub start {
 	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
-	$_->start for values %{$self->networks};
-	$_->start for values %{$self->plugins};
+	
+	$_->start for values %{$self->networks}, values %{$self->plugins};
+	
+	# Make sure perl signals are caught in a timely fashion
+	$self->_set_watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
+		unless $self->has_watch_timer;
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 	return $self;
 }
@@ -421,6 +432,9 @@ sub stop {
 	my ($self, $message) = @_;
 	$self->logger->debug("Stopping bot");
 	$self->is_stopping(1);
+	Mojo::IOLoop->remove($self->watch_timer) if $self->has_watch_timer;
+	$self->clear_watch_timer;
+	
 	$_->stop for values %{$self->plugins};
 	Mojo::IOLoop->delay(sub {
 		my $delay = shift;
@@ -434,8 +448,7 @@ sub reload {
 	$self->clear_logger;
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
-	$_->reload for values %{$self->networks};
-	$_->reload for values %{$self->plugins};
+	$_->reload for values %{$self->networks}, values %{$self->plugins};
 	return $self;
 }
 
