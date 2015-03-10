@@ -1,0 +1,7 @@
+# To use: cpanm --installdeps --with-recommends ./plugindeps/dns
+requires 'Carp';
+requires 'Mojolicious', '6.0';
+requires 'Moo', '2.000';
+requires 'namespace::clean';
+requires 'Socket';
+recommends 'Net::DNS::Native', '0.15';
