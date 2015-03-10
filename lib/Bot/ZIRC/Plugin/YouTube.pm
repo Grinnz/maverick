@@ -2,7 +2,6 @@ package Bot::ZIRC::Plugin::YouTube;
 
 use Carp;
 use Mojo::URL;
-use Mojo::UserAgent;
 use Time::Duration 'ago';
 
 use Moo 2;
@@ -22,12 +21,6 @@ has 'results_cache' => (
 	lazy => 1,
 	default => sub { {} },
 	init_arg => undef,
-);
-
-has 'ua' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { Mojo::UserAgent->new },
 );
 
 sub register {

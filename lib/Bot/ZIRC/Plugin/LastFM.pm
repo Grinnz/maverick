@@ -2,7 +2,6 @@ package Bot::ZIRC::Plugin::LastFM;
 
 use Carp;
 use Mojo::URL;
-use Mojo::UserAgent;
 use Time::Duration 'ago';
 
 use Moo 2;
@@ -14,13 +13,6 @@ use constant LASTFM_API_KEY_MISSING =>
 	"See http://www.last.fm/api/authentication for more information on obtaining a Last.fm API key.\n";
 
 with 'Bot::ZIRC::Plugin';
-
-has 'ua' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { Mojo::UserAgent->new },
-	init_arg => undef,
-);
 
 sub register {
 	my ($self, $bot) = @_;

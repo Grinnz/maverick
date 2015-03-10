@@ -10,6 +10,7 @@ use List::Util 'any';
 use Mojo::IOLoop;
 use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
+use Mojo::UserAgent;
 use Scalar::Util 'blessed';
 use Bot::ZIRC::Access qw/:access ACCESS_LEVELS/;
 use Bot::ZIRC::Command;
@@ -178,6 +179,13 @@ sub _build_logger {
 	$logger->level('info') unless $self->config->get('debug');
 	return $logger;
 }
+
+has 'ua' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { Mojo::UserAgent->new },
+	init_arg => undef,
+);
 
 has 'is_stopping' => (
 	is => 'rw',
