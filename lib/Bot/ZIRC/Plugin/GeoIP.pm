@@ -29,55 +29,6 @@ sub _build_geoip {
 	return $geoip;
 }
 
-sub geoip_locate {
-	my ($self, $ip) = @_;
-	die "Invalid IP address $ip\n" unless is_ipv4 $ip or is_ipv6 $ip;
-	local $@;
-	my $record = eval { $self->geoip->city(ip => $ip) };
-	my $err;
-	if ($@) {
-		$err = $@;
-		die $err unless blessed $err and $err->isa('Throwable::Error');
-		$err = $err->message;
-	}
-	return ($err, $record);
-}
-
-sub geoip_locate_host {
-	my ($self, $host, $cb) = @_;
-	if ($cb) {
-		return $cb->($self->bot->geoip_locate($host)) if is_ipv4 $host or is_ipv6 $host;
-		return $cb->('DNS plugin is required to resolve hostnames')
-			unless $self->bot->has_plugin_method('dns_resolve');
-		weaken $self;
-		$self->bot->dns_resolve($host, sub {
-			$cb->($self->on_dns_host(@_));
-		});
-	} else {
-		return $self->bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
-		return 'DNS plugin is required to resolve hostnames'
-			unless $self->bot->has_plugin_method('dns_resolve');
-		return $self->on_dns_host($self->bot->dns_resolve($host));
-	}
-}
-
-sub on_dns_host {
-	my ($self, $err, @results) = @_;
-	return $err if $err;
-	my $addrs = $self->bot->dns_ip_results(\@results);
-	return 'No DNS results' unless @$addrs;
-	my $last_err = 'No valid DNS results';
-	my $best_record;
-	foreach my $addr (@$addrs) {
-		next unless is_ipv4 $addr or is_ipv6 $addr;
-		my ($err, $record) = $self->bot->geoip_locate($addr);
-		return (undef, $record) if !$err and defined $record->city->name;
-		$best_record //= $record if !$err;
-		$last_err = $err if $err;
-	}
-	return defined $best_record ? (undef, $best_record) : $last_err;
-}
-
 sub register {
 	my ($self, $bot) = @_;
 	my $file = $bot->config->get('apis','geoip_file');
@@ -108,6 +59,48 @@ sub register {
 			});
 		},
 	);
+}
+
+sub geoip_locate {
+	my ($self, $ip) = @_;
+	die "Invalid IP address $ip\n" unless is_ipv4 $ip or is_ipv6 $ip;
+	local $@;
+	my $record = eval { $self->geoip->city(ip => $ip) };
+	my $err;
+	if ($@) {
+		$err = $@;
+		die $err unless blessed $err and $err->isa('Throwable::Error');
+		$err = $err->message;
+	}
+	return ($err, $record);
+}
+
+sub geoip_locate_host {
+	my ($self, $host, $cb) = @_;
+	return $cb->($self->bot->geoip_locate($host)) if is_ipv4 $host or is_ipv6 $host;
+	return $cb->('DNS plugin is required to resolve hostnames')
+		unless $self->bot->has_plugin_method('dns_resolve');
+	weaken $self;
+	$self->bot->dns_resolve($host, sub {
+		$cb->($self->on_dns_host(@_));
+	});
+}
+
+sub on_dns_host {
+	my ($self, $err, @results) = @_;
+	return $err if $err;
+	my $addrs = $self->bot->dns_ip_results(\@results);
+	return 'No DNS results' unless @$addrs;
+	my $last_err = 'No valid DNS results';
+	my $best_record;
+	foreach my $addr (@$addrs) {
+		next unless is_ipv4 $addr or is_ipv6 $addr;
+		my ($err, $record) = $self->bot->geoip_locate($addr);
+		return (undef, $record) if !$err and defined $record->city->name;
+		$best_record //= $record if !$err;
+		$last_err = $err if $err;
+	}
+	return defined $best_record ? (undef, $best_record) : $last_err;
 }
 
 sub location_str {
