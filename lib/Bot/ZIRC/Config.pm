@@ -128,12 +128,19 @@ sub apply {
 		my $section = $apply->{$section_name} // next;
 		croak "Invalid configuration section $section; must be a hash reference"
 			unless ref $section eq 'HASH';
-		$self->set($section_name, $_, $section->{$_}) for keys %$section;
+		$self->_set($section_name, $_, $section->{$_}) for keys %$section;
 	}
+	$self->store;
 	return $self;
 }
 
 sub set {
+	my $self = shift;
+	$self->_set(@_);
+	$self->store;
+}
+
+sub _set {
 	my $self = shift;
 	my ($section, $key, $value);
 	if (@_ < 3) {
@@ -148,7 +155,7 @@ sub set {
 		"must be a simple scalar" if ref $value;
 	$self->config->{$section} //= {};
 	$self->config->{$section}{$key} = $value;
-	return $self->store;
+	return $self;
 }
 
 sub get {

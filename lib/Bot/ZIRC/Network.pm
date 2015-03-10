@@ -71,7 +71,7 @@ sub _build_config {
 		file => $self->config_file,
 		defaults_config => $self->bot->config,
 	);
-	$config->apply($self->init_config)->store if %{$self->init_config};
+	$config->apply($self->init_config) if %{$self->init_config};
 	return $config;
 }
 
@@ -376,7 +376,8 @@ sub parse_command {
 	my $bot_nick = $self->nick;
 	
 	my ($cmd_name, $args_str);
-	if ($trigger and $message =~ /^\Q$trigger\E(\w+)\s*(.*?)$/i) {
+	$trigger =~ s/(?!<\\)]/\\]/g if $trigger;
+	if ($trigger and $message =~ /^[$trigger](\w+)\s*(.*?)$/i) {
 		($cmd_name, $args_str) = ($1, $2);
 	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
 		($cmd_name, $args_str) = ($1, $2);
@@ -512,7 +513,7 @@ sub irc_kick {
 	$self->channel($channel)->remove_user($to);
 	$self->user($to)->remove_channel($channel);
 	if (lc $to eq lc $self->nick and any { lc $_ eq lc $channel }
-			split /[\s,]+/, $self->config->{channels}{autojoin}) {
+			split /[\s,]+/, $self->config->get('channels','autojoin')) {
 		$self->write(join => $channel);
 	}
 }

@@ -10,7 +10,7 @@ my $bot = Bot::ZIRC->new(networks => { socialgamer => {
 		class => 'SocialGamer',
 		irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
 		users => { master => 'Grinnz' },
-		channels => { autojoin => '#bots' },
+		channels => { autojoin => '#bots,#socialgamer' },
 	}},
 	plugins => { DNS => { native => 0 }, LastFM => 1, YouTube => 1, GeoIP => 1 },
 );
