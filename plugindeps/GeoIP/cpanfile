@@ -1,4 +1,4 @@
-# To use: cpanm --installdeps --with-recommends ./plugindeps/geoip
+# To use: cpanm --installdeps --with-recommends ./plugindeps/GeoIP
 requires 'Carp';
 requires 'Data::Validate::IP';
 requires 'GeoIP2', '2.000';

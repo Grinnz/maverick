@@ -1,4 +1,4 @@
-# To use: cpanm --installdeps --with-recommends ./plugindeps/youtube
+# To use: cpanm --installdeps --with-recommends ./plugindeps/LastFM
 requires 'Carp';
 requires 'Mojolicious', '6.0';
 requires 'Moo', '2.000';
