@@ -12,7 +12,7 @@ has 'bot' => (
 		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
 	required => 1,
 	weak_ref => 1,
-	handles => qw/ua/,
+	handles => ['ua'],
 );
 
 sub require_methods { () }
