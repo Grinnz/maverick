@@ -3,7 +3,7 @@ package Bot::ZIRC::Plugin::GeoIP;
 use Carp;
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
-use Scalar::Util 'blessed';
+use Scalar::Util qw/blessed weaken/;
 
 use Moo 2;
 use namespace::clean;
@@ -43,12 +43,48 @@ sub geoip_locate {
 	return ($err, $record);
 }
 
+sub geoip_locate_host {
+	my ($self, $host, $cb) = @_;
+	if ($cb) {
+		return $cb->($self->bot->geoip_locate($host)) if is_ipv4 $host or is_ipv6 $host;
+		return $cb->('DNS plugin is required to resolve hostnames')
+			unless $self->bot->has_plugin_method('dns_resolve');
+		weaken $self;
+		$self->bot->dns_resolve($host, sub {
+			$cb->($self->on_dns_host(@_));
+		});
+	} else {
+		return $self->bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
+		return 'DNS plugin is required to resolve hostnames'
+			unless $self->bot->has_plugin_method('dns_resolve');
+		return $self->on_dns_host($self->bot->dns_resolve($host));
+	}
+}
+
+sub on_dns_host {
+	my ($self, $err, @results) = @_;
+	return $err if $err;
+	my $addrs = $self->bot->dns_ip_results(\@results);
+	return 'No DNS results' unless @$addrs;
+	my $last_err = 'No valid DNS results';
+	my $best_record;
+	foreach my $addr (@$addrs) {
+		next unless is_ipv4 $addr or is_ipv6 $addr;
+		my ($err, $record) = $self->bot->geoip_locate($addr);
+		return (undef, $record) if !$err and defined $record->city->name;
+		$best_record //= $record if !$err;
+		$last_err = $err if $err;
+	}
+	return defined $best_record ? (undef, $best_record) : $last_err;
+}
+
 sub register {
 	my ($self, $bot) = @_;
 	my $file = $bot->config->get('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
 	$bot->add_plugin_method($self, 'geoip_locate');
+	$bot->add_plugin_method($self, 'geoip_locate_host');
 	
 	$bot->add_command(
 		name => 'locate',
@@ -65,29 +101,10 @@ sub register {
 				$say_target = "$target ($host)";
 			}
 			
-			if (is_ipv4 $host or is_ipv6 $host) {
-				my ($err, $record) = $network->bot->geoip_locate($host);
+			$network->bot->geoip_locate_host($host, sub {
+				my ($err, $record) = @_;
 				return $network->reply($sender, $channel, "Error locating $say_target: $err") if $err;
 				return $network->reply($sender, $channel, "GeoIP location for $say_target: ".location_str($record));
-			}
-			
-			return $network->reply($sender, $channel, "DNS plugin is required to resolve hostnames")
-				unless $network->bot->has_plugin_method('dns_resolve');
-			$network->bot->dns_resolve($host, sub {
-				my ($err, @results) = @_;
-				return $network->reply($sender, $channel, "Error resolving hostname for $say_target: $err") if $err;
-				my $addrs = $network->bot->dns_ip_results(\@results);
-				return $network->reply($sender, $channel, "No DNS results for $say_target") unless @$addrs;
-				my $last_err = 'No valid DNS results';
-				foreach my $addr (@$addrs) {
-					next unless is_ipv4 $addr or is_ipv6 $addr;
-					my ($err, $record) = $network->bot->geoip_locate($addr);
-					return $network->reply($sender, $channel, "GeoIP location for $say_target: ".location_str($record))
-						unless $err;
-					$last_err = $err;
-				}
-				# No valid record
-				return $network->reply($sender, $channel, "Unable to locate $say_target: $last_err");
 			});
 		},
 	);
