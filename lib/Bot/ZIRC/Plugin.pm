@@ -2,7 +2,7 @@ package Bot::ZIRC::Plugin;
 
 use Carp;
 use Scalar::Util 'blessed';
-use Moo::Role 2;
+use Moo::Role;
 
 requires 'register';
 

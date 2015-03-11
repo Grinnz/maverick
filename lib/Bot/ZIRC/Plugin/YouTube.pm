@@ -4,7 +4,7 @@ use Carp;
 use Mojo::URL;
 use Time::Duration 'ago';
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 with 'Bot::ZIRC::Plugin';
@@ -12,9 +12,9 @@ with 'Bot::ZIRC::Plugin';
 use constant YOUTUBE_API_ENDPOINT => 'https://www.googleapis.com/youtube/v3/';
 use constant YOUTUBE_VIDEO_URL => 'https://www.youtube.com/watch';
 use constant YOUTUBE_API_KEY_MISSING => 
-	"YouTube plugin requires configuration option 'youtube_api_key' in section 'apis'\n" .
+	"YouTube plugin requires configuration option 'google_api_key' in section 'apis'\n" .
 	"See https://developers.google.com/youtube/registering_an_application " .
-	"for more information on obtaining a YouTube API key.\n";
+	"for more information on obtaining a Google API key.\n";
 
 has 'results_cache' => (
 	is => 'ro',
@@ -25,7 +25,7 @@ has 'results_cache' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	my $api_key = $bot->config->get('apis','youtube_api_key');
+	my $api_key = $bot->config->get('apis','google_api_key');
 	die YOUTUBE_API_KEY_MISSING unless defined $api_key;
 	
 	$bot->add_command(
@@ -36,7 +36,7 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel, $query) = @_;
 			return 'usage' unless length $query;
-			my $api_key = $network->config->get('apis','youtube_api_key');
+			my $api_key = $network->config->get('apis','google_api_key');
 			die YOUTUBE_API_KEY_MISSING unless defined $api_key;
 			
 			my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('search')
@@ -82,7 +82,7 @@ sub register {
 		my ($network, $sender, $channel, $message) = @_;
 		return unless defined $channel;
 		return unless $network->config->get_channel($channel, 'youtube_trigger');
-		my $api_key = $network->config->get('apis','youtube_api_key');
+		my $api_key = $network->config->get('apis','google_api_key');
 		die YOUTUBE_API_KEY_MISSING unless defined $api_key;
 		
 		return unless $message =~ m!\b(\S+youtube.com/watch\S+)!;

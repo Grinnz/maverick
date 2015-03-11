@@ -6,7 +6,7 @@ use File::Path 'make_path';
 use File::Spec;
 use Scalar::Util 'blessed';
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 has 'defaults' => (

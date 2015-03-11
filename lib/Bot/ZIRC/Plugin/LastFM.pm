@@ -4,7 +4,7 @@ use Carp;
 use Mojo::URL;
 use Time::Duration 'ago';
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';

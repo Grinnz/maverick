@@ -1,6 +1,6 @@
 package Bot::ZIRC::Network::GameSurge;
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 extends 'Bot::ZIRC::Network';

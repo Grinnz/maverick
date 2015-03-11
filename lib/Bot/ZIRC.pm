@@ -17,7 +17,7 @@ use Bot::ZIRC::Command;
 use Bot::ZIRC::Config;
 use Bot::ZIRC::Storage;
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 use Exporter 'import';

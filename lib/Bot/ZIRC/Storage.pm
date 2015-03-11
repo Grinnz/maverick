@@ -5,7 +5,7 @@ use File::Path 'make_path';
 use File::Spec;
 use Mojo::JSON qw/decode_json encode_json/;
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 has 'data' => (

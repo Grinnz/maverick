@@ -1,6 +1,6 @@
 package Bot::ZIRC::Network::Freenode;
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 extends 'Bot::ZIRC::Network';

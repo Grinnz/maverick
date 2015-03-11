@@ -5,7 +5,7 @@ use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
 use Scalar::Util qw/blessed weaken/;
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 use constant GEOIP_FILE_MISSING =>

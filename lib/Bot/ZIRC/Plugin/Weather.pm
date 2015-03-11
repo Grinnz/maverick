@@ -5,7 +5,7 @@ use Mojo::IOLoop;
 use Mojo::URL;
 use Scalar::Util 'looks_like_number';
 
-use Moo 2;
+use Moo;
 use namespace::clean;
 
 use constant WEATHER_API_ENDPOINT => 'http://api.wunderground.com/api/';
