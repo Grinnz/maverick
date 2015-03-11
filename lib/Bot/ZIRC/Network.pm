@@ -21,7 +21,7 @@ use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
 
-my @irc_events = qw/irc_default irc_invite irc_join irc_kick irc_mode irc_nick
+my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
 	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_welcome
 	irc_rpl_motdstart irc_rpl_endofmotd err_nomotd irc_rpl_notopic
 	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
@@ -212,9 +212,14 @@ sub on_connect {
 		Mojo::IOLoop->timer($delay => sub { $self->reconnect });
 	} else {
 		$self->identify;
-		$self->autojoin;
 		$self->check_recurring;
 	}
+}
+
+sub on_welcome {
+	my $self = shift;
+	$self->set_bot_mode;
+	$self->autojoin;
 }
 
 sub on_disconnect {
@@ -267,17 +272,6 @@ sub do_identify {
 	$self->write(quote => "NICKSERV identify $nick $pass");
 }
 
-sub autojoin {
-	my $self = shift;
-	my @channels = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
-	return unless @channels;
-	my $channels_str = join ', ', @channels;
-	$self->logger->debug("Joining channels: $channels_str");
-	while (my @chunk = splice @channels, 0, 10) {
-		$self->write(join => join(',', @chunk));
-	}
-}
-
 sub check_recurring {
 	my $self = shift;
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
@@ -294,6 +288,22 @@ sub check_nick {
 		$self->write(whois => $desired);
 	} else {
 		$self->write(whois => $self->nick);
+	}
+}
+
+sub set_bot_mode {
+	my $self = shift;
+	$self->write(mode => $self->nick => '+B');
+}
+
+sub autojoin {
+	my $self = shift;
+	my @channels = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
+	return unless @channels;
+	my $channels_str = join ', ', @channels;
+	$self->logger->debug("Joining channels: $channels_str");
+	while (my @chunk = splice @channels, 0, 10) {
+		$self->write(join => join(',', @chunk));
 	}
 }
 
@@ -342,7 +352,6 @@ sub split_reply {
 
 sub check_privmsg {
 	my ($self, $sender, $channel, $message) = @_;
-	$sender = $self->user($sender);
 	my ($command, @args) = $self->parse_command($sender, $channel, $message);
 	
 	if (defined $command) {
@@ -477,14 +486,6 @@ sub get_event_futures {
 
 # IRC event callbacks
 
-sub irc_default {
-	my ($self, $message) = @_;
-	my $command = $message->{command} // '';
-	my $params_str = join ', ', map { "'$_'" } @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->debug("[$command] <$from> [ $params_str ]");
-}
-
 sub irc_invite {
 	my ($self, $message) = @_;
 	my ($to, $channel) = @{$message->{params}};
@@ -582,7 +583,8 @@ sub irc_privmsg {
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->get('echo');
-	$self->check_privmsg($from, undef, $msg);
+	my $user = $self->user($from);
+	$self->check_privmsg($user, undef, $msg) unless $user->is_bot and $self->config->get('users','ignore_bots');
 }
 
 sub irc_public {
@@ -590,7 +592,8 @@ sub irc_public {
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->get('echo');
-	$self->check_privmsg($from, $channel, $msg);
+	my $user = $self->user($from);
+	$self->check_privmsg($user, $channel, $msg) unless $user->is_bot and $self->config->get('users','ignore_bots');
 }
 
 sub irc_quit {
@@ -606,6 +609,7 @@ sub irc_rpl_welcome {
 	my ($to) = @{$message->{params}};
 	$self->logger->debug("Set nick to $to");
 	$self->nick($to);
+	$self->on_welcome;
 	$self->write(whois => $to);
 }
 

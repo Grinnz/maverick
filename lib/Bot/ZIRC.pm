@@ -117,6 +117,7 @@ sub config_defaults {
 		users => {
 			master => '',
 			ircop_admin_override => 1,
+			ignore_bots => 1,
 		},
 		channels => {
 			autojoin => '',
