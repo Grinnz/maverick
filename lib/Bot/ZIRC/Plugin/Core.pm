@@ -98,6 +98,7 @@ sub register {
 	$bot->add_command(
 		name => 'more',
 		help_text => 'Show more results',
+		usage_text => '[<command>]',
 		on_run => sub {
 			my ($network, $sender, $channel, $command_name) = @_;
 			my $channel_name = lc ($channel // $sender);
@@ -106,6 +107,7 @@ sub register {
 			my $command = $network->bot->get_command($command_name);
 			return $network->reply($sender, $channel, "No more to display for $command_name")
 				unless $command and $command->has_on_more;
+			$self->more_commands->{$network}{$channel_name} = $command_name;
 			$command->on_more->($network, $sender, $channel);
 		},
 	);
