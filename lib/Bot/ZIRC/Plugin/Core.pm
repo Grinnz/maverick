@@ -107,7 +107,7 @@ sub register {
 			my $command = $network->bot->get_command($command_name);
 			return $network->reply($sender, $channel, "No more to display for $command_name")
 				unless $command and $command->has_on_more;
-			$self->more_commands->{$network}{$channel_name} = $command_name;
+			$self->more_commands->{$network}{$channel_name} = lc $command->name;
 			$command->on_more->($network, $sender, $channel);
 		},
 	);
