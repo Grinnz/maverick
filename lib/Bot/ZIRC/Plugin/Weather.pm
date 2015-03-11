@@ -1,6 +1,5 @@
 package Bot::ZIRC::Plugin::Weather;
 
-use Carp;
 use Mojo::IOLoop;
 use Mojo::URL;
 use Scalar::Util 'looks_like_number';

@@ -1,0 +1,4 @@
+# To use: cpanm --installdeps --with-recommends ./plugindeps/Calc
+requires 'Math::Calc::Parser';
+requires 'Moo', '2.000';
+requires 'namespace::clean';

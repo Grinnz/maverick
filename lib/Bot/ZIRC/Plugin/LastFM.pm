@@ -1,6 +1,5 @@
 package Bot::ZIRC::Plugin::LastFM;
 
-use Carp;
 use Mojo::URL;
 use Time::Duration 'ago';
 

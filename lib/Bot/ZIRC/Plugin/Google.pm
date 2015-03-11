@@ -1,6 +1,5 @@
 package Bot::ZIRC::Plugin::Google;
 
-use Carp;
 use Mojo::URL;
 
 use Moo;

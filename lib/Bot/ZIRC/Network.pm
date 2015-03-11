@@ -299,6 +299,7 @@ sub check_nick {
 
 sub reply {
 	my ($self, $sender, $channel, $message, $cb) = @_;
+	croak "Missing arguments" unless defined $self and defined $sender and defined $message;
 	if (defined $channel) {
 		my @reply = $self->limit_reply(privmsg => $channel, "$sender: $message");
 		push @reply, $cb if $cb;
