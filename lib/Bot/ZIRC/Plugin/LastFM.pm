@@ -25,7 +25,7 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel, @args) = @_;
 			
-			if (lc $args[0] eq 'set') {
+			if (@args and lc $args[0] eq 'set') {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
 				$network->storage->data->{lastfm}{usernames}{lc $sender} = $username;
