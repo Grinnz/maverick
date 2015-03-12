@@ -32,13 +32,7 @@ sub register {
 				->query(format => 'json', action => 'opensearch', search => $query);
 			$network->ua->get($url, sub {
 				my ($ua, $tx) = @_;
-				if (my $err = $tx->error) {
-					my $msg = $err->{code}
-						? "$err->{code} response: $err->{message}"
-						: "Connection error: $err->{message}";
-					return $network->reply($sender, $channel,
-						"Error retrieving Wikipedia search results: $msg");
-				}
+				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
 				
 				my $titles = $tx->res->json->[1];
 				return $network->reply($sender, $channel, "No results for Wikipedia search")
@@ -74,13 +68,7 @@ sub display_wiki_page {
 		explaintext => 1, exsectionformat => 'plain', exchars => 250, inprop => 'url', titles => $title);
 	$network->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		if (my $err = $tx->error) {
-			my $msg = $err->{code}
-				? "$err->{code} response: $err->{message}"
-				: "Connection error: $err->{message}";
-			return $network->reply($sender, $channel,
-				"Error retrieving Wikipedia page $title: $msg$if_show_more");
-		}
+		return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
 		
 		my $pages = $tx->res->json->{query}{pages};
 		my $page = (values %$pages)[0];

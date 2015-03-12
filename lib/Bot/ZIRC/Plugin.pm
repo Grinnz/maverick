@@ -21,4 +21,11 @@ sub reload {}
 sub start {}
 sub stop {}
 
+sub ua_error {
+	my $err = shift;
+	return $err->{code}
+		? "Transport error $err->{code}: $err->{message}"
+		: "Connection error: $err->{message}";
+}
+
 1;

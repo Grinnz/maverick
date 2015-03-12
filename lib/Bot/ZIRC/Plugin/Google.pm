@@ -43,13 +43,8 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				if (my $err = $tx->error) {
-					my $msg = $err->{code}
-						? "$err->{code} response: $err->{message}"
-						: "Connection error: $err->{message}";
-					return $network->reply($sender, $channel,
-						"Error retrieving Google search results: $msg");
-				}
+				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for Google search")
 					unless $results and @$results;
@@ -92,13 +87,8 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				if (my $err = $tx->error) {
-					my $msg = $err->{code}
-						? "$err->{code} response: $err->{message}"
-						: "Connection error: $err->{message}";
-					return $network->reply($sender, $channel,
-						"Error retrieving Google image search results: $msg");
-				}
+				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for Google image search")
 					unless $results and @$results;

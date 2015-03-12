@@ -46,13 +46,8 @@ sub register {
 			$network->logger->debug("Retrieving Last.fm recent tracks for $username");
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				if (my $err = $tx->error) {
-					my $msg = $err->{code}
-						? "$err->{code} response: $err->{message}"
-						: "Connection error: $err->{message}";
-					return $network->reply($sender, $channel,
-						"Error retrieving Last.fm user data for $username: $err");
-				}
+				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				
 				my $response = $tx->res->json;
 				if ($response->{error}) {
 					return $network->reply($sender, $channel,

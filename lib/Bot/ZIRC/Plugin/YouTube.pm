@@ -44,13 +44,8 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				if (my $err = $tx->error) {
-					my $msg = $err->{code}
-						? "$err->{code} response: $err->{message}"
-						: "Connection error: $err->{message}";
-					return $network->reply($sender, $channel,
-						"Error retrieving YouTube search results: $msg");
-				}
+				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for YouTube search")
 					unless $results and @$results;
@@ -95,12 +90,9 @@ sub register {
 		
 		$self->ua->get($request, sub {
 			my ($ua, $tx) = @_;
-			if (my $err = $tx->error) {
-				my $msg = $err->{code}
-					? "$err->{code} response: $err->{message}"
-					: "Connection error: $err->{message}";
-				return $network->logger->error("Error retrieving YouTube video data: $msg");
-			}
+			return $network->logger->error("Error retrieving YouTube video data: ".ua_error($tx->error))
+				if $tx->error;
+			
 			my $results = $tx->res->json->{items};
 			return unless $results and @$results;
 			my $result = shift @$results;

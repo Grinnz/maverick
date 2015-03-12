@@ -138,11 +138,8 @@ sub weather_autocomplete_location_code {
 	my $url = Mojo::URL->new(WEATHER_API_AUTOCOMPLETE_ENDPOINT)->query(h => 0, query => $query);
 	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		if (my $err = $tx->error) {
-			return $cb->($err->{code}
-				? "$err->{code} response: $err->{message}"
-				: "Connection error: $err->{message}");
-		}
+		return $cb->(ua_error($tx->error)) if $tx->error;
+		
 		my $locs = $tx->res->json->{RESULTS};
 		return $cb->('No results') unless defined $locs;
 		foreach my $loc (@$locs) {
@@ -166,11 +163,8 @@ sub weather_location_data {
 	my $url = Mojo::URL->new(WEATHER_API_ENDPOINT)->path("$api_key/conditions/forecast/geolookup/q/$code.json");
 	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		if (my $err = $tx->error) {
-			return $cb->($err->{code}
-				? "$err->{code} response: $err->{message}"
-				: "Connection error: $err->{message}");
-		}
+		return $cb->(ua_error($tx->error)) if $tx->error;
+		
 		my $results = $tx->res->json;
 		$self->weather_cache->{$code} = {
 			location => $results->{location},

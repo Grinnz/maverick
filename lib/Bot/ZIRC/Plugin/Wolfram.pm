@@ -59,13 +59,7 @@ sub do_wolfram_query {
 	
 	$network->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		if (my $err = $tx->error) {
-			my $msg = $err->{code}
-				? "$err->{code} response: $err->{message}"
-				: "Connection error: $err->{message}";
-			return $network->reply($sender, $channel,
-				"Error retrieving Wolfram|Alpha query results: $msg");
-		}
+		return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
 		
 		my $result = $tx->res->dom->xml(1)->children('queryresult')->first;
 		return $network->reply($sender, $channel, "Error querying Wolfram|Alpha")
