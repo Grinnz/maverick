@@ -41,7 +41,7 @@ has 'bot' => (
 	required => 1,
 	isa => sub { croak "Invalid bot" unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
 	weak_ref => 1,
-	handles => [qw/bot_version config_dir get_hooks is_stopping storage/],
+	handles => [qw/bot_version config_dir get_hooks is_stopping storage ua/],
 );
 
 has 'init_config' => (
