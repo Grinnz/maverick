@@ -165,7 +165,7 @@ sub reformat_wolfram_content {
 	my $content = shift // return undef;
 	$content =~ s/ \| / - /g;
 	$content =~ s/^\r?\n//;
-	$content =~ s/\r?\n$//;
+	$content =~ s/\r?\n\z//;
 	$content =~ s/\r?\n/, /g;
 	$content =~ s/\\\:([0-9a-f]{4})/chr(hex($1))/egi;
 	$content =~ s/~~/\x{2248}/g;

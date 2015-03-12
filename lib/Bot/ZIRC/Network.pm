@@ -310,8 +310,10 @@ sub autojoin {
 sub reply {
 	my ($self, $sender, $channel, $message, $cb) = @_;
 	croak "Missing arguments" unless defined $self and defined $sender and defined $message;
+	
 	if (defined $channel) {
-		my @reply = $self->limit_reply(privmsg => $channel, "$sender: $message");
+		$message = "$sender: $message";
+		my @reply = $self->limit_reply(privmsg => $channel, $message);
 		push @reply, $cb if $cb;
 		$self->write(@reply);
 	} else {
@@ -322,6 +324,13 @@ sub reply {
 		push @writes, $cb if $cb;
 		Mojo::IOLoop->delay(@writes);
 	}
+	
+	if ($self->config->get('echo')) {
+		my $nick = $self->nick;
+		my $target = $channel // $sender;
+		$self->logger->info("[to $target] <$nick> $message");
+	}
+	
 	return $self;
 }
 
