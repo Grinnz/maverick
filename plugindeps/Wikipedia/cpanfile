@@ -1,0 +1,4 @@
+# To use: cpanm --installdeps --with-recommends ./plugindeps/Google
+requires 'Mojolicious', '6.0';
+requires 'Moo', '2.000';
+requires 'namespace::clean';
