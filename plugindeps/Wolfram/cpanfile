@@ -2,4 +2,3 @@
 requires 'Data::Validate::IP';
 requires 'Mojolicious', '6.0';
 requires 'Moo', '2.000';
-requires 'namespace::clean';

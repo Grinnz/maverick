@@ -4,14 +4,12 @@ use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use Mojo::URL;
 
 use Moo;
-use namespace::clean;
+with 'Bot::ZIRC::Plugin';
 
 use constant WOLFRAM_API_ENDPOINT => 'http://api.wolframalpha.com/v2/query';
 use constant WOLFRAM_API_KEY_MISSING => 
 	"Wolfram plugin requires configuration option 'wolfram_api_key' in section 'apis'\n" .
 	"See http://products.wolframalpha.com/api/ for more information on obtaining a Wolfram API key.\n";
-
-with 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;

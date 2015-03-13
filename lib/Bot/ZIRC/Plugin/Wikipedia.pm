@@ -3,11 +3,9 @@ package Bot::ZIRC::Plugin::Wikipedia;
 use Mojo::URL;
 
 use Moo;
-use namespace::clean;
+with 'Bot::ZIRC::Plugin';
 
 use constant WIKIPEDIA_API_ENDPOINT => 'http://en.wikipedia.org/w/api.php';
-
-with 'Bot::ZIRC::Plugin';
 
 has 'results_cache' => (
 	is => 'ro',

@@ -5,7 +5,7 @@ use Mojo::URL;
 use Scalar::Util 'looks_like_number';
 
 use Moo;
-use namespace::clean;
+with 'Bot::ZIRC::Plugin';
 
 use constant WEATHER_API_ENDPOINT => 'http://api.wunderground.com/api/';
 use constant WEATHER_API_AUTOCOMPLETE_ENDPOINT => 'http://autocomplete.wunderground.com/aq';
@@ -13,8 +13,6 @@ use constant WEATHER_API_KEY_MISSING =>
 	"Weather plugin requires configuration option 'wunderground_api_key' in section 'apis'\n" .
 	"See http://www.wunderground.com/weather/api for more information on obtaining a Weather Underground API key.\n";
 use constant WEATHER_CACHE_EXPIRATION => 600;
-
-with 'Bot::ZIRC::Plugin';
 
 has 'weather_cache' => (
 	is => 'ro',

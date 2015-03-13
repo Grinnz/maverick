@@ -3,8 +3,6 @@ package Bot::ZIRC::Plugin::Calc;
 use Math::Calc::Parser 'calc';
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 sub register {

@@ -3,14 +3,12 @@ package Bot::ZIRC::Plugin::PYX;
 use Mojo::URL;
 
 use Moo;
-use namespace::clean;
+with 'Bot::ZIRC::Plugin';
 
 use constant PYX_ENDPOINT_MISSING =>
 	"PYX plugin requires configuration option 'pyx_endpoint' in section 'apis'\n";
 use constant PYX_MAX_PICK => 3;
 use constant PYX_MAX_COUNT => 10;
-
-with 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;

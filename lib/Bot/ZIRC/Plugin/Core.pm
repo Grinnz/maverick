@@ -3,8 +3,6 @@ package Bot::ZIRC::Plugin::Core;
 use Bot::ZIRC::Access;
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 has 'more_commands' => (

@@ -4,14 +4,12 @@ use Mojo::URL;
 use Time::Duration 'ago';
 
 use Moo;
-use namespace::clean;
+with 'Bot::ZIRC::Plugin';
 
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';
 use constant LASTFM_API_KEY_MISSING =>
 	"Last.fm plugin requires configuration option 'lastfm_api_key' in section 'apis'\n" .
 	"See http://www.last.fm/api/authentication for more information on obtaining a Last.fm API key.\n";
-
-with 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;

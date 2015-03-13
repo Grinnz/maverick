@@ -3,8 +3,6 @@ package Bot::ZIRC::Plugin::Google;
 use Mojo::URL;
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 use constant GOOGLE_API_ENDPOINT => 'https://www.googleapis.com/customsearch/v1';
