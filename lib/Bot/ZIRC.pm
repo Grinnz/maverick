@@ -242,7 +242,10 @@ sub add_network {
 	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
 	local $@;
 	eval "require $class; 1" or croak $@;
-	$self->networks->{$name} = $class->new(name => $name, bot => $self, config => $config);
+	my $config_file = $self->config_file;
+	$config_file =~ s/(.+)\.conf/$1-$name.conf/
+		or $config_file .= "-$name";
+	$self->networks->{$name} = $class->new(name => $name, bot => $self, config => $config, config_file => $config_file);
 	return $self;
 }
 
