@@ -29,7 +29,7 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.06';
+our $VERSION = '0.10';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
