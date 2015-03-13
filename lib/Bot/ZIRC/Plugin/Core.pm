@@ -68,7 +68,7 @@ sub register {
 				$sender->check_access(ACCESS_BOT_ADMIN, sub {
 					my ($sender, $has_access) = @_;
 					if ($has_access) {
-						$sender->network->write(part => $_, $message) for @channels;
+						$sender->network->write(part => $_, ":$message") for @channels;
 					} else {
 						$sender->network->reply($sender, $channel,
 							"You must be a bot administrator to run this command.");
@@ -78,7 +78,7 @@ sub register {
 				$sender->check_access(ACCESS_CHANNEL_OP, $channel, sub {
 					my ($sender, $has_access) = @_;
 					if ($has_access) {
-						$sender->network->write(part => $channel, $message);
+						$sender->network->write(part => $channel, ":$message");
 					} else {
 						$sender->network->reply($sender, $channel,
 							"You must be a channel operator to run this command.");
@@ -151,7 +151,7 @@ sub register {
 				$sender->check_access(ACCESS_BOT_ADMIN, sub {
 					my ($sender, $has_access) = @_;
 					if ($has_access) {
-						$sender->network->write(privmsg => $in_channel, $message);
+						$sender->network->write(privmsg => $in_channel, ":$message");
 					} else {
 						$sender->network->reply($sender, $channel,
 							"You must be a bot administrator to run this command.");

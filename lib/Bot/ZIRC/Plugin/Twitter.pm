@@ -206,7 +206,7 @@ sub display_triggered {
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
 	my $msg = "Tweet linked by $sender: Tweeted by $name $ago$in_reply_to: $content";
-	$network->write(privmsg => $channel, $msg);
+	$network->write(privmsg => $channel, ":$msg");
 }
 
 sub parse_tweet_text {

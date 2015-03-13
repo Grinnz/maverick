@@ -137,7 +137,7 @@ sub display_triggered {
 	my $b_code = chr 2;
 	my $response = "YouTube video linked by $sender: $b_code$title$b_code - " .
 		"published by $b_code$ytchannel$b_code$description";
-	$network->write(privmsg => $channel, $response);
+	$network->write(privmsg => $channel, ":$response");
 }
 
 1;

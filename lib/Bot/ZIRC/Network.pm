@@ -244,7 +244,7 @@ sub disconnect {
 	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
 	my $message = shift;
 	if (defined $message) {
-		$self->write(quit => $message, sub { shift->disconnect($cb) });
+		$self->write(quit => ":$message", sub { shift->disconnect($cb) });
 	} else {
 		$self->irc->disconnect($cb);
 	}
@@ -341,7 +341,7 @@ sub limit_reply {
 	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
 	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
 	$msg = substr($msg, 0, ($allowed_len-3)).'...' if length $msg > $allowed_len;
-	return (@args, $msg);
+	return (@args, ":$msg");
 }
 
 sub split_reply {
@@ -352,7 +352,7 @@ sub split_reply {
 	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
 	my @returns;
 	while (my $chunk = substr $msg, 0, $allowed_len, '') {
-		push @returns, [@args, $chunk];
+		push @returns, [@args, ":$chunk"];
 	}
 	return @returns;
 }
