@@ -269,7 +269,7 @@ sub identify {
 sub do_identify {
 	my ($self, $nick, $pass) = @_;
 	$self->logger->debug("Identifying with NickServ as $nick");
-	$self->write(quote => "NICKSERV identify $nick $pass");
+	$self->write("NICKSERV identify $nick $pass");
 }
 
 sub check_recurring {
