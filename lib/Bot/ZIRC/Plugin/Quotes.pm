@@ -147,6 +147,7 @@ sub register {
 			my $quotes = $network->bot->storage->data->{quotes} //= [];
 			push @$quotes, @add_quotes;
 			$network->bot->storage->store;
+			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Loaded $num_quotes quotes from $filename");
 		},
 		required_access => ACCESS_BOT_MASTER,
@@ -180,6 +181,7 @@ sub register {
 			my ($network, $sender, $channel) = @_;
 			$network->bot->storage->data->{quotes} = [];
 			$network->bot->storage->store;
+			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Deleted all quotes");
 		},
 		required_access => ACCESS_BOT_MASTER,

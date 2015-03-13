@@ -125,14 +125,18 @@ sub display_triggered {
 	my $video_id = $result->{id} // '';
 	my $title = $result->{snippet}{title} // '';
 	
-	my $url = Mojo::URL->new(YOUTUBE_VIDEO_URL)->query(v => $video_id);
-	$url->fragment($fragment) if defined $fragment;
-	$url = $url->to_string;
+#	my $url = Mojo::URL->new(YOUTUBE_VIDEO_URL)->query(v => $video_id);
+#	$url->fragment($fragment) if defined $fragment;
+#	$url = $url->to_string;
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
+	
+	my $description = $result->{snippet}{description} // '';
+	$description = substr($description, 0, 200) . '...' if length $description > 200;
+	$description = " - $description" if length $description;
 	
 	my $b_code = chr 2;
 	my $response = "YouTube video linked by $sender: $b_code$title$b_code - " .
-		"published by $b_code$ytchannel$b_code - $url";
+		"published by $b_code$ytchannel$b_code$description";
 	$network->write(privmsg => $channel, $response);
 }
 
