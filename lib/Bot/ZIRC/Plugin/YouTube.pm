@@ -4,8 +4,6 @@ use Mojo::URL;
 use Time::Duration 'ago';
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 use constant YOUTUBE_API_ENDPOINT => 'https://www.googleapis.com/youtube/v3/';

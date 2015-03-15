@@ -2,6 +2,5 @@
 requires 'Data::Validate::IP';
 requires 'GeoIP2', '2.000';
 requires 'Moo', '2.000';
-requires 'namespace::clean';
 requires 'Scalar::Util';
 recommends 'MaxMind::DB::Reader::XS';

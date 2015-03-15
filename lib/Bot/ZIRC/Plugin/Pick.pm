@@ -1,8 +1,6 @@
 package Bot::ZIRC::Plugin::Pick;
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 sub register {

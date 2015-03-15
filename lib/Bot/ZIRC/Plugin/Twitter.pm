@@ -7,8 +7,6 @@ use Mojo::Util qw/b64_encode html_unescape url_escape/;
 use Time::Duration 'ago';
 
 use Moo;
-use namespace::clean;
-
 with 'Bot::ZIRC::Plugin';
 
 use constant TWITTER_OAUTH_ENDPOINT => 'https://api.twitter.com/oauth2/token';
