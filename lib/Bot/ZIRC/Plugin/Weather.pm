@@ -154,7 +154,7 @@ sub weather_autocomplete_location_code {
 sub weather_location_data {
 	my ($self, $code, $cb) = @_;
 	my $cached = $self->weather_cache->{$code};
-	return $cb->(undef, $cached) if defined $cached and $cached->{expiration} <= time;
+	return $cb->(undef, $cached) if defined $cached and $cached->{expiration} > time;
 	
 	my $api_key = $self->bot->config->get('apis','wunderground_api_key');
 	die WEATHER_API_KEY_MISSING unless defined $api_key;
