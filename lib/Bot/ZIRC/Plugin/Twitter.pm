@@ -162,10 +162,10 @@ sub display_tweet {
 	my ($network, $sender, $channel, $tweet, $show_more) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
-	my $id = $tweet->{id};
+	my $id = $tweet->{id_str};
 	my $url = Mojo::URL->new('https://twitter.com')->path("$username/status/$id");
 	
-	my $in_reply_to_id = $tweet->{in_reply_to_status_id};
+	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
 	my $in_reply_to_user = $tweet->{in_reply_to_screen_name};
 	
 	my $b_code = chr 2;
@@ -188,10 +188,8 @@ sub display_triggered {
 	my ($network, $sender, $channel, $tweet) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
-	my $id = $tweet->{id};
-#	my $url = Mojo::URL->new('https://twitter.com')->path("$username/status/$id");
 	
-	my $in_reply_to_id = $tweet->{in_reply_to_status_id};
+	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
 	my $in_reply_to_user = $tweet->{in_reply_to_screen_name};
 	
 	my $b_code = chr 2;
