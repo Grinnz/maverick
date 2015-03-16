@@ -364,6 +364,8 @@ sub check_privmsg {
 	my ($command, @args) = $self->parse_command($sender, $channel, $message);
 	
 	if (defined $command) {
+		return unless length $command;
+		
 		my $args_str = join ' ', @args;
 		$self->logger->debug("<$sender> [command] $command $args_str");
 			
@@ -414,7 +416,7 @@ sub parse_command {
 			my $suggestions = join ', ', sort @$cmds;
 			$self->reply($sender, $channel,
 				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
-			return undef;
+			return '';
 		}
 		$command = $self->bot->get_command($cmds->[0]);
 	}
@@ -423,7 +425,7 @@ sub parse_command {
 	
 	unless ($command->is_enabled) {
 		$self->reply($sender, undef, "Command $command is currently disabled.");
-		return undef;
+		return '';
 	}
 	
 	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
