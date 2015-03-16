@@ -1,0 +1,5 @@
+# To use: cpanm --installdeps --with-recommends ./plugindeps/Hailo
+requires 'Carp';
+requires 'Hailo';
+requires 'Moo', '2.000';
+requires 'Scalar::Util';
