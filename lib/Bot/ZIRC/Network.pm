@@ -283,12 +283,15 @@ sub check_recurring {
 sub check_nick {
 	my $self = shift;
 	my $desired = $self->config->get('irc','nick');
-	unless (lc $desired eq lc substr $self->nick, 0, length $desired) {
+	my $current = $self->nick;
+	unless (lc $desired eq lc substr $current, 0, length $desired) {
 		$self->write(nick => $desired);
-		$self->write(whois => $desired);
-	} else {
-		$self->write(whois => $self->nick);
+		$current = $desired;
 	}
+	$self->after_whois($current, sub {
+		my ($self, $user) = @_;
+		$self->identify unless $user->is_registered;
+	});
 }
 
 sub set_bot_mode {
@@ -702,7 +705,6 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->channel_access($channel => $access);
 	
 	$self->run_after_who($nick);
-	$self->identify if lc $nick eq lc $self->nick and !$reg;
 }
 
 sub irc_rpl_endofwho { # RPL_ENDOFWHO
@@ -797,7 +799,6 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 		my $user = $self->user($nick);
 		$user->identity(undef) unless $user->is_registered;
 		$self->run_after_whois($nick);
-		$self->identify if lc $nick eq lc $self->nick and !$user->is_registered;
 	}
 }
 
