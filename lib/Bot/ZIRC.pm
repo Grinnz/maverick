@@ -542,12 +542,12 @@ send responses or perform actions.
 
 =head1 PLUGINS
 
-Plugins are L<Moo>-compatible objects that perform the L<Bot::ZIRC::Plugin>
-L<Moo::Role>. They are registered by calling the required method C<register>
-and may add commands, hooks, or anything else to the bot instance. A plugin may
-also register a method of its own as a "plugin method" which then can be called
-on the bot instance from elsewhere. Plugin objects are stored in the bot
-instance and are passed as the invocant of plugin methods called on the bot.
+Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
+registered by calling the required method C<register> and may add commands,
+hooks, or anything else to the bot instance. A plugin may also register a
+method of its own as a "plugin method" which then can be called on the bot
+instance from elsewhere. Plugin objects are stored in the bot instance and are
+passed as the invocant of plugin methods called on the bot.
 
 =head1 COMMANDS
 
