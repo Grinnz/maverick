@@ -4,7 +4,7 @@ use Bot::ZIRC::Access ':access';
 use Mojo::Util qw/decode encode slurp spurt/;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 has 'quote_cache' => (
 	is => 'ro',

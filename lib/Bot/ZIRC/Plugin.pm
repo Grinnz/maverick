@@ -2,9 +2,9 @@ package Bot::ZIRC::Plugin;
 
 use Carp;
 use Scalar::Util 'blessed';
-use Moo::Role;
 
-requires 'register';
+use Moo;
+use namespace::clean;
 
 has 'bot' => (
 	is => 'ro',
@@ -14,6 +14,8 @@ has 'bot' => (
 	weak_ref => 1,
 	handles => ['ua'],
 );
+
+sub register { die "Method must be overloaded by subclass" }
 
 sub require_methods { () }
 

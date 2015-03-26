@@ -1,9 +1,9 @@
 package Bot::ZIRC::Plugin::Core;
 
-use Bot::ZIRC::Access;
+use Bot::ZIRC::Access ':access';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 has 'more_commands' => (
 	is => 'ro',

@@ -4,7 +4,7 @@ use Mojo::URL;
 use Time::Duration 'ago';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';
 use constant LASTFM_API_KEY_MISSING =>

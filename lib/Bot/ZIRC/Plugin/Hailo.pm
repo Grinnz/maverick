@@ -5,7 +5,7 @@ use Hailo;
 use Scalar::Util 'blessed';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 has 'hailo' => (
 	is => 'rwp',

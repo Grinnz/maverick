@@ -1,7 +1,7 @@
 package Bot::ZIRC::Plugin::Pick;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;

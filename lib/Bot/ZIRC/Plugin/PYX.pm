@@ -3,7 +3,7 @@ package Bot::ZIRC::Plugin::PYX;
 use Mojo::URL;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant PYX_ENDPOINT_MISSING =>
 	"PYX plugin requires configuration option 'pyx_endpoint' in section 'apis'\n";

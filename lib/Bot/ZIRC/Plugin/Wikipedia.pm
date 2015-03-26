@@ -3,7 +3,7 @@ package Bot::ZIRC::Plugin::Wikipedia;
 use Mojo::URL;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant WIKIPEDIA_API_ENDPOINT => 'http://en.wikipedia.org/w/api.php';
 

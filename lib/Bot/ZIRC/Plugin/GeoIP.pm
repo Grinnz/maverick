@@ -6,7 +6,7 @@ use GeoIP2::Database::Reader;
 use Scalar::Util qw/blessed weaken/;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant GEOIP_FILE_MISSING =>
 	"GeoIP plugin requires a readable GeoLite2 City database file located by the configuration option 'geoip_file' in section 'apis'\n" .

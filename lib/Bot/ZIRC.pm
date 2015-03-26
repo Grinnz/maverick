@@ -277,9 +277,8 @@ sub register_plugin {
 	local $@;
 	my $plugin = eval {
 		eval "require $class; 1" or die $@;
-		require Role::Tiny;
-		die "$class does not do role Bot::ZIRC::Plugin\n"
-			unless Role::Tiny::does_role($class, 'Bot::ZIRC::Plugin');
+		die "$class is not a Bot::ZIRC::Plugin\n"
+			unless "$class"->isa('Bot::ZIRC::Plugin');
 		my @params = ref $params eq 'HASH' ? %$params : ();
 		my $plugin = $class->new(@params, bot => $self);
 		$plugin->register($self);
@@ -477,3 +476,311 @@ sub sig_reload {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC - Mojo::IRC Bot framework
+
+=head1 SYNOPSIS
+
+  use Bot::ZIRC;
+  
+  my $bot = Bot::ZIRC->new(
+    name => 'MyIRCBot',
+    networks => {
+      freenode => {
+        class => 'Freenode',
+        irc => { server => 'chat.freenode.net' },
+      },
+    },
+  );
+  
+  $bot->start;
+
+=head1 DESCRIPTION
+
+L<Bot::ZIRC> is an IRC bot framework built on L<Mojo::IRC> that supports
+connecting to multiple networks and is designed to be configurable and
+customizable via plugins. A core set of plugins is included from
+L<Bot::ZIRC::Plugin::Core> which includes basic administrative and
+configuration commands, and additional plugins can be registered that may
+implement any functionality from adding more commands to hooking into message
+events and more.
+
+=head1 CONFIGURATION
+
+L<Bot::ZIRC> is configured by INI files: one global configuration file and a
+network configuration file for each network it connects to. The global
+configuration file is used as a default configuration for each network. Any
+configuration specified in the constructor or when adding a network will be
+written to the configuration files, overriding existing configuration.
+
+Configuration INI files are organized into sections; the C<[main]> section is
+the default for any configuration not in a section.
+
+=head2 main
+
+=head2 irc
+
+=head2 network
+
+=head2 channels
+
+=head2 users
+
+=head2 commands
+
+=head2 apis
+
+=head1 NETWORKS
+
+IRC networks are represented by L<Bot::ZIRC::Network> (or subclassed) objects
+that handle all communication with that network. Networks can be specified in
+the bot's constructor, or added later with the L</"add_network"> method. The
+network object is provided to command and hook callbacks and can be used to
+send responses or perform actions.
+
+=head1 PLUGINS
+
+Plugins are L<Moo>-compatible objects that perform the L<Bot::ZIRC::Plugin>
+L<Moo::Role>. They are registered by calling the required method C<register>
+and may add commands, hooks, or anything else to the bot instance. A plugin may
+also register a method of its own as a "plugin method" which then can be called
+on the bot instance from elsewhere. Plugin objects are stored in the bot
+instance and are passed as the invocant of plugin methods called on the bot.
+
+=head1 COMMANDS
+
+Commands are represented by L<Bot::ZIRC::Command> objects which define the
+properties of the command and a callback "on_run" that is called when the
+command is invoked by a IRC user.
+
+=head1 HOOKS
+
+Hooks are subroutines which are run whenever a specific action occurs. They are
+a powerful way to add global functionality.
+
+=head2 privmsg
+
+  $bot->add_hook(privmsg => sub { my ($network, $sender, $channel, $message) = @_; ... });
+
+The C<privmsg> hook is called whenever the bot receives a channel or private
+message ("privmsg") from an IRC user. The callback will receive the appropriate
+L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
+channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
+and the message string.
+
+=head2 before_command
+
+  $bot->add_hook(before_command => sub { my ($command, $network, $sender, $channel, @args) = @_; ... });
+
+The C<before_command> hook is called before a recognized command is executed.
+The callback will receive the L<Bot::ZIRC::Command> object, the appropriate
+L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
+channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
+and the command arguments as they will be received by the command.
+
+=head2 after_command
+
+  $bot->add_hook(after_command => sub { my ($command, $network, $sender, $channel, @args) = @_; ... });
+
+The C<after_command> hook is called after a command has been executed. The
+callback will receive the L<Bot::ZIRC::Command> object, the appropriate
+L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
+channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
+and the command arguments as they were received by the command.
+
+=head1 METHODS
+
+=head2 new
+
+Constructs a new L<Bot::ZIRC> object instance. Accepts values for the following
+attributes:
+
+=over
+
+=item name
+
+  name => 'Botzilla',
+
+Name for the bot, defaults to C<ZIRC>. The bot's name is used as a default nick
+for networks where it is not configured, as well as lowercased for the default
+filenames for configuration and other files. For example, a bot named C<Fred>
+will (by default) use the configuration file C<fred.conf>, network
+configuration files C<fred-E<lt>networkE<gt>.conf>, and database file
+C<fred.db>.
+
+=item networks
+
+  networks => { freenode => { class => 'Freenode', debug => 1 } },
+
+Hash reference that must contain at least one network to connect to. Keys are
+names which will be used to identify the network as well as define the network
+configuration filename. Values are hash references containing an optional
+object C<class> (defaults to L<Bot::ZIRC::Network>) and configuration for the
+network. The C<class> will be appended to C<Bot::ZIRC::Network::> if it does
+not contain C<::>.
+
+=item plugins
+
+  plugins => [qw/DNS GeoIP/],
+  plugins => { Core => 0, DNS => { native => 0 }, GeoIP => 1 },
+
+Plugins to register with the bot, specified as plugin class names, which are
+appended to C<Bot::ZIRC::Plugin::> if they do not contain C<::>. May be
+specified as an array reference to simply include the list of plugins, or as a
+hash reference to configure the registration of plugins. If the hash value is
+false, the plugin will be not be registered; otherwise, the value will be
+passed to the plugin's C<register> method. See L<Bot::ZIRC::Plugin> for
+documentation on ZIRC plugins.
+
+=item config
+
+  config => { debug => 1, irc => { nick => 'OtherGuy' } },
+
+Global configuration that will override any defaults or existing global
+configuration file. To override configuration for a specific network, see the
+C<networks> attribute.
+
+=item config_dir
+
+  config_dir => "$HOME/.mybot",
+
+Directory to store configuration and other files. Defaults to current
+directory.
+
+=item config_file
+
+  config_file => 'myconfig.conf',
+
+Filename for main configuration file. Defaults to bot's name, lowercased and
+appended with C<.conf>. Network configuration filenames default to this
+filename with C<-E<lt>networkE<gt>> inserted before C<.conf>
+
+=item storage_file
+
+  storage_file => 'mystuff.db',
+
+Filename for database storage file. Defaults to bot's name, lowercased and
+appended with C<.db>.
+
+=item logger
+
+  logger => Mojo::Log->new('/var/log/botstuff.log')->level('warn'),
+
+Logger object that will be used for all debug, informational and warning
+output. Can be any type of logger that has C<debug>, C<info>, C<warn>,
+C<error>, and C<fatal> methods, such as L<Mojo::Log>. Defaults to logging to
+the file specified by the configuration C<logfile>, or STDERR otherwise.
+
+=back
+
+=head2 start
+
+Start the bot and connect to configured networks. Blocks until the bot is told
+to stop.
+
+=head2 stop
+
+Disconnect from all networks and stop the bot.
+
+=head2 reload
+
+Reloads configuration and reopens log handles.
+
+=head2 get_network_names
+
+  my @names = $bot->get_network_names;
+
+Returns a list of all configured network names.
+
+=head2 add_network
+
+  $bot = $bot->add_network(freenode => { class => 'Freenode' });
+
+Adds a network for the bot to connect to. See L</"NETWORKS">.
+
+=head2 get_plugin_classes
+
+  my @classes = $bot->get_plugin_classes;
+
+Returns a list of all registered plugin classes.
+
+=head2 has_plugin
+
+  my $bool = $bot->has_plugin('DNS');
+
+Returns a boolean value that is true if the plugin has been registered.
+
+=head2 get_plugin
+
+  my $plugin = $bot->get_plugin('DNS');
+
+Returns the plugin object if it has been registered, or C<undef> otherwise.
+
+=head2 register_plugin
+
+  $bot = $bot->register_plugin(DNS => { native => 0 });
+
+Registers a plugin with optional hashref of parameters to pass to the plugin's
+C<register> method. See L</"PLUGINS">.
+
+=head2 add_plugin_method
+
+  $bot = $bot->add_plugin_method(DNS => 'dns_resolve');
+
+Adds a plugin method to the bot, so that it may be called on the bot via
+L</"AUTOLOAD">.
+
+=head2 has_plugin_method
+
+  my $bool = $bot->has_plugin_method('dns_resolve');
+
+Returns a boolean value that is true if the specified plugin method is
+available.
+
+=head2 get_command_names
+
+  my @names = $bot->get_command_names;
+
+Returns a list of all commands.
+
+=head2 get_command
+
+  my $command = $bot->get_command('say');
+
+Returns the L<Bot::ZIRC::Command> object representing the command, or C<undef>
+if the command does not exist.
+
+=head2 add_command
+
+  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
+  $bot = $bot->add_command(...);
+
+Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
+new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
+
+=head2 add_hook
+
+  $bot = $bot->add_hook(privmsg => sub { warn $_[1] });
+
+Adds a hook to be executed when a certain event occurs. See L</"HOOKS">.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC::Network>, L<Bot::ZIRC::Plugin>, L<Mojo::IRC>

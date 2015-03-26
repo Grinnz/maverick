@@ -4,7 +4,7 @@ use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use Mojo::URL;
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant WOLFRAM_API_ENDPOINT => 'http://api.wolframalpha.com/v2/query';
 use constant WOLFRAM_API_KEY_MISSING => 

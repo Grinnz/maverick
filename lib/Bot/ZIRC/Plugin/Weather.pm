@@ -5,7 +5,7 @@ use Mojo::URL;
 use Scalar::Util 'looks_like_number';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant WEATHER_API_ENDPOINT => 'http://api.wunderground.com/api/';
 use constant WEATHER_API_AUTOCOMPLETE_ENDPOINT => 'http://autocomplete.wunderground.com/aq';

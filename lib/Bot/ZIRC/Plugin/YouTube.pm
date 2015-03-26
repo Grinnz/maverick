@@ -4,7 +4,7 @@ use Mojo::URL;
 use Time::Duration 'ago';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 use constant YOUTUBE_API_ENDPOINT => 'https://www.googleapis.com/youtube/v3/';
 use constant YOUTUBE_VIDEO_URL => 'https://www.youtube.com/watch';

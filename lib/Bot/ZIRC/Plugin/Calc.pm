@@ -3,7 +3,7 @@ package Bot::ZIRC::Plugin::Calc;
 use Math::Calc::Parser 'calc';
 
 use Moo;
-with 'Bot::ZIRC::Plugin';
+extends 'Bot::ZIRC::Plugin';
 
 sub register {
 	my ($self, $bot) = @_;
