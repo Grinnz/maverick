@@ -54,11 +54,11 @@ sub register {
 			return $network->reply($sender, $channel, "There are only $count quotes")
 				unless $num <= $count;
 			
-			splice @$quotes, $num-1, 1;
+			my ($quote) = splice @$quotes, $num-1, 1;
 			$network->bot->storage->store;
 			
 			$self->clear_quote_cache;
-			return $network->reply($sender, $channel, "Deleted quote $num");
+			return $network->reply($sender, $channel, "Deleted quote $num: $quote");
 		},
 		required_access => ACCESS_BOT_ADMIN,
 	);
