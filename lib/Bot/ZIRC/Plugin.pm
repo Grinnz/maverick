@@ -6,6 +6,9 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
+use Exporter 'import';
+our @EXPORT = 'ua_error';
+
 has 'bot' => (
 	is => 'ro',
 	isa => sub { croak "Invalid bot object"
