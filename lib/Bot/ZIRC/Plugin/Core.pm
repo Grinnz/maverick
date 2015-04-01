@@ -23,7 +23,7 @@ sub register {
 			my ($network, $sender, $channel, $name) = @_;
 			my ($help_text, $command);
 			if (defined $name) {
-				$command = $network->bot->get_command($name);
+				$command = $self->bot->get_command($name);
 				if (defined $command) {
 					$help_text = $command->help_text // 'No help text for command $name';
 					$help_text .= '.' if $help_text =~ /\w\s*$/;
@@ -33,7 +33,7 @@ sub register {
 					return $network->reply($sender, $channel, "No such command $name");
 				}
 			} else {
-				$command = $network->bot->get_command('help');
+				$command = $self->bot->get_command('help');
 				$help_text = 'Type $trigger$name <command> to get help with a specific command.';
 			}
 			$help_text = $command->parse_usage_text($network, $help_text);
@@ -102,7 +102,7 @@ sub register {
 			my $channel_name = lc ($channel // $sender);
 			$command_name //= $self->more_commands->{$network}{$channel_name};
 			return $network->reply($sender, $channel, "No more to display") unless defined $command_name;
-			my $command = $network->bot->get_command($command_name);
+			my $command = $self->bot->get_command($command_name);
 			return $network->reply($sender, $channel, "No more to display for $command_name")
 				unless $command and $command->has_on_more;
 			$self->more_commands->{$network}{$channel_name} = lc $command->name;
@@ -119,7 +119,7 @@ sub register {
 			my ($network, $sender, $channel, @message) = @_;
 			my $message = join ' ', @message;
 			$message ||= 'Goodbye';
-			$network->bot->stop($message);
+			$self->bot->stop($message);
 		},
 	);
 	
@@ -129,7 +129,7 @@ sub register {
 		required_access => ACCESS_BOT_MASTER,
 		on_run => sub {
 			my ($network, $sender, $channel) = @_;
-			$network->bot->reload;
+			$self->bot->reload;
 			$network->reply($sender, $channel, "Reloaded configuration");
 		},
 	);

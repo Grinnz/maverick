@@ -27,10 +27,10 @@ sub register {
 			my ($network, $sender, $channel, $quote) = @_;
 			return 'usage' unless length $quote;
 			
-			my $quotes = $network->bot->storage->data->{quotes} //= [];
+			my $quotes = $self->bot->storage->data->{quotes} //= [];
 			push @$quotes, $quote;
 			my $num = @$quotes;
-			$network->bot->storage->store;
+			$self->bot->storage->store;
 			
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Added quote $num");
@@ -49,13 +49,13 @@ sub register {
 			return $network->reply($sender, $channel, "Invalid quote number")
 				unless $num =~ /^\d+$/ and $num > 0;
 			
-			my $quotes = $network->bot->storage->data->{quotes} // [];
+			my $quotes = $self->bot->storage->data->{quotes} // [];
 			my $count = @$quotes;
 			return $network->reply($sender, $channel, "There are only $count quotes")
 				unless $num <= $count;
 			
 			my ($quote) = splice @$quotes, $num-1, 1;
-			$network->bot->storage->store;
+			$self->bot->storage->store;
 			
 			$self->clear_quote_cache;
 			return $network->reply($sender, $channel, "Deleted quote $num: $quote");
@@ -72,7 +72,7 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel, $args) = @_;
 			
-			my $quotes = $network->bot->storage->data->{quotes};
+			my $quotes = $self->bot->storage->data->{quotes};
 			return $network->reply($sender, $channel, "No quotes stored")
 				unless $quotes and @$quotes;
 			
@@ -142,9 +142,9 @@ sub register {
 				unless @add_quotes;
 			
 			my $num_quotes = @add_quotes;
-			my $quotes = $network->bot->storage->data->{quotes} //= [];
+			my $quotes = $self->bot->storage->data->{quotes} //= [];
 			push @$quotes, @add_quotes;
-			$network->bot->storage->store;
+			$self->bot->storage->store;
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Loaded $num_quotes quotes from $filename");
 		},
@@ -164,7 +164,7 @@ sub register {
 			return $network->reply($sender, $channel, "File $filename exists")
 				if -e $filename;
 			
-			my $quotes = $network->bot->storage->data->{quotes} // [];
+			my $quotes = $self->bot->storage->data->{quotes} // [];
 			spurt encode('UTF-8', join("\n", @$quotes)), $filename;
 			my $num_quotes = @$quotes;
 			$network->reply($sender, $channel, "Stored $num_quotes quotes to $filename");
@@ -177,8 +177,8 @@ sub register {
 		help_text => 'Delete all quotes',
 		on_run => sub {
 			my ($network, $sender, $channel) = @_;
-			$network->bot->storage->data->{quotes} = [];
-			$network->bot->storage->store;
+			$self->bot->storage->data->{quotes} = [];
+			$self->bot->storage->store;
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Deleted all quotes");
 		},

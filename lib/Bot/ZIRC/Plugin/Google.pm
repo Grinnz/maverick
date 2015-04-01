@@ -41,7 +41,7 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for Google search")
@@ -85,7 +85,7 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for Google image search")

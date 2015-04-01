@@ -6,9 +6,6 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
-use Exporter 'import';
-our @EXPORT = 'ua_error';
-
 has 'bot' => (
 	is => 'ro',
 	isa => sub { croak "Invalid bot object"
@@ -27,7 +24,7 @@ sub start {}
 sub stop {}
 
 sub ua_error {
-	my $err = shift;
+	my ($self, $err) = @_;
 	return $err->{code}
 		? "Transport error $err->{code}: $err->{message}"
 		: "Connection error: $err->{message}";

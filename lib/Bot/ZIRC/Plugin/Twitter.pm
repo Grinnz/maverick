@@ -47,7 +47,7 @@ sub _build__access_token {
 		'Content-Type' => 'application/x-www-form-urlencoded;charset=UTF-8' };
 	my $tx = $self->ua->post($url, $headers,
 		form => { grant_type => 'client_credentials' });
-	die ua_error($tx->error) if $tx->error;
+	die $self->ua_error($tx->error) if $tx->error;
 	return $tx->res->json->{access_token};
 }
 
@@ -75,9 +75,9 @@ sub register {
 				my $id = $1;
 				my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)
 					->path('statuses/show.json')->query(id => $id);
-				$network->ua->get($url, { Authorization => "Bearer $token" }, sub {
+				$self->ua->get($url, { Authorization => "Bearer $token" }, sub {
 					my ($ua, $tx) = @_;
-					return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+					return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 					my $tweet = $tx->res->json;
 					return display_tweet($network, $sender, $channel, $tweet);
 				});
@@ -88,9 +88,9 @@ sub register {
 				my $user = $1;
 				my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)
 					->path('users/show.json')->query(screen_name => $user, include_entities => 'false');
-				$network->ua->get($url, { Authorization => "Bearer $token" }, sub {
+				$self->ua->get($url, { Authorization => "Bearer $token" }, sub {
 					my ($ua, $tx) = @_;
-					return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+					return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 					my $user = $tx->res->json;
 					my $tweet = delete $user->{status};
 					$tweet->{user} = $user;
@@ -102,9 +102,9 @@ sub register {
 			else {
 				my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)
 					->path('search/tweets.json')->query(q => $query, count => 15, include_entities => 'false');
-				$network->ua->get($url, { Authorization => "Bearer $token" }, sub {
+				$self->ua->get($url, { Authorization => "Bearer $token" }, sub {
 					my ($ua, $tx) = @_;
-					return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+					return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 					my $tweets = $tx->res->json->{statuses};
 					return $network->reply($sender, $channel, "No results for Twitter search")
 						unless $tweets and @$tweets;
@@ -146,9 +146,9 @@ sub register {
 		$network->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
 		my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)
 			->path('statuses/show.json')->query(id => $tweet_id);
-		$network->ua->get($url, { Authorization => "Bearer $token" }, sub {
+		$self->ua->get($url, { Authorization => "Bearer $token" }, sub {
 			my ($ua, $tx) = @_;
-			return $network->logger->error("Error retrieving Twitter tweet data: ".ua_error($tx->error))
+			return $network->logger->error("Error retrieving Twitter tweet data: ".$self->ua_error($tx->error))
 				if $tx->error;
 			my $tweet = $tx->res->json;
 			return display_triggered($network, $sender, $channel, $tweet);

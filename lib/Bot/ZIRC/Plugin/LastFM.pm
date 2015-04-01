@@ -44,7 +44,7 @@ sub register {
 			$network->logger->debug("Retrieving Last.fm recent tracks for $username");
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 				
 				my $response = $tx->res->json;
 				if ($response->{error}) {

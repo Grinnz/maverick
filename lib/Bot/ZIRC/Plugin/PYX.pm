@@ -45,18 +45,18 @@ sub register {
 			
 			if (defined $black_card_text) {
 				$white_card_count = 1 if $white_card_count < 1;
-				get_white_cards($network, $white_card_count, sub {
+				$self->get_white_cards($network, $white_card_count, sub {
 					my ($err, $cards) = @_;
 					return $network->reply($sender, $channel, $err) if $err;
 					show_pyx_match($network, $sender, $channel, $black_card_text, $cards);
 				});
 			} else {
-				get_black_card($network, $black_card_pick, sub {
+				$self->get_black_card($network, $black_card_pick, sub {
 					my ($err, $black_card) = @_;
 					return $network->reply($sender, $channel, $err) if $err;
 					$white_card_count //= $black_card->{pick} // 1;
 					if ($white_card_count > 0) {
-						get_white_cards($network, $white_card_count, sub {
+						$self->get_white_cards($network, $white_card_count, sub {
 							my ($err, $cards) = @_;
 							return $network->reply($sender, $channel, $err) if $err;
 							if (defined $white_cards) {
@@ -76,7 +76,7 @@ sub register {
 }
 
 sub get_black_card {
-	my ($network, $pick, $cb) = @_;
+	my ($self, $network, $pick, $cb) = @_;
 	if (defined $pick) {
 		$pick = 1 if $pick < 1;
 		$pick = PYX_MAX_PICK if $pick > PYX_MAX_PICK;
@@ -91,9 +91,9 @@ sub get_black_card {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({pick => $pick}) if defined $pick;
 	
-	$network->ua->get($url, sub {
+	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		return $cb->(ua_error($tx->error)) if $tx->error;
+		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		my $card = $tx->res->json->{card};
 		return $cb->('No applicable black cards') unless defined $card and defined $card->{text};
 		$card->{text} = format_pyx_card($card->{text});
@@ -102,7 +102,7 @@ sub get_black_card {
 }
 
 sub get_white_cards {
-	my ($network, $count, $cb) = @_;
+	my ($self, $network, $count, $cb) = @_;
 	$count //= 1;
 	$count = 1 if $count < 1;
 	$count = PYX_MAX_COUNT if $count > PYX_MAX_COUNT;
@@ -116,9 +116,9 @@ sub get_white_cards {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({count => $count});
 	
-	$network->ua->get($url, sub {
+	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		return $cb->(ua_error($tx->error)) if $tx->error;
+		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		my $cards = $tx->res->json->{cards} // [];
 		$_ = format_pyx_card($_->{text}) for @$cards;
 		$cb->(undef, $cards);

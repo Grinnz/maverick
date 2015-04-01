@@ -99,10 +99,10 @@ sub register {
 			}
 			
 			$network->logger->debug("Resolving $hostname");
-			$network->bot->dns_resolve($hostname, sub {
+			$self->bot->dns_resolve($hostname, sub {
 				my ($err, @results) = @_;
 				return $network->reply($sender, $channel, "Failed to resolve $hostname: $err") if $err;
-				my $addrs = $network->bot->dns_ip_results(\@results);
+				my $addrs = $self->bot->dns_ip_results(\@results);
 				return $network->reply($sender, $channel, "No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
 				$network->reply($sender, $channel, "DNS results for $say_result: $addr_list");

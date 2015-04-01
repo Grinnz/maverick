@@ -50,7 +50,7 @@ sub _build__access_token {
 		grant_type => 'client_credentials'
 	);
 	my $tx = $self->ua->post($url, form => \%form);
-	die ua_error($tx->error) if $tx->error;
+	die $self->ua_error($tx->error) if $tx->error;
 	my $data = $tx->res->json;
 	$self->_access_token_expire(time+$data->{expires_in});
 	return $data->{access_token};
@@ -84,13 +84,13 @@ sub _build__translate_languages {
 	my $access_token = $self->_retrieve_access_token;
 	my %headers = (Authorization => "Bearer $access_token");
 	my $tx = $self->ua->get($url, \%headers);
-	die ua_error($tx->error) if $tx->error;
+	die $self->ua_error($tx->error) if $tx->error;
 	my @languages = $tx->res->dom->xml(1)->find('string')->map('text')->each;
 	
 	$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
 	$headers{'Content-Type'} = 'text/xml';
 	$tx = $self->ua->post($url, \%headers, _xml_string_array(@languages));
-	die ua_error($tx->error) if $tx->error;
+	die $self->ua_error($tx->error) if $tx->error;
 	my @names = $tx->res->dom->xml(1)->find('string')->map('text')->each;
 	
 	my %languages;
@@ -161,7 +161,7 @@ sub register {
 				my %headers = (Authorization => "Bearer $access_token");
 				return $self->ua->get($url, \%headers, sub {
 					my ($ua, $tx) = @_;
-					return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+					return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 					my $from = $tx->res->dom->xml(1)->at('string')->text;
 					$self->do_translate($network, $sender, $channel, $text, $from, $to);
 				});
@@ -194,7 +194,7 @@ sub do_translate {
 	my %headers = (Authorization => "Bearer $access_token");
 	$self->ua->get($url, \%headers, sub {
 		my ($ua, $tx) = @_;
-		return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+		return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 		my $translated = $tx->res->dom->xml(1)->at('string')->text;
 		my $from_name = $self->_translate_languages->{$from};
 		my $to_name = $self->_translate_languages->{$to};

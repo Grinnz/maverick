@@ -36,13 +36,13 @@ sub register {
 			$target = $sender unless length $target;
 			if (exists $network->users->{lc $target}) {
 				return $network->reply($sender, $channel, "GeoIP plugin is required to display weather for a user")
-					unless $network->bot->has_plugin_method('geoip_locate_host');
+					unless $self->bot->has_plugin_method('geoip_locate_host');
 				my $hostname = $network->user($target)->host;
 				return $network->reply($sender, $channel, "Unable to find hostname for $target")
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
-					$network->bot->geoip_locate_host($hostname, shift->begin(0));
+					$self->bot->geoip_locate_host($hostname, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $record) = @_;
 					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
@@ -90,13 +90,13 @@ sub register {
 			$target = $sender unless length $target;
 			if (exists $network->users->{lc $target}) {
 				return $network->reply($sender, $channel, "GeoIP plugin is required to display weather for a user")
-					unless $network->bot->has_plugin_method('geoip_locate_host');
+					unless $self->bot->has_plugin_method('geoip_locate_host');
 				my $hostname = $network->user($target)->host;
 				return $network->reply($sender, $channel, "Unable to find hostname for $target")
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
-					$network->bot->geoip_locate_host($hostname, shift->begin(0));
+					$self->bot->geoip_locate_host($hostname, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $record) = @_;
 					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
@@ -136,7 +136,7 @@ sub weather_autocomplete_location_code {
 	my $url = Mojo::URL->new(WEATHER_API_AUTOCOMPLETE_ENDPOINT)->query(h => 0, query => $query);
 	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		return $cb->(ua_error($tx->error)) if $tx->error;
+		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		
 		my $locs = $tx->res->json->{RESULTS};
 		return $cb->('No results') unless defined $locs;
@@ -161,7 +161,7 @@ sub weather_location_data {
 	my $url = Mojo::URL->new(WEATHER_API_ENDPOINT)->path("$api_key/conditions/forecast/geolookup/q/$code.json");
 	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		return $cb->(ua_error($tx->error)) if $tx->error;
+		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		
 		my $results = $tx->res->json;
 		$self->weather_cache->{$code} = {

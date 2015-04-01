@@ -50,7 +50,7 @@ sub register {
 				$say_target = "$target ($host)";
 			}
 			
-			$network->bot->geoip_locate_host($host, sub {
+			$self->bot->geoip_locate_host($host, sub {
 				my ($err, $record) = @_;
 				return $network->reply($sender, $channel, "Error locating $say_target: $err") if $err;
 				return $network->reply($sender, $channel, "GeoIP location for $say_target: ".location_str($record));

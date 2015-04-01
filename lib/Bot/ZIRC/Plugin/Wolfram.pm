@@ -31,23 +31,23 @@ sub register {
 			my $host = $sender->host;
 			if (is_ipv4 $host or is_ipv6 $host) {
 				$ip = $host;
-				do_wolfram_query($network, $sender, $channel, $query, $ip);
-			} elsif ($network->bot->has_plugin_method('dns_resolve')) {
-				$network->bot->dns_resolve($host, sub {
+				$self->do_wolfram_query($network, $sender, $channel, $query, $ip);
+			} elsif ($self->bot->has_plugin_method('dns_resolve')) {
+				$self->bot->dns_resolve($host, sub {
 					my ($err, @results) = @_;
-					my $addrs = $network->bot->dns_ip_results(\@results);
+					my $addrs = $self->bot->dns_ip_results(\@results);
 					my $ip = @$addrs ? $addrs->[0] : undef;
-					do_wolfram_query($network, $sender, $channel, $query, $ip);
+					$self->do_wolfram_query($network, $sender, $channel, $query, $ip);
 				});
 			} else {
-				do_wolfram_query($network, $sender, $channel, $query);
+				$self->do_wolfram_query($network, $sender, $channel, $query);
 			}
 		},
 	);
 }
 
 sub do_wolfram_query {
-	my ($network, $sender, $channel, $query, $ip) = @_;
+	my ($self, $network, $sender, $channel, $query, $ip) = @_;
 	my $api_key = $network->config->get('apis','wolfram_api_key');
 	die WOLFRAM_API_KEY_MISSING unless defined $api_key;
 	
@@ -55,9 +55,9 @@ sub do_wolfram_query {
 		->query(input => $query, appid => $api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 	
-	$network->ua->get($url, sub {
+	$self->ua->get($url, sub {
 		my ($ua, $tx) = @_;
-		return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+		return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 		
 		my $result = $tx->res->dom->xml(1)->children('queryresult')->first;
 		return $network->reply($sender, $channel, "Error querying Wolfram|Alpha")

@@ -42,7 +42,7 @@ sub register {
 			
 			$self->ua->get($request, sub {
 				my ($ua, $tx) = @_;
-				return $network->reply($sender, $channel, ua_error($tx->error)) if $tx->error;
+				return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
 				
 				my $results = $tx->res->json->{items};
 				return $network->reply($sender, $channel, "No results for YouTube search")
@@ -88,7 +88,7 @@ sub register {
 		
 		$self->ua->get($request, sub {
 			my ($ua, $tx) = @_;
-			return $network->logger->error("Error retrieving YouTube video data: ".ua_error($tx->error))
+			return $network->logger->error("Error retrieving YouTube video data: ".$self->ua_error($tx->error))
 				if $tx->error;
 			
 			my $results = $tx->res->json->{items};
