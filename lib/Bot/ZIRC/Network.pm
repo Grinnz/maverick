@@ -124,6 +124,13 @@ sub user {
 	return $self->users->{lc $nick} //= Bot::ZIRC::User->new(nick => $nick, network => $self);
 }
 
+sub rename_user {
+	my ($self, $from, $to) = @_;
+	my $user = delete $self->users->{lc $from} // return $self->user($to);
+	$user->nick($to);
+	$self->users->{lc $to} = $user;
+}
+
 has 'irc' => (
 	is => 'lazy',
 	init_arg => undef,
@@ -561,7 +568,7 @@ sub irc_nick {
 	my $from = parse_user($message->{prefix});
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
-	$self->user($from)->nick($to);
+	$self->rename_user($from => $to);
 }
 
 sub irc_notice {
