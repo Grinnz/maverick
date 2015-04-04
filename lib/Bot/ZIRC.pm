@@ -201,23 +201,20 @@ sub BUILD {
 
 sub get_network_names {
 	my $self = shift;
-	return keys %{$self->networks};
+	return map { $_->name } values %{$self->networks};
 }
 
 sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
 	croak "Network name $name contains invalid characters" unless $name =~ /^[-.\w]+$/;
-	croak "Network $name already exists" if exists $self->networks->{$name};
+	croak "Network $name already exists" if exists $self->networks->{lc $name};
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
 	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
 	local $@;
 	eval "require $class; 1" or croak $@;
-	my $config_file = $self->config_file;
-	$config_file =~ s/(.+)\.conf/$1-$name.conf/
-		or $config_file .= "-$name";
-	$self->networks->{$name} = $class->new(name => $name, bot => $self, config => $config, config_file => $config_file);
+	$self->networks->{lc $name} = $class->new(name => $name, bot => $self, config => $config);
 	return $self;
 }
 
