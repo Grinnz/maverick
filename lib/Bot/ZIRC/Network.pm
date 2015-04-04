@@ -269,9 +269,9 @@ sub reconnect {
 
 sub identify {
 	my $self = shift;
-	my $nick = $self->config->get('irc','nick');
+	my $nick = $self->config->get('irc','nick') // $self->bot->name;
 	my $pass = $self->config->get('irc','password');
-	if (defined $nick and length $nick and defined $pass and length $pass) {
+	if (defined $pass and length $pass) {
 		$self->do_identify($nick, $pass);
 	}
 }
@@ -292,7 +292,7 @@ sub check_recurring {
 
 sub check_nick {
 	my $self = shift;
-	my $desired = $self->config->get('irc','nick');
+	my $desired = $self->config->get('irc','nick') // $self->bot->name;
 	my $current = $self->nick;
 	unless (lc $desired eq lc substr $current, 0, length $desired) {
 		$self->write(nick => $desired);

@@ -2,6 +2,7 @@ package Bot::ZIRC::Plugin;
 
 use Bot::ZIRC;
 use Carp;
+use Mojo::IOLoop::ForkCall;
 use Scalar::Util 'blessed';
 
 use Moo;
@@ -14,7 +15,7 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::ZIRC->new },
 	weak_ref => 1,
-	handles => ['ua'],
+	handles => [qw/logger ua/],
 );
 
 sub register { die "Method must be overloaded by subclass" }
@@ -30,6 +31,16 @@ sub ua_error {
 	return $err->{code}
 		? "Transport error $err->{code}: $err->{message}"
 		: "Connection error: $err->{message}";
+}
+
+sub fork_call {
+	my ($self, @args) = @_;
+	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : undef;
+	my $fc = Mojo::IOLoop::ForkCall->new->catch(sub { $self->logger->error($_[1]) });
+	return $fc->run(@args, sub {
+		my $fc = shift;
+		$self->$cb(@_) if $cb;
+	});
 }
 
 1;

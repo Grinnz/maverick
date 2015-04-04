@@ -84,7 +84,7 @@ sub register {
 			
 			if (defined $num) {
 				$num = @$quotes if $num > @$quotes;
-				return display_quote($network, $sender, $channel, $quotes, $num);
+				return $self->display_quote($network, $sender, $channel, $quotes, undef, $num);
 			}
 			
 			# Quotes by search regex
@@ -99,27 +99,30 @@ sub register {
 			}
 			
 			my $results = $self->quote_cache->{$match_by}{lc $args};
-			unless (defined $results) {
-				my $re = eval { qr/$args/i };
-				unless (defined $re) {
-					my $err = $@;
-					chomp $err;
-					return $network->reply($sender, $channel, "Invalid search regex: $err");
-				}
-				
-				my $num_quotes = @$quotes;
-				my @matches = $match_by eq '='
-					? grep { $quotes->[$_-1] =~ $re } (1..$num_quotes)
-					: grep { $quotes->[$_-1] !~ $re } (1..$num_quotes);
-				$results = $self->quote_cache->{$match_by}{lc $args} = \@matches;
+			if (defined $results) {
+				$self->display_quote($network, $sender, $channel, $quotes, $results, $num);
+			} else {
+				$self->fork_call(sub {
+					my $re = qr/$args/i;
+					$quotes->lock_shared;
+					my $num_quotes = @$quotes;
+					my @matches = $match_by eq '='
+						? grep { $quotes->[$_-1] =~ $re } (1..$num_quotes)
+						: grep { $quotes->[$_-1] !~ $re } (1..$num_quotes);
+					$quotes->unlock;
+					return \@matches;
+				}, sub {
+					my ($self, $err, $matches) = @_;
+					if ($err) {
+						chomp $err;
+						$err =~ s/ at .+? line .+?\.$//;
+						return $network->reply($sender, $channel, "Invalid search regex: $err");
+					}
+					$results = $self->quote_cache->{$match_by}{lc $args} = $matches;
+					$self->display_quote($network, $sender, $channel, $quotes, $results, $num);
+				});
 			}
 			
-			return $network->reply($sender, $channel, "No matches") unless @$results;
-			
-			$num //= 1+int rand @$results;
-			$num = @$results if $num > @$results;
-			my $result = $results->[$num-1];
-			return display_quote($network, $sender, $channel, $quotes, $result, $num, scalar @$results);
 		},
 	);
 	
@@ -135,15 +138,22 @@ sub register {
 				if $filename =~ m!/!;
 			return $network->reply($sender, $channel, "File $filename not found")
 				unless -r $filename;
-			my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', slurp $filename;
-			return $network->reply($sender, $channel, "No quotes to add")
-				unless @add_quotes;
 			
-			my $num_quotes = @add_quotes;
 			my $quotes = $self->bot->storage->data->{quotes} //= [];
-			push @$quotes, @add_quotes;
-			$self->clear_quote_cache;
-			$network->reply($sender, $channel, "Loaded $num_quotes quotes from $filename");
+			$self->fork_call(sub {
+				my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', slurp $filename;
+				return 0 unless @add_quotes;
+				my $num_quotes = @add_quotes;
+				push @$quotes, @add_quotes;
+				return $num_quotes;
+			}, sub {
+				my ($self, $err, $num_quotes) = @_;
+				die $err if $err;
+				return $network->reply($sender, $channel, "No quotes to add")
+					unless $num_quotes;
+				$self->clear_quote_cache;
+				$network->reply($sender, $channel, "Loaded $num_quotes from $filename");
+			});
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -162,9 +172,14 @@ sub register {
 				if -e $filename;
 			
 			my $quotes = $self->bot->storage->data->{quotes} // [];
-			spurt encode('UTF-8', join("\n", @$quotes)), $filename;
-			my $num_quotes = @$quotes;
-			$network->reply($sender, $channel, "Stored $num_quotes quotes to $filename");
+			$self->fork_call(sub {
+				spurt encode('UTF-8', join("\n", @$quotes)."\n"), $filename;
+				return scalar @$quotes;
+			}, sub {
+				my ($self, $err, $num_quotes) = @_;
+				die $err if $err;
+				$network->reply($sender, $channel, "Stored $num_quotes quotes to $filename");
+			});
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -174,19 +189,33 @@ sub register {
 		help_text => 'Delete all quotes',
 		on_run => sub {
 			my ($network, $sender, $channel) = @_;
-			$self->bot->storage->data->{quotes} = [];
-			$self->clear_quote_cache;
-			$network->reply($sender, $channel, "Deleted all quotes");
+			$self->fork_call(sub {
+				$self->bot->storage->data->{quotes} = [];
+				return 1;
+			}, sub {
+				my ($self, $err) = @_;
+				die $err if $err;
+				$self->clear_quote_cache;
+				$network->reply($sender, $channel, "Deleted all quotes");
+			});
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
 }
 
 sub display_quote {
-	my ($network, $sender, $channel, $quotes, $num, $result_num, $result_count) = @_;
+	my ($self, $network, $sender, $channel, $quotes, $results, $num) = @_;
+	my ($result_num, $result_count);
+	if ($results) {
+		return $network->reply($sender, $channel, "No matches") unless @$results;
+		$result_count = @$results;
+		$result_num = $num //= 1+int rand $result_count;
+		$result_num = $result_count if $result_num > $result_count;
+		$num = $results->[$result_num-1];
+	}
 	my $quote = $quotes->[$num-1];
 	my $msg = "[$num] $quote";
-	$msg = "$msg ($result_num/$result_count)" if defined $result_num and defined $result_count;
+	$msg = "$msg ($result_num/$result_count)" if $results;
 	$network->reply($sender, $channel, $msg);
 }
 
