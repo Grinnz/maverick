@@ -27,7 +27,6 @@ sub register {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
 				$network->storage->data->{lastfm}{usernames}{lc $sender} = $username;
-				$network->storage->store;
 				return $network->reply($sender, $channel, "Set Last.fm username of $sender to $username");
 			}
 			

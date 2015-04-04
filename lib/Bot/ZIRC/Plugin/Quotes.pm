@@ -30,7 +30,6 @@ sub register {
 			my $quotes = $self->bot->storage->data->{quotes} //= [];
 			push @$quotes, $quote;
 			my $num = @$quotes;
-			$self->bot->storage->store;
 			
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Added quote $num");
@@ -55,7 +54,6 @@ sub register {
 				unless $num <= $count;
 			
 			my ($quote) = splice @$quotes, $num-1, 1;
-			$self->bot->storage->store;
 			
 			$self->clear_quote_cache;
 			return $network->reply($sender, $channel, "Deleted quote $num: $quote");
@@ -144,7 +142,6 @@ sub register {
 			my $num_quotes = @add_quotes;
 			my $quotes = $self->bot->storage->data->{quotes} //= [];
 			push @$quotes, @add_quotes;
-			$self->bot->storage->store;
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Loaded $num_quotes quotes from $filename");
 		},
@@ -178,7 +175,6 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel) = @_;
 			$self->bot->storage->data->{quotes} = [];
-			$self->bot->storage->store;
 			$self->clear_quote_cache;
 			$network->reply($sender, $channel, "Deleted all quotes");
 		},

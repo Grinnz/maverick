@@ -1,17 +1,16 @@
 package Bot::ZIRC::Storage;
 
 use Carp;
+use DBM::Deep;
 use File::Path 'make_path';
 use File::Spec;
-use Mojo::JSON qw/decode_json encode_json/;
 
 use Moo;
 use namespace::clean;
 
 has 'data' => (
-	is => 'rwp',
-	lazy => 1,
-	builder => 1,
+	is => 'lazy',
+	clearer => 1,
 	init_arg => undef,
 );
 
@@ -29,53 +28,18 @@ has 'file' => (
 sub _build_data {
 	my $self = shift;
 	my $dir = $self->dir;
-	my $storage_file = $self->file;
+	my $file = $self->file;
+	my $path = $file;
 	if (defined $dir and length $dir) {
 		make_path($dir) if !-e $dir;
-		$storage_file = File::Spec->catfile($dir, $storage_file);
+		$path = File::Spec->catfile($dir, $file);
 	}
-	if (-e $storage_file) {
-		return $self->_load($storage_file);
-	} else {
-		return {};
-	}
+	return DBM::Deep->new($path);
 }
 
 sub reload {
 	my $self = shift;
-	my $dir = $self->dir;
-	my $storage_file = $self->file;
-	$storage_file = File::Spec->catfile($dir, $storage_file) if defined $dir and length $dir;
-	$self->_set_data($self->_load($storage_file));
-	return $self;
-}
-
-sub store {
-	my $self = shift;
-	my $dir = $self->dir;
-	my $storage_file = $self->file;
-	$storage_file = File::Spec->catfile($dir, $storage_file) if defined $dir and length $dir;
-	$self->_store($storage_file, $self->data);
-	return $self;
-}
-
-sub _load {
-	my ($self, $file) = @_;
-	die "Unable to read storage file $file" unless -r $file;
-	open my $fh, '<', $file or die "Unable to read storage file $file: $!\n";
-	my $encoded = do { local $/; readline $fh };
-	my $data;
-	eval { $data = decode_json $encoded; 1 } or die "Invalid storage data: $@";
-	die "Storage data is not a hashref" unless ref $data eq 'HASH';
-	return $data;
-}
-
-sub _store {
-	my ($self, $file, $data) = @_;
-	my $encoded;
-	eval { $encoded = encode_json $data; 1 } or die "Error encoding storage data: $@";
-	open my $fh, '>', $file or die "Unable to write storage file $file: $!\n";
-	print $fh $encoded;
+	$self->clear_data;
 	return $self;
 }
 
