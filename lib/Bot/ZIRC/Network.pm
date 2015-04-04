@@ -8,6 +8,7 @@ use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
 use Scalar::Util qw/blessed looks_like_number weaken/;
+use Bot::ZIRC;
 use Bot::ZIRC::Access qw/:access channel_access_level/;
 use Bot::ZIRC::Channel;
 use Bot::ZIRC::User;
@@ -37,9 +38,10 @@ has 'name' => (
 );
 
 has 'bot' => (
-	is => 'rwp',
-	required => 1,
+	is => 'ro',
 	isa => sub { croak "Invalid bot" unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
+	lazy => 1,
+	default => sub { Bot::ZIRC->new },
 	weak_ref => 1,
 	handles => [qw/bot_version config_dir get_hooks is_stopping storage ua/],
 );

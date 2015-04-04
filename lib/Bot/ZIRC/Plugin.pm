@@ -1,5 +1,6 @@
 package Bot::ZIRC::Plugin;
 
+use Bot::ZIRC;
 use Carp;
 use Scalar::Util 'blessed';
 
@@ -10,7 +11,8 @@ has 'bot' => (
 	is => 'ro',
 	isa => sub { croak "Invalid bot object"
 		unless blessed $_[0] and $_[0]->isa('Bot::ZIRC') },
-	required => 1,
+	lazy => 1,
+	default => sub { Bot::ZIRC->new },
 	weak_ref => 1,
 	handles => ['ua'],
 );

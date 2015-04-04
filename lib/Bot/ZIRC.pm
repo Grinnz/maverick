@@ -340,10 +340,9 @@ sub add_command {
 	my $command;
 	if (blessed $_[0] and $_[0]->isa('Bot::ZIRC::Command')) {
 		$command = shift;
-		$command->_set_bot($self);
 	} elsif (!ref $_[0] or ref $_[0] eq 'HASH') {
 		my %params = ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
-		$command = Bot::ZIRC::Command->new(%params, bot => $self);
+		$command = Bot::ZIRC::Command->new(%params);
 	} else {
 		croak "$_[0] is not a Bot::ZIRC::Command object";
 	}
