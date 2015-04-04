@@ -56,7 +56,7 @@ has 'init_config' => (
 has 'config_file' => (
 	is => 'ro',
 	lazy => 1,
-	default => sub { my $name = shift->name; return "zirc-$name.conf" },
+	default => sub { lc($_[0]->bot->name) . '-' . lc($_[0]->name) . '.conf' },
 );
 
 has 'config' => (
@@ -148,10 +148,11 @@ sub _connect_options {
 	my $self = shift;
 	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
 		@{$self->config->hash->{irc}}{qw/server port server_pass ssl nick realname/};
-	die "IRC server for network $self is not configured\n"
+	croak "IRC server for network $self is not configured\n"
 		unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
-	$nick //= 'ZIRCBot',
+	$nick = $self->bot->name unless defined $nick and length $nick;
+	croak "Invalid bot nick $nick" unless IRC::Utils::is_valid_nick_name $nick;
 	$realname = sprintf 'Bot::ZIRC %s by %s', $self->bot_version, 'Grinnz'
 		unless defined $realname and length $realname;
 	my %options = (
@@ -402,17 +403,18 @@ sub check_privmsg {
 
 sub parse_command {
 	my ($self, $sender, $channel, $message) = @_;
-	my $trigger = $self->config->get('commands','trigger');
+	my $trigger = $self->config->get('commands','trigger') // '';
 	my $by_nick = $self->config->get('commands','by_nick');
+	my $bare = $self->config->get('commands','bare');
 	my $bot_nick = $self->nick;
 	
 	my ($cmd_name, $args_str);
-	$trigger =~ s/(?!<\\)]/\\]/g if $trigger;
-	if ($trigger and $message =~ /^[$trigger](\w+)\s*(.*?)$/i) {
+	$trigger = quotemeta $trigger;
+	if (length $trigger and $message =~ /^[$trigger](\w+)\s*(.*?)$/i) {
 		($cmd_name, $args_str) = ($1, $2);
 	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
 		($cmd_name, $args_str) = ($1, $2);
-	} elsif (!defined $channel and $message =~ /^(\w+)\s*(.*?)$/) {
+	} elsif (($bare or !defined $channel) and $message =~ /^(\w+)\s*(.*?)$/) {
 		($cmd_name, $args_str) = ($1, $2);
 	} else {
 		return undef;

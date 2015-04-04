@@ -1,7 +1,5 @@
 package Bot::ZIRC;
 
-use Net::DNS::Native; # load early to avoid threading issues
-
 use Carp;
 use Exporter;
 use File::Spec;
@@ -33,6 +31,14 @@ our $VERSION = '0.10';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
+
+has 'name' => (
+	is => 'ro',
+	isa => sub { croak "Invalid bot name $_[0]"
+		unless defined $_[0] and IRC::Utils::is_valid_nick_name $_[0] },
+	lazy => 1,
+	default => 'ZIRC',
+);
 
 has 'networks' => (
 	is => 'ro',
@@ -94,42 +100,8 @@ has 'config_dir' => (
 has 'config_file' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'zirc.conf',
+	default => sub { lc($_[0]->name) . '.conf' },
 );
-
-sub config_defaults {
-	{
-		main => {
-			debug => 1,
-			echo => 1,
-		},
-		irc => {
-			server => '',
-			server_pass => '',
-			port => 6667,
-			ssl => 0,
-			realname => '',
-			nick => 'ZIRCBot',
-			password => '',
-			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
-			reconnect => 1,
-		},
-		users => {
-			master => '',
-			ircop_admin_override => 1,
-			ignore_bots => 1,
-		},
-		channels => {
-			autojoin => '',
-		},
-		commands => {
-			prefixes => 1,
-			trigger => '!',
-			by_nick => 1,
-		},
-		apis => {},
-	};
-}
 
 has 'config' => (
 	is => 'lazy',
@@ -141,7 +113,7 @@ sub _build_config {
 	my $config = Bot::ZIRC::Config->new(
 		dir => $self->config_dir,
 		file => $self->config_file,
-		defaults => $self->config_defaults,
+		defaults => $self->_config_defaults,
 	);
 	$config->apply($self->init_config)->store if %{$self->init_config};
 	return $config;
@@ -150,7 +122,7 @@ sub _build_config {
 has 'storage_file' => (
 	is => 'ro',
 	lazy => 1,
-	default => 'zirc.json',
+	default => sub { lc($_[0]->name) . '.db' },
 );
 
 has 'storage' => (
@@ -475,6 +447,39 @@ sub sig_reload {
 	$self->reload;
 }
 
+sub _config_defaults {
+	{
+		main => {
+			debug => 1,
+			echo => 1,
+		},
+		irc => {
+			server => '',
+			server_pass => '',
+			port => 6667,
+			ssl => 0,
+			realname => '',
+			password => '',
+			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
+			reconnect => 1,
+		},
+		users => {
+			master => '',
+			ircop_admin_override => 1,
+			ignore_bots => 1,
+		},
+		channels => {
+			autojoin => '',
+		},
+		commands => {
+			prefixes => 1,
+			trigger => '!',
+			by_nick => 1,
+		},
+		apis => {},
+	};
+}
+
 1;
 
 =head1 NAME
@@ -615,11 +620,11 @@ C<fred.db>.
   networks => { freenode => { class => 'Freenode', debug => 1 } },
 
 Hash reference that must contain at least one network to connect to. Keys are
-names which will be used to identify the network as well as define the network
-configuration filename. Values are hash references containing an optional
-object C<class> (defaults to L<Bot::ZIRC::Network>) and configuration for the
-network. The C<class> will be appended to C<Bot::ZIRC::Network::> if it does
-not contain C<::>.
+names which will be used to identify the network as well as lowercased to
+define the default network configuration filename. Values are hash references
+containing an optional object C<class> (defaults to L<Bot::ZIRC::Network>) and
+configuration for the network. The C<class> will be appended to
+C<Bot::ZIRC::Network::> if it does not contain C<::>.
 
 =item plugins
 
@@ -654,8 +659,8 @@ directory.
   config_file => 'myconfig.conf',
 
 Filename for main configuration file. Defaults to bot's name, lowercased and
-appended with C<.conf>. Network configuration filenames default to this
-filename with C<-E<lt>networkE<gt>> inserted before C<.conf>
+appended with C<.conf>. Network configuration filenames default to bot's name,
+lowercased and appended with lowercased C<-E<lt>networkE<gt>.conf>.
 
 =item storage_file
 

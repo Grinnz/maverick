@@ -138,11 +138,11 @@ C<fred.db>.
   networks => { freenode => { class => 'Freenode', debug => 1 } },
 
 Hash reference that must contain at least one network to connect to. Keys are
-names which will be used to identify the network as well as define the network
-configuration filename. Values are hash references containing an optional
-object C<class> (defaults to L<Bot::ZIRC::Network>) and configuration for the
-network. The C<class> will be appended to C<Bot::ZIRC::Network::> if it does
-not contain C<::>.
+names which will be used to identify the network as well as lowercased to
+define the default network configuration filename. Values are hash references
+containing an optional object C<class> (defaults to L<Bot::ZIRC::Network>) and
+configuration for the network. The C<class> will be appended to
+C<Bot::ZIRC::Network::> if it does not contain C<::>.
 
 =item plugins
 
@@ -177,8 +177,8 @@ directory.
   config_file => 'myconfig.conf',
 
 Filename for main configuration file. Defaults to bot's name, lowercased and
-appended with C<.conf>. Network configuration filenames default to this
-filename with C<-E<lt>networkE<gt>> inserted before C<.conf>
+appended with C<.conf>. Network configuration filenames default to bot's name,
+lowercased and appended with lowercased C<-E<lt>networkE<gt>.conf>.
 
 =item storage_file
 
