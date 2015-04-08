@@ -630,10 +630,10 @@ C<Bot::ZIRC::Network::> if it does not contain C<::>.
 Plugins to register with the bot, specified as plugin class names, which are
 appended to C<Bot::ZIRC::Plugin::> if they do not contain C<::>. May be
 specified as an array reference to simply include the list of plugins, or as a
-hash reference to configure the registration of plugins. If the hash value is
-false, the plugin will be not be registered; otherwise, the value will be
-passed to the plugin's C<register> method. See L<Bot::ZIRC::Plugin> for
-documentation on ZIRC plugins.
+hash reference to configure the plugins. If the hash value is false, the plugin
+will be not be registered. If the value is a hash reference, it will be passed
+to the plugin's constructor. See L<Bot::ZIRC::Plugin> for documentation on ZIRC
+plugins.
 
 =item config
 
