@@ -116,6 +116,7 @@ sub register {
 		usage_text => '<nick>',
 		on_run => sub {
 			my ($network, $sender, $channel, $nick) = @_;
+			return 'usage' unless defined $nick and length $nick;
 			$network->config->set('irc', 'nick', $nick);
 			$network->write(nick => $nick);
 		},
