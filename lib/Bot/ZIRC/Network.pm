@@ -573,6 +573,7 @@ sub irc_nick {
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
 	$self->rename_user($from => $to);
+	$self->nick($to) if $self->nick eq lc $from;
 }
 
 sub irc_notice {

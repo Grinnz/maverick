@@ -111,6 +111,18 @@ sub register {
 	);
 	
 	$bot->add_command(
+		name => 'nick',
+		help_text => 'Change bot\'s nick',
+		usage_text => '<nick>',
+		on_run => sub {
+			my ($network, $sender, $channel, $nick) = @_;
+			$network->config->set('irc', 'nick', $nick);
+			$network->write(nick => $nick);
+		},
+		required_access => ACCESS_BOT_ADMIN,
+	);
+	
+	$bot->add_command(
 		name => 'quit',
 		help_text => 'Quit IRC and shutdown',
 		usage_text => '[<message>]',
