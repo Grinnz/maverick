@@ -45,7 +45,7 @@ sub register {
 			return 'usage' unless defined $word and length $word;
 			$lang //= $self->default_lang;
 			my $dict = $self->dicts->{$lang} //= $self->_build_dict($lang);
-			return $network->reply($sender, $channel, "Unknown language $lang") unless defined $dict;
+			return $network->reply($sender, $channel, "Dictionary for $lang not found") unless defined $dict;
 			return $network->reply($sender, $channel, "$word is a word.") if $dict->check($word);
 			my @suggestions = $dict->suggest($word);
 			my $msg = "$word is not a word. Did you mean: ".join ' ', @suggestions;
