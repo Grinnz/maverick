@@ -6,7 +6,6 @@ use File::Spec;
 use IRC::Utils;
 use List::Util 'any';
 use Mojo::IOLoop;
-use Mojo::JSON qw/encode_json decode_json/;
 use Mojo::Log;
 use Mojo::UserAgent;
 use Scalar::Util 'blessed';
@@ -265,8 +264,8 @@ sub register_plugin {
 sub has_plugin_method {
 	my ($self, $method) = @_;
 	croak "Unspecified plugin method" unless defined $method;
-	return exists $self->plugin_methods->{$method}
-		or !!$self->can($method);
+	return (exists $self->plugin_methods->{$method}
+		or !!$self->can($method));
 }
 
 sub check_required_methods {
