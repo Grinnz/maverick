@@ -1,4 +1,5 @@
-# To use: cpanm --installdeps --with-recommends ./plugindeps/Google
+# To use: cpanm --installdeps --with-recommends ./plugindeps/Twitter
+requires 'Carp';
 requires 'Date::Parse';
 requires 'Mojolicious', '6.0';
 requires 'Moo', '2.000';

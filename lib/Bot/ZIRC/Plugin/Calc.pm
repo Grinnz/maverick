@@ -1,5 +1,6 @@
 package Bot::ZIRC::Plugin::Calc;
 
+use Carp 'croak';
 use Math::Calc::Parser 'calc';
 
 use Moo;
@@ -7,6 +8,7 @@ extends 'Bot::ZIRC::Plugin';
 
 sub calc_expression {
 	my ($self, $expr) = @_;
+	croak 'Undefined expression to evaluate' unless defined $expr;
 	my $result = Math::Calc::Parser->try_evaluate($expr);
 	return Math::Calc::Parser->error unless defined $result;
 	return (undef, $result);

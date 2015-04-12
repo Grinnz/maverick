@@ -1,5 +1,6 @@
 package Bot::ZIRC::Plugin::LastFM;
 
+use Carp 'croak';
 use Mojo::URL;
 use Time::Duration 'ago';
 
@@ -55,6 +56,7 @@ sub register {
 
 sub lastfm_last_track {
 	my ($self, $username, $cb) = @_;
+	croak 'Undefined Last.fm username' unless defined $username;
 	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
 	
 	my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
