@@ -1,5 +1,7 @@
 package Bot::ZIRC::Plugin::Translate;
 
+use Carp 'croak';
+use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -70,7 +72,7 @@ has '_translate_languages' => (
 	init_arg => undef,
 );
 
-has '_language_names' => (
+has '_languages_by_name' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -98,15 +100,21 @@ sub _build__translate_languages {
 		my $lang = $languages[$i] // next;
 		my $name = $names[$i] // next;
 		$languages{$lang} = $name;
-		$self->_language_names->{lc $name} = $lang;
+		$self->_languages_by_name->{lc $name} = $lang;
 		my @words = split ' ', $name;
 		if (@words > 1) {
-			$self->_language_names->{lc $_} //= $lang for @words;
+			$self->_languages_by_name->{lc $_} //= $lang for @words;
 		}
-		$self->_language_names->{lc $lang} //= $lang;
+		$self->_languages_by_name->{lc $lang} //= $lang;
 	}
 	
 	return \%languages;
+}
+
+sub _language_name {
+	my ($self, $code) = @_;
+	return undef unless defined $code and exists $self->_translate_languages->{$code};
+	return $self->_translate_languages->{$code};
 }
 
 sub _xml_string_array {
@@ -128,6 +136,10 @@ sub register {
 	$self->client_secret($bot->config->get('apis','microsoft_client_secret'))
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
+	
+	$bot->add_plugin_method($self, 'detect_language');
+	$bot->add_plugin_method($self, 'translate_language_code');
+	$bot->add_plugin_method($self, 'translate_text');
 	
 	$bot->add_command(
 		name => 'translate',
@@ -154,52 +166,184 @@ sub register {
 			$text =~ s/\s*"\s*$//;
 			return 'usage' unless length $text;
 			
-			$to = 'en' unless defined $to and length $to;
-			unless (defined $from and length $from) { # Detect language
-				my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
-				my $access_token = $self->_retrieve_access_token;
-				my %headers = (Authorization => "Bearer $access_token");
-				return $self->ua->get($url, \%headers, sub {
-					my ($ua, $tx) = @_;
-					return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
-					my $from = $tx->res->dom->xml(1)->at('string')->text;
-					$self->do_translate($network, $sender, $channel, $text, $from, $to);
-				});
-			}
-			
-			$self->do_translate($network, $sender, $channel, $text, $from, $to);
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				$to = 'en' unless defined $to and length $to;
+				if (defined $from and length $from) {
+					$delay->pass(undef, $from);
+				} else { # Detect language
+					$self->detect_language($text, $delay->begin(0));
+				}
+			}, sub {
+				my ($delay, $err, $from) = @_;
+				return $network->reply($sender, $channel, $err) if $err;
+				my $from_code = $self->translate_language_code($from);
+				return $network->reply($sender, $channel, "Unknown from language $from")
+					unless defined $from_code;
+				my $to_code = $self->translate_language_code($to);
+				return $network->reply($sender, $channel, "Unknown to language $to")
+					unless defined $to_code;
+				$delay->data(from => $self->_language_name($from_code),
+					to => $self->_language_name($to_code));
+				$self->translate_text($text, $from_code, $to_code, $delay->begin(0));
+			}, sub {
+				my ($delay, $err, $translated) = @_;
+				return $network->reply($sender, $channel, $err) if $err;
+				my ($from, $to) = @{$delay->data}{'from','to'};
+				$network->reply($sender, $channel, "Translated $from => $to: $translated");
+			});
 		},
 	);
 }
 
-sub do_translate {
-	my ($self, $network, $sender, $channel, $text, $from, $to) = @_;
+sub detect_language {
+	my ($self, $text, $cb) = @_;
+	croak 'Undefined text to detect' unless defined $text;
 	
-	unless (exists $self->_translate_languages->{$from}) {
-		my $lang = $self->_language_names->{lc $from};
-		return $network->reply($sender, $channel, "Unknown language $from")
-			unless defined $lang and exists $self->_translate_languages->{$lang};
-		$from = $lang;
+	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
+	my $access_token = $self->_retrieve_access_token;
+	my %headers = (Authorization => "Bearer $access_token");
+	if ($cb) {
+		$self->ua->get($url, \%headers, sub {
+			my ($ua, $tx) = @_;
+			return $cb->($self->ua_error($tx->error)) if $tx->error;
+			return $cb->(undef, $tx->res->dom->xml(1)->at('string')->text);
+		});
+	} else {
+		my $tx = $self->ua->get($url, \%headers);
+		return $self->ua_error($tx->error) if $tx->error;
+		return (undef, $tx->res->dom->xml(1)->at('string')->text);
 	}
-	unless (exists $self->_translate_languages->{$to}) {
-		my $lang = $self->_language_names->{lc $to};
-		return $network->reply($sender, $channel, "Unknown language $to")
-			unless defined $lang and exists $self->_translate_languages->{$lang};
-		$to = $lang;
-	}
+}
+
+sub translate_language_code {
+	my ($self, $lang) = @_;
+	croak 'Undefined language' unless defined $lang;
+	return $lang if exists $self->_translate_languages->{$lang};
+	$lang = $self->_languages_by_name->{lc $lang};
+	return $lang if defined $lang and exists $self->_translate_languages->{$lang};
+	return undef;
+}
+
+sub translate_text {
+	my ($self, $text, $from, $to, $cb) = @_;
+	croak 'Undefined text to translate' unless defined $text;
+	croak 'Undefined from language' unless defined $from;
+	croak 'Undefined to language' unless defined $to;
+	croak "Unknown from language $from" unless exists $self->_translate_languages->{$from};
+	croak "Unknown to language $to" unless exists $self->_translate_languages->{$to};
 	
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
 		->query(text => $text, from => $from, to => $to, contentType => 'text/plain');
 	my $access_token = $self->_retrieve_access_token;
 	my %headers = (Authorization => "Bearer $access_token");
-	$self->ua->get($url, \%headers, sub {
-		my ($ua, $tx) = @_;
-		return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
-		my $translated = $tx->res->dom->xml(1)->at('string')->text;
-		my $from_name = $self->_translate_languages->{$from};
-		my $to_name = $self->_translate_languages->{$to};
-		$network->reply($sender, $channel, "Translated $from_name => $to_name: $translated");
-	});
+	if ($cb) {
+		$self->ua->get($url, \%headers, sub {
+			my ($ua, $tx) = @_;
+			return $cb->($self->ua_error($tx->error)) if $tx->error;
+			return $cb->(undef, $tx->res->dom->xml(1)->at('string')->text);
+		});
+	} else {
+		my $tx = $self->ua->get($url, \%headers);
+		return $self->ua_error($tx->error) if $tx->error;
+		return (undef, $tx->res->dom->xml(1)->at('string')->text);
+	}
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Translate - Language translation plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Translate => 1 },
+ );
+ 
+ # Standalone usage
+ my $translate = Bot::ZIRC::Plugin::Translate->new(client_id => $client_id, client_secret => $client_secret);
+ my ($err, $from) = $translate->detect_language($text);
+ my $from_code = $translate->translate_language_code($from_name);
+ my $to_code = $translate->translate_language_code($to_name);
+ my ($err, $translated) = $translate->translate_text($text, $from_code, $to_code);
+
+=head1 DESCRIPTION
+
+Adds plugin methods and commands for translating text to a L<Bot::ZIRC> IRC
+bot.
+
+This plugin requires a Microsoft Client ID and Client secret that is registered
+for the Bing Translate API. These must be configured as C<microsoft_client_id>
+and C<microsoft_client_secret> in the C<apis> section. See
+L<http://blogs.msdn.com/b/translation/p/gettingstarted1.aspx> for information
+on obtaining a Microsoft Client ID and Client secret.
+
+=head1 ATTRIBUTES
+
+=head2 client_id
+
+Client ID for Microsoft API, defaults to value of configuration option
+C<microsoft_client_id> in section C<apis>.
+
+=head2 client_secret
+
+Client secret for Microsoft API, defaults to value of configuration option
+C<microsoft_client_secret> in section C<apis>.
+
+=head1 METHODS
+
+=head2 detect_language
+
+ my ($err, $language_code) = $bot->detect_language($text);
+
+Attempt to detect the language of a text string. On error, the first return
+value contains the error message. On success, the second return value contains
+the language code.
+
+=head2 translate_language_code
+
+ my $language_code = $bot->translate_language_code($language_name);
+
+Returns the language code for a given language name or code, or undef if the
+language is unknown.
+
+=head2 translate_text
+
+ my ($err, $translated) = $bot->translate_text($text, $from_code, $to_code);
+
+Attempt to translate a text string from one language to another. On error, the
+first return value contains the error message. On success, the second value
+contains the translated text.
+
+=head1 COMMANDS
+
+=head2 translate
+
+ !translate tengo un gato en mis pantalones
+ !translate a from spanish to german
+ !translate "bagels from france" to japanese
+
+Attempt to translate text, with optional from and to languages. Use quotes
+to avoid ambiguity if the string contains the words C<from> or C<to>. From
+language defaults to auto-detect, and to language defaults to English.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

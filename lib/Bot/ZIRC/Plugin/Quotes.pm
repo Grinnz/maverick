@@ -84,7 +84,7 @@ sub register {
 			
 			if (defined $num) {
 				$num = @$quotes if $num > @$quotes;
-				return $self->display_quote($network, $sender, $channel, $quotes, undef, $num);
+				return $self->_display_quote($network, $sender, $channel, $quotes, undef, $num);
 			}
 			
 			# Quotes by search regex
@@ -100,7 +100,7 @@ sub register {
 			
 			my $results = $self->quote_cache->{$match_by}{lc $args};
 			if (defined $results) {
-				$self->display_quote($network, $sender, $channel, $quotes, $results, $num);
+				$self->_display_quote($network, $sender, $channel, $quotes, $results, $num);
 			} else {
 				$self->fork_call(sub {
 					my $re = qr/$args/i;
@@ -119,7 +119,7 @@ sub register {
 						return $network->reply($sender, $channel, "Invalid search regex: $err");
 					}
 					$results = $self->quote_cache->{$match_by}{lc $args} = $matches;
-					$self->display_quote($network, $sender, $channel, $quotes, $results, $num);
+					$self->_display_quote($network, $sender, $channel, $quotes, $results, $num);
 				});
 			}
 			
@@ -203,7 +203,7 @@ sub register {
 	);
 }
 
-sub display_quote {
+sub _display_quote {
 	my ($self, $network, $sender, $channel, $quotes, $results, $num) = @_;
 	my ($result_num, $result_count);
 	if ($results) {
@@ -220,3 +220,84 @@ sub display_quote {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Quotes - Quote storage and retrieval plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Quotes => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds commands for storing and retrieving quotes to a L<Bot::ZIRC> IRC bot.
+
+=head1 COMMANDS
+
+=head2 addquote
+
+ !addquote <Somebody> something funny!
+
+Adds a quote to the quote database.
+
+=head2 delquote
+
+ !delquote 900
+
+Deletes a quote from the quote database.
+
+=head2 quote
+
+ !quote
+ !quote 900
+ !quote <Somebody>
+ !quote <Somebody> 3
+
+Retrieves a quote from the quote database. With no arguments, retrieves a
+quote at random. If a quote number is specified, retrieves that quote.
+Otherwise, the arguments are used as a regex to search quotes, and a random
+quote from those results is returned. A specific quote from a regex search can
+be retrieved by appending a result number.
+
+=head2 loadquotes
+
+ !loadquotes quotes.txt
+
+Loads quotes from a given text file into the quote database, file must be in
+the bot's working directory. Each line is interpreted to be a quote.
+
+=head2 storequotes
+
+ !storequotes quotes.txt
+
+Stores all quotes from the quote database to a text file in the bot's working
+directory (File must not already exist). Each quote is stored as a separate
+line.
+
+=head2 clearquotes
+
+ !clearquotes
+
+Clears all quotes from the quote database.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

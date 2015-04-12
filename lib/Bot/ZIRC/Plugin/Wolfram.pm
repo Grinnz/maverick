@@ -1,6 +1,8 @@
 package Bot::ZIRC::Plugin::Wolfram;
 
+use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
+use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -11,10 +13,16 @@ use constant WOLFRAM_API_KEY_MISSING =>
 	"Wolfram plugin requires configuration option 'wolfram_api_key' in section 'apis'\n" .
 	"See http://products.wolframalpha.com/api/ for more information on obtaining a Wolfram API key.\n";
 
+has 'api_key' => (
+	is => 'rw',
+);
+
 sub register {
 	my ($self, $bot) = @_;
-	my $api_key = $bot->config->get('apis','wolfram_api_key');
-	die WOLFRAM_API_KEY_MISSING unless defined $api_key;
+	$self->api_key($bot->config->get('apis','wolfram_api_key')) unless defined $self->api_key;
+	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
+	
+	$bot->add_plugin_method($self, 'wolfram_query');
 	
 	$bot->add_command(
 		name => 'wolframalpha',
@@ -27,53 +35,65 @@ sub register {
 			my $api_key = $network->config->get('apis','wolfram_api_key');
 			die WOLFRAM_API_KEY_MISSING unless defined $api_key;
 			
-			my $ip;
 			my $host = $sender->host;
-			if (is_ipv4 $host or is_ipv6 $host) {
-				$ip = $host;
-				$self->do_wolfram_query($network, $sender, $channel, $query, $ip);
-			} elsif ($self->bot->has_plugin_method('dns_resolve')) {
-				$self->bot->dns_resolve($host, sub {
-					my ($err, @results) = @_;
-					my $addrs = $self->bot->dns_ip_results(\@results);
-					my $ip = @$addrs ? $addrs->[0] : undef;
-					$self->do_wolfram_query($network, $sender, $channel, $query, $ip);
-				});
-			} else {
-				$self->do_wolfram_query($network, $sender, $channel, $query);
-			}
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				if (is_ipv4 $host or is_ipv6 $host) {
+					$delay->pass($host);
+				} elsif ($self->bot->has_plugin_method('dns_resolve')) {
+					my $cb = $delay->begin(0);
+					$self->bot->dns_resolve($host, sub {
+						my ($err, @results) = @_;
+						my $addrs = $self->bot->dns_ip_results(\@results);
+						$cb->($addrs->[0]);
+					});
+				} else {
+					$delay->pass(undef);
+				}
+			}, sub {
+				my ($delay, $ip) = @_;
+				$self->wolfram_query($query, $ip, $delay->begin(0));
+			}, sub {
+				my ($delay, $err, $result) = @_;
+				return $network->reply($sender, $channel, $err) if $err;
+				return $network->reply($sender, $channel, 'No results from Wolfram|Alpha') unless defined $result;
+				
+				my $success = $result->attr('success');
+				if (defined $success and $success eq 'false') {
+					$self->_reply_wolfram_error($network, $sender, $channel, $result);
+				} else {
+					$self->_reply_wolfram_success($network, $sender, $channel, $result);
+				}
+			});
 		},
 	);
 }
 
-sub do_wolfram_query {
-	my ($self, $network, $sender, $channel, $query, $ip) = @_;
-	my $api_key = $network->config->get('apis','wolfram_api_key');
-	die WOLFRAM_API_KEY_MISSING unless defined $api_key;
+sub wolfram_query {
+	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
+	my ($self, $query, $ip) = @_;
+	croak 'Undefined Wolfram query' unless defined $query;
+	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
 	
 	my $url = Mojo::URL->new(WOLFRAM_API_ENDPOINT)
-		->query(input => $query, appid => $api_key, format => 'plaintext');
+		->query(input => $query, appid => $self->api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 	
-	$self->ua->get($url, sub {
-		my ($ua, $tx) = @_;
-		return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
-		
-		my $result = $tx->res->dom->xml(1)->children('queryresult')->first;
-		return $network->reply($sender, $channel, "Error querying Wolfram|Alpha")
-			unless defined $result;
-		
-		my $success = $result->attr('success');
-		if (defined $success and $success eq 'false') {
-			reply_wolfram_error($network, $sender, $channel, $result);
-		} else {
-			reply_wolfram_success($network, $sender, $channel, $result);
-		}
-	});
+	if ($cb) {
+		$self->ua->get($url, sub {
+			my ($ua, $tx) = @_;
+			return $cb->($self->ua_error($tx->error)) if $tx->error;
+			return $cb->(undef, $tx->res->dom->xml(1)->children('queryresult')->first);
+		});
+	} else {
+		my $tx = $self->ua->get($url);
+		return $self->ua_error($tx->error) if $tx->error;
+		return (undef, $tx->res->dom->xml(1)->children('queryresult')->first);
+	}
 }
 
-sub reply_wolfram_error {
-	my ($network, $sender, $channel, $result) = @_;
+sub _reply_wolfram_error {
+	my ($self, $network, $sender, $channel, $result) = @_;
 	
 	my $error = $result->attr('error');
 	if (defined $error and $error eq 'true') {
@@ -123,8 +143,8 @@ sub reply_wolfram_error {
 	}
 }
 
-sub reply_wolfram_success {
-	my ($network, $sender, $channel, $result) = @_;
+sub _reply_wolfram_success {
+	my ($self, $network, $sender, $channel, $result) = @_;
 	
 	my @pod_contents;
 	my $pods = $result->find('pod');
@@ -137,7 +157,7 @@ sub reply_wolfram_success {
 			my $plaintext = $subpod->find('plaintext')->first // next;
 			my $content = $plaintext->text;
 			next unless defined $content and length $content;
-			$content = reformat_wolfram_content($content);
+			$content = _reformat_wolfram_content($content);
 			$content = "$subtitle: $content" if defined $subtitle and length $subtitle;
 			push @contents, $content;
 		}
@@ -153,7 +173,7 @@ sub reply_wolfram_success {
 	}
 }
 
-sub reformat_wolfram_content {
+sub _reformat_wolfram_content {
 	my $content = shift // return undef;
 	$content =~ s/ \| / - /g;
 	$content =~ s/^\r?\n//;
@@ -165,3 +185,76 @@ sub reformat_wolfram_content {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Wolfram - Wolfram|Alpha plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Wolfram => 1 },
+ );
+ 
+ # Standalone usage
+ my $wolfram = Bot::ZIRC::Plugin::Wolfram->new(api_key => $api_key);
+ my ($err, $results) = $wolfram->wolfram_query($query);
+
+=head1 DESCRIPTION
+
+Adds plugin methods and commands for querying Wolfram|Alpha to a L<Bot::ZIRC>
+IRC bot.
+
+This plugin requires a Wolfram|Alpha API key, as the configuration option
+C<wolfram_api_key> in the C<apis> section. See
+L<http://products.wolframalpha.com/api/> for information on obtaining an API
+key.
+
+=head1 ATTRIBUTES
+
+=head2 api_key
+
+API key for Wolfram|Alpha API, defaults to value of configuration option
+C<wolfram_api_key> in section C<apis>.
+
+=head1 METHODS
+
+=head2 wolfram_query
+
+ my ($err, $results) = $bot->wolfram_query($query);
+ $bot->wolfram_query($query, sub {
+   my ($err, $results) = @_;
+ });
+
+Query Wolfram|Alpha. On error, the first return value contains the error
+message. On success, the second return value contains the results (if any) as a
+L<Mojo::DOM> object. Pass a callback to perform the query non-blocking.
+
+=head1 COMMANDS
+
+=head2 wolframalpha
+
+ !wolframalpha distance from earth to sun
+ !wolframalpha convert 1000 BTC to USD
+ !wolframalpha 1001st digit of pi
+
+Query Wolfram|Alpha and display results or errors.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

@@ -23,3 +23,45 @@ sub register {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Pick - Pick command plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Pick => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds command for randomly selecting an item from a list to a L<Bot::ZIRC> IRC
+bot.
+
+=head1 COMMANDS
+
+=head2 pick
+
+ !pick something, something else, something else entirely
+
+Chooses an item from the given comma-separated list at random.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

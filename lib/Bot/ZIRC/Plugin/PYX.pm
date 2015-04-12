@@ -153,3 +153,56 @@ sub format_pyx_card {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::PYX - Pretend You're Xyzzy plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { PYX => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds C<pyx> command for forming random Cards Against Humanity combinations to a
+L<Bot::ZIRC> IRC bot.
+
+This plugin requires access to a REST interface to pick random cards, as
+implemented by L<cah-cards|https://github.com/Grinnz/cah-cards>. The URL
+endpoint must be set with the configuration option C<pyx_endpoint> in section
+C<apis>.
+
+=head1 COMMANDS
+
+=head2 pyx
+
+ !pyx
+ !pyx __ and __: A perfect match.
+ !pyx w A giant snail. w Doritos.
+
+Generate random Cards Against Humanity combinations, using the supplied black
+card or white card(s) if any. Blanks in black cards are specified as two or
+more consecutive underscores, and white cards are prefixed by the lone letter
+C<w>. White cards that consist only of underscores or question marks will
+additionally be replaced by random cards.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

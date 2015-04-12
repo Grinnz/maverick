@@ -121,3 +121,85 @@ sub stop {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::DNS - DNS resolver plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { DNS => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds plugin methods for resolving DNS and a C<dns> command to a L<Bot::ZIRC>
+IRC bot.
+
+Please note, for non-blocking DNS resolution L<Net::DNS::Native> must be
+installed and you must have a perl that is either built with interpreter
+threads ("ithreads") or linked to POSIX threads ("pthreads"). See
+L<Net::DNS::Native/"INSTALLATION WARNING"> for more details.
+
+=head1 ATTRIBUTES
+
+=head2 native
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { DNS => { native => 0 } },
+ );
+
+If true (default), attempt to use L<Net::DNS::Native> for non-blocking DNS
+resolution. If false or if loading L<Net::DNS::Native> fails, DNS resolution
+will fallback to a blocking method.
+
+=head1 METHODS
+
+head2 dns_resolve
+
+ my ($err, $results) = $bot->dns_resolve($hostname);
+ $bot->dns_resolve($hostname, sub {
+   my ($err, $results) = @_;
+ });
+
+Attempt to resolve a hostname, returning any error as the first return value
+and an arrayref of results as the second return value, in the format returned
+by C<getaddrinfo> in L<Socket>.
+
+head2 dns_ip_results
+
+ my $ips = $bot->dns_ip_results($results);
+
+Translate an arrayref of C<getaddrinfo> results such as returned by
+L</"dns_resolve"> into an arrayref of IPv4 or IPv6 address strings, removing
+duplicates and unknown results.
+
+=head1 COMMANDS
+
+=head2 dns
+
+ !dns google.com
+ !dns Fred
+
+Attempt to resolve the IP address(es) of a hostname. If given a known user
+nick, uses their hostname. Defaults to using sender's hostname.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Net::DNS::Native>, L<Socket>

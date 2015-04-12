@@ -211,3 +211,100 @@ sub register {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Core - Core commands plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Core => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds commands for core functionality to a L<Bot::ZIRC> IRC bot. This plugin is
+included by default unless disabled in the constructor.
+
+=head1 COMMANDS
+
+=head2 help
+
+ !help set
+
+Display the help and usage text for a command.
+
+=head2 join
+
+ !join #bots
+
+Attempt to join a channel.
+
+=head2 leave
+
+ !leave
+ !leave #bots
+
+Leave a channel (default current channel).
+
+=head2 more
+
+ !more
+ !more google
+
+Display more results for a specified command (or the last command with C<more>
+functionality).
+
+=head2 nick
+
+ !nick Somebot
+
+Change the bot's configured nick for this network, and attempt to set the new
+nick.
+
+=head2 quit
+
+ !quit Goodbye
+
+Quit all networks with an optional quit message.
+
+=head2 reload
+
+ !reload
+
+Reload configuration from files and reopen logs.
+
+=head2 say
+
+ !say To be, or not to be?
+
+Echo a message. If the first argument is a channel name it will be said there.
+
+=head2 set
+
+ !set youtube_trigger 0
+ !set network youtube_trigger 0
+ !set #bots youtube_trigger 0
+
+Set a network configuration option for either the whole network or a channel,
+defaulting to the current channel.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

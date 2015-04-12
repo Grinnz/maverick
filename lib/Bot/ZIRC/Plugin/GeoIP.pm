@@ -1,9 +1,9 @@
 package Bot::ZIRC::Plugin::GeoIP;
 
-use Carp;
+use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
-use Scalar::Util qw/blessed weaken/;
+use Scalar::Util 'blessed';
 
 use Moo;
 extends 'Bot::ZIRC::Plugin';
@@ -53,7 +53,7 @@ sub register {
 			$self->bot->geoip_locate_host($host, sub {
 				my ($err, $record) = @_;
 				return $network->reply($sender, $channel, "Error locating $say_target: $err") if $err;
-				return $network->reply($sender, $channel, "GeoIP location for $say_target: ".location_str($record));
+				return $network->reply($sender, $channel, "GeoIP location for $say_target: "._location_str($record));
 			});
 		},
 	);
@@ -61,6 +61,7 @@ sub register {
 
 sub geoip_locate {
 	my ($self, $ip) = @_;
+	croak 'Undefined IP address' unless defined $ip;
 	die "Invalid IP address $ip\n" unless is_ipv4 $ip or is_ipv6 $ip;
 	local $@;
 	my $record = eval { $self->geoip->city(ip => $ip) };
@@ -75,16 +76,19 @@ sub geoip_locate {
 
 sub geoip_locate_host {
 	my ($self, $host, $cb) = @_;
-	return $cb->($self->bot->geoip_locate($host)) if is_ipv4 $host or is_ipv6 $host;
-	return $cb->('DNS plugin is required to resolve hostnames')
-		unless $self->bot->has_plugin_method('dns_resolve');
-	weaken $self;
-	$self->bot->dns_resolve($host, sub {
-		$cb->($self->on_dns_host(@_));
-	});
+	croak 'Undefined hostname' unless defined $host;
+	return $cb ? $cb->($self->bot->geoip_locate($host)) : $self->bot->geoip_locate($host)
+		if is_ipv4 $host or is_ipv6 $host or !$self->bot->has_plugin_method('dns_resolve');
+	if ($cb) {
+		$self->bot->dns_resolve($host, sub {
+			$cb->($self->_on_dns_host(@_));
+		});
+	} else {
+		return $self->_on_dns_host($self->bot->dns_resolve($host));
+	}
 }
 
-sub on_dns_host {
+sub _on_dns_host {
 	my ($self, $err, @results) = @_;
 	return $err if $err;
 	my $addrs = $self->bot->dns_ip_results(\@results);
@@ -101,7 +105,7 @@ sub on_dns_host {
 	return defined $best_record ? (undef, $best_record) : $last_err;
 }
 
-sub location_str {
+sub _location_str {
 	my $record = shift // croak 'No location record passed';
 	my @subdivisions = reverse map { $_->name } $record->subdivisions;
 	my @location_parts = grep { defined } $record->city->name, @subdivisions, $record->country->name;
@@ -109,3 +113,78 @@ sub location_str {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::GeoIP - Geolocation plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { GeoIP => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Adds plugin methods for geolocating IP addresses and a C<locate> command to a
+L<Bot::ZIRC> IRC bot.
+
+This plugin requires that a MaxMind GeoLite2 City database file (binary format)
+is present, with the path in the configuration option C<geoip_file> in the
+C<apis> section. See L<http://dev.maxmind.com/geoip/geoip2/geolite2/> to obtain
+this database file.
+
+For faster GeoIP lookups, you may install L<MaxMind::DB::Reader::XS> which
+requires the libmaxminddb library; it will be automatically used if present.
+
+=head1 METHODS
+
+=head2 geoip_locate
+
+ my ($err, $record) = $bot->geoip_locate($ip);
+
+Attempt to locate an IP address in the GeoIP database. On error, returns an
+error message as the first return value. On success, the GeoIP record as a
+L<GeoIP2::Model::City> object is returned as the second return value.
+
+=head2 geoip_locate_host
+
+ my ($err, $record) = $bot->geoip_locate_host($hostname);
+ $bot->geoip_locate_host($hostname, sub {
+   my ($err, $record) = @_;
+ });
+
+Attempt to resolve a hostname and locate the resulting IP address in the GeoIP
+database. If a callback is passed, non-blocking DNS resolution will be used if
+available. Requires the L<Bot::ZIRC::Plugin::DNS> plugin.
+
+=head1 COMMANDS
+
+=head2 locate
+
+ !locate 8.8.8.8
+ !locate google.com
+ !locate Fred
+
+Attempt to geolocate an IP address. If given a hostname or known user nick,
+and the C<DNS> plugin is loaded, that hostname will first be resolved to an
+IP address. Defaults to locating the sender.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Bot::ZIRC::Plugin::DNS>, L<GeoIP2::Database::Reader>

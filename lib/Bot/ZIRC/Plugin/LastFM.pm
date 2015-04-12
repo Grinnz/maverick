@@ -11,10 +11,16 @@ use constant LASTFM_API_KEY_MISSING =>
 	"Last.fm plugin requires configuration option 'lastfm_api_key' in section 'apis'\n" .
 	"See http://www.last.fm/api/authentication for more information on obtaining a Last.fm API key.\n";
 
+has 'api_key' => (
+	is => 'rw',
+);
+
 sub register {
 	my ($self, $bot) = @_;
-	my $api_key = $bot->config->get('apis','lastfm_api_key');
-	die LASTFM_API_KEY_MISSING unless defined $api_key;
+	$self->api_key($bot->config->get('apis','lastfm_api_key')) unless defined $self->api_key;
+	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
+	
+	$bot->add_plugin_method($self, 'lastfm_last_track');
 	
 	$bot->add_command(
 		name => 'np',
@@ -35,33 +41,47 @@ sub register {
 				$username = $network->storage->data->{lastfm}{usernames}{lc $sender} // $sender->nick;
 			}
 			
-			my $api_key = $network->config->get('apis','lastfm_api_key');
-			die LASTFM_API_KEY_MISSING unless defined $api_key;
-			my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
-				user => $username, api_key => $api_key, format => 'json', limit => 1);
-			
 			$network->logger->debug("Retrieving Last.fm recent tracks for $username");
-			$self->ua->get($request, sub {
-				my ($ua, $tx) = @_;
-				return $network->reply($sender, $channel, $self->ua_error($tx->error)) if $tx->error;
-				
-				my $response = $tx->res->json;
-				if ($response->{error}) {
-					return $network->reply($sender, $channel,
-						"Error retrieving Last.fm user data for $username: $response->{message}");
-				}
-				
-				my $track = $response->{recenttracks}{track};
-				$track = shift @$track if ref $track eq 'ARRAY';
-				my $username = $response->{recenttracks}{'@attr'}{user} // $username;
-				display_result($network, $sender, $channel, $track, $username);
+			$self->lastfm_last_track($username, sub {
+				my ($err, $track) = @_;
+				return $network->reply($sender, $channel, $err) if $err;
+				return $network->reply($sender, $channel, "No recent tracks found for $username")
+					unless defined $track;
+				$self->_lastfm_result($network, $sender, $channel, $track, $username);
 			});
 		},
 	);
 }
 
-sub display_result {
-	my ($network, $sender, $channel, $track, $username) = @_;
+sub lastfm_last_track {
+	my ($self, $username, $cb) = @_;
+	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
+	
+	my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
+		user => $username, api_key => $self->api_key, format => 'json', limit => 1);
+	if ($cb) {
+		$self->ua->get($request, sub {
+			my ($ua, $tx) = @_;
+			return $cb->($self->ua_error($tx->error)) if $tx->error;
+			my $res = $tx->res->json;
+			return $cb->("Last.fm error: $res->{message}") if $res->{error};
+			my $track = $res->{recenttracks}{track};
+			$track = shift @$track if ref $track eq 'ARRAY';
+			return $cb->(undef, $track);
+		});
+	} else {
+		my $tx = $self->ua->get($request);
+		return $self->ua_error($tx->error) if $tx->error;
+		my $res = $tx->res->json;
+		return "Last.fm error: $res->{message}" if $res->{error};
+		my $track = $res->{recenttracks}{track};
+		$track = shift @$track if ref $track eq 'ARRAY';
+		return (undef, $track);
+	}
+}
+
+sub _lastfm_result {
+	my ($self, $network, $sender, $channel, $track, $username) = @_;
 	my $track_name = $track->{name} // '';
 	my $artist = $track->{artist}{'#text'};
 	my $album = $track->{album}{'#text'};
@@ -78,3 +98,79 @@ sub display_result {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::LastFM - Last.FM plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { LastFM => 1 },
+ );
+ 
+ # Standalone usage
+ my $lastfm = Bot::ZIRC::Plugin::LastFM->new(api_key => $api_key);
+ my ($err, $track) = $lastfm->lastfm_last_track($username);
+
+=head1 DESCRIPTION
+
+Adds plugin method and command for retrieving Last.FM last-track-played
+information to a L<Bot::ZIRC> IRC bot.
+
+This plugin requires a Last.FM API key, as configuration option
+C<lastfm_api_key> in section C<apis>. See
+L<http://www.last.fm/api/authentication> for information on obtaining an API
+key.
+
+=head1 ATTRIBUTES
+
+=head2 api_key
+
+API key for Last.FM API, defaults to value of configuration option
+C<lastfm_api_key> in section C<apis>.
+
+=head1 METHODS
+
+=head2 lastfm_last_track
+
+ my ($err, $track) = $bot->lastfm_last_track($username);
+ $bot->lastfm_last_track($username, sub {
+   my ($err, $track) = @_;
+ });
+
+Retrieve last-played track information from Last.FM for a username. On error,
+the first return value contains the error message. Otherwise, the second return
+value contains the most recently played track, or undef if none was found. Pass
+a callback to perform the query non-blocking.
+
+=head1 COMMANDS
+
+=head2 np
+
+ !np
+ !np CoolGuy
+ !np set CoolGuy
+
+Display last-played or currently playing track for user. Defaults to sender's
+nick. Use the C<set> syntax to set a Last.FM account to be used as your
+default.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>
