@@ -47,7 +47,7 @@ sub register {
 		
 		my $speak = 1;
 		$speak = $network->config->get_channel($channel, 'hailo_speak') if defined $channel;
-		my $do_reply = $speak > rand ? 1 : 0;
+		my $do_reply = $speak > rand() ? 1 : 0;
 		my $when_addressed = $network->config->get_channel($channel, 'hailo_reply_when_addressed');
 		$do_reply = 1 if $when_addressed and $addressed;
 		return unless $do_reply;
