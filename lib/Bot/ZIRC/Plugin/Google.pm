@@ -112,7 +112,7 @@ sub register {
 		on_run => sub {
 			my ($network, $sender, $channel, $args) = @_;
 			my @challengers;
-			while ($args =~ /\s*(.+?)(?:\s+(?:vs\.?|versus)\s+|\s*$)/g) {
+			while ($args =~ /\s*(".+?"|.+?)(?:\s+(?:vs\.?|versus)\s+|\s*$)/g) {
 				push @challengers, $1;
 			}
 			return 'usage' unless @challengers > 1;
