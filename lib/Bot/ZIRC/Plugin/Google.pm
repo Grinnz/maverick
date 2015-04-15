@@ -1,6 +1,8 @@
 package Bot::ZIRC::Plugin::Google;
 
 use Carp 'croak';
+use Lingua::EN::Number::Format::MixWithWords 'format_number_mix';
+use List::UtilsBy 'max_by';
 use Mojo::URL;
 
 use Moo;
@@ -101,6 +103,45 @@ sub register {
 			$self->_google_result_image($network, $sender, $channel, $next_result, $show_more);
 		},
 	);
+	
+	$bot->add_command(
+		name => 'fight',
+		help_text => 'Compare two or more searches in a Google fight',
+		usage_text => '<query1> (vs.|versus) <query2> [(vs.|versus) <query3> ...]',
+		tokenize => 0,
+		on_run => sub {
+			my ($network, $sender, $channel, $args) = @_;
+			my @challengers;
+			while ($args =~ /\s*(.+?)(?:\s+(?:vs\.?|versus)\s+|\s*$)/g) {
+				push @challengers, $1;
+			}
+			return 'usage' unless @challengers > 1;
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				foreach my $challenger (@challengers) {
+					$self->google_search_web_count($challenger, $delay->begin(0));
+				}
+			}, sub {
+				my $delay = shift;
+				my %counts;
+				foreach my $challenger (@challengers) {
+					my ($err, $count) = (shift, shift);
+					return $network->reply($sender, $channel, $err) if $err;
+					$counts{$challenger} = $count // 0;
+				}
+				my @winners = max_by { $counts{$_} } @challengers;
+				$_ = format_number_mix(
+					num => $_,
+					num_decimal => 1,
+					min_format => 1000,
+					scale => 'short',
+				) foreach values %counts;
+				my $reply_str = join '; ', map { "$_: $counts{$_}" } @challengers;
+				my $winner_str = @winners > 1 ? 'Tie between '.join(' / ', @winners) : "Winner: $winners[0]";
+				$network->reply($sender, $channel, "Google Fight! $reply_str. $winner_str!");
+			});
+		},
+	);
 }
 
 sub google_search_web {
@@ -120,6 +161,26 @@ sub google_search_web {
 		my $tx = $self->ua->get($request);
 		return $self->ua_error($tx->error) if $tx->error;
 		return (undef, $tx->res->json->{items}//[]);
+	}
+}
+
+sub google_search_web_count {
+	my ($self, $query, $cb) = @_;
+	croak 'Undefined search query' unless defined $query;
+	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
+	
+	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
+		cx => $self->cse_id, q => $query, safe => 'off', num => 1);
+	if ($cb) {
+		$self->ua->get($request, sub {
+			my ($ua, $tx) = @_;
+			return $cb->($self->ua_error($tx->error)) if $tx->error;
+			return $cb->(undef, $tx->res->json->{searchInformation}{totalResults}//0);
+		});
+	} else {
+		my $tx = $self->ua->get($request);
+		return $self->ua_error($tx->error) if $tx->error;
+		return (undef, $tx->res->json->{searchInformation}{totalResults}//0);
 	}
 }
 
