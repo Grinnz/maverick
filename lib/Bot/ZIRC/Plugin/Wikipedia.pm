@@ -25,32 +25,32 @@ sub register {
 		name => 'wikipedia',
 		help_text => 'Search Wikipedia articles',
 		usage_text => '<query>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
 			
 			$self->wikipedia_search($query, sub {
 				my ($err, $titles) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, "No results for Wikipedia search") unless @$titles;
+				return $m->reply($err) if $err;
+				return $m->reply("No results for Wikipedia search") unless @$titles;
 				
 				my $first_title = shift @$titles;
-				my $channel_name = lc ($channel // $sender);
-				$self->_results_cache->{$network}{$channel_name} = $titles;
+				my $channel_name = lc ($m->channel // $m->sender);
+				$self->_results_cache->{$m->network}{$channel_name} = $titles;
 				my $show_more = @$titles;
-				$self->_display_wiki_page($network, $sender, $channel, $first_title, $show_more);
+				$self->_display_wiki_page($m, $first_title, $show_more);
 			});
 		},
 		on_more => sub {
-			my ($network, $sender, $channel) = @_;
-			my $channel_name = lc ($channel // $sender);
-			my $titles = $self->_results_cache->{$network}{$channel_name} // [];
-			return $network->reply($sender, $channel, "No more results for Wikipedia search") unless @$titles;
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $titles = $self->_results_cache->{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Wikipedia search") unless @$titles;
 			
 			my $next_title = shift @$titles;
 			my $show_more = @$titles;
-			$self->_display_wiki_page($network, $sender, $channel, $next_title, $show_more);
+			$self->_display_wiki_page($m, $next_title, $show_more);
 		},
 	);
 }
@@ -99,13 +99,13 @@ sub wikipedia_page {
 }
 
 sub _display_wiki_page {
-	my ($self, $network, $sender, $channel, $title, $show_more) = @_;
+	my ($self, $m, $title, $show_more) = @_;
 	
 	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	$self->wikipedia_page($title, sub {
 		my ($err, $page) = @_;
-		return $network->reply($sender, $channel, $err) if $err;
-		return $network->reply($sender, $channel, "Wikipedia page $title not found$if_show_more") unless defined $page;
+		return $m->reply($err) if $err;
+		return $m->reply("Wikipedia page $title not found$if_show_more") unless defined $page;
 		
 		my $title = $page->{title} // '';
 		my $url = $page->{fullurl} // '';
@@ -114,7 +114,7 @@ sub _display_wiki_page {
 		
 		my $b_code = chr 2;
 		my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract$if_show_more";
-		return $network->reply($sender, $channel, $response);
+		return $m->reply($response);
 	});
 }
 

@@ -36,53 +36,53 @@ sub register {
 		name => 'youtube',
 		help_text => 'Search YouTube videos',
 		usage_text => '<search query>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
 			
 			$self->youtube_search($query, sub {
 				my ($err, $results) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, "No results for YouTube search") unless @$results;
+				return $m->reply($err) if $err;
+				return $m->reply("No results for YouTube search") unless @$results;
 				
 				my $first_result = shift @$results;
-				my $channel_name = lc ($channel // $sender);
-				$self->_results_cache->{$network}{$channel_name} = $results;
+				my $channel_name = lc ($m->channel // $m->sender);
+				$self->_results_cache->{$m->network}{$channel_name} = $results;
 				my $show_more = @$results;
-				$self->_display_result($network, $sender, $channel, $first_result, $show_more);
+				$self->_display_result($m, $first_result, $show_more);
 			});
 		},
 		on_more => sub {
-			my ($network, $sender, $channel) = @_;
-			my $channel_name = lc ($channel // $sender);
-			my $results = $self->_results_cache->{$network}{$channel_name} // [];
-			return $network->reply($sender, $channel, "No more results for YouTube search") unless @$results;
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $results = $self->_results_cache->{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for YouTube search") unless @$results;
 			
 			my $next_result = shift @$results;
 			my $show_more = @$results;
-			$self->_display_result($network, $sender, $channel, $next_result, $show_more);
+			$self->_display_result($m, $next_result, $show_more);
 		},
 	);
 	
 	$bot->config->set_channel_default('youtube_trigger', 1);
 	
 	$bot->add_hook_privmsg(sub {
-		my ($network, $sender, $channel, $message) = @_;
-		return unless defined $channel;
-		return unless $network->config->get_channel($channel, 'youtube_trigger');
+		my $m = shift;
+		my $message = $m->text;
+		return unless defined $m->channel;
+		return unless $m->config->get_channel($m->channel, 'youtube_trigger');
 		
 		return unless $message =~ m!\b(\S+youtube.com/watch\S+)!;
 		my $captured = Mojo::URL->new($1);
 		my $video_id = $captured->query->param('v') // return;
-		my $fragment = $captured->fragment;
 		
-		$network->logger->debug("Captured YouTube URL $captured with video ID $video_id");
+		$m->logger->debug("Captured YouTube URL $captured with video ID $video_id");
 		$self->youtube_video($video_id, sub {
 			my ($err, $result) = @_;
-			return $network->logger->error("Error retrieving YouTube video data: $err") if $err;
+			return $m->logger->error("Error retrieving YouTube video data: $err") if $err;
 			return unless defined $result;
-			$self->_display_triggered($network, $sender, $channel, $result, $fragment);
+			$self->_display_triggered($m, $result);
 		});
 	});
 }
@@ -131,7 +131,7 @@ sub youtube_video {
 }
 
 sub _display_result {
-	my ($self, $network, $sender, $channel, $result, $show_more) = @_;
+	my ($self, $m, $result, $show_more) = @_;
 	my $video_id = $result->{id}{videoId} // '';
 	my $title = $result->{snippet}{title} // '';
 	
@@ -146,11 +146,11 @@ sub _display_result {
 	my $b_code = chr 2;
 	my $response = "YouTube search result: $b_code$title$b_code - " .
 		"published by $b_code$ytchannel$b_code - $url$description$if_show_more";
-	$network->reply($sender, $channel, $response);
+	$m->reply($response);
 }
 
 sub _display_triggered {
-	my ($self, $network, $sender, $channel, $result, $fragment) = @_;
+	my ($self, $m, $result) = @_;
 	my $video_id = $result->{id} // '';
 	my $title = $result->{snippet}{title} // '';
 	
@@ -161,9 +161,10 @@ sub _display_triggered {
 	$description = " - $description" if length $description;
 	
 	my $b_code = chr 2;
+	my $sender = $m->sender;
 	my $response = "YouTube video linked by $sender: $b_code$title$b_code - " .
 		"published by $b_code$ytchannel$b_code$description";
-	$network->write(privmsg => $channel, ":$response");
+	$m->reply_bare($response);
 }
 
 1;

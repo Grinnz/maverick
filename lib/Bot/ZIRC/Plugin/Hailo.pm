@@ -32,30 +32,31 @@ sub register {
 	$bot->config->set_channel_default('hailo_reply_when_addressed', 1);
 	
 	$bot->add_hook_privmsg(sub {
-		my ($network, $sender, $channel, $message) = @_;
-		return if $sender->is_bot;
+		my $m = shift;
+		my $message = $m->text;
+		return if $m->sender->is_bot;
 		
 		my $addressed;
-		my $bot_nick = $network->nick;
+		my $bot_nick = $m->nick;
 		if ($message =~ s/^\Q$bot_nick\E[:,]?\s+//) {
 			$addressed = 1;
 		}
 		
 		$self->hailo->learn($message);
-		$network->logger->debug("Learned: $message");
+		$m->logger->debug("Learned: $message");
 		$self->hailo->save;
 		
 		my $speak = 1;
-		$speak = $network->config->get_channel($channel, 'hailo_speak') if defined $channel;
+		$speak = $m->config->get_channel($m->channel, 'hailo_speak') if defined $m->channel;
 		my $do_reply = $speak > rand() ? 1 : 0;
-		my $when_addressed = $network->config->get_channel($channel, 'hailo_reply_when_addressed');
+		my $when_addressed = $m->config->get_channel($m->channel, 'hailo_reply_when_addressed');
 		$do_reply = 1 if $when_addressed and $addressed;
 		return unless $do_reply;
 		
 		my $reply = $self->hailo->reply($message);
-		$network->logger->debug("Reply: $reply");
+		$m->logger->debug("Reply: $reply");
 		
-		$network->reply($sender, $channel, $reply);
+		$m->reply($reply);
 	});
 }
 

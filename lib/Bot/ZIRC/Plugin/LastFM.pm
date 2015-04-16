@@ -28,27 +28,29 @@ sub register {
 		help_text => 'Show now playing information, or set Last.fm username',
 		usage_text => '[<Last.fm username>|set <Last.fm username>]',
 		on_run => sub {
-			my ($network, $sender, $channel, @args) = @_;
+			my $m = shift;
+			my @args = $m->args_list;
 			
 			if (@args and lc $args[0] eq 'set') {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
-				$network->storage->data->{lastfm}{usernames}{lc $sender} = $username;
-				return $network->reply($sender, $channel, "Set Last.fm username of $sender to $username");
+				$self->bot->storage->data->{lastfm}{usernames}{lc $m->sender} = $username;
+				my $sender = $m->sender;
+				return $m->reply("Set Last.fm username of $sender to $username");
 			}
 			
 			my $username = shift @args;
 			unless (defined $username) {
-				$username = $network->storage->data->{lastfm}{usernames}{lc $sender} // $sender->nick;
+				$username = $self->bot->storage->data->{lastfm}{usernames}{lc $m->sender} // $m->sender->nick;
 			}
 			
-			$network->logger->debug("Retrieving Last.fm recent tracks for $username");
+			$m->logger->debug("Retrieving Last.fm recent tracks for $username");
 			$self->lastfm_last_track($username, sub {
 				my ($err, $track) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, "No recent tracks found for $username")
+				return $m->reply($err) if $err;
+				return $m->reply("No recent tracks found for $username")
 					unless defined $track;
-				$self->_lastfm_result($network, $sender, $channel, $track, $username);
+				$self->_lastfm_result($m, $track, $username);
 			});
 		},
 	);
@@ -83,7 +85,7 @@ sub lastfm_last_track {
 }
 
 sub _lastfm_result {
-	my ($self, $network, $sender, $channel, $track, $username) = @_;
+	my ($self, $m, $track, $username) = @_;
 	my $track_name = $track->{name} // '';
 	my $artist = $track->{artist}{'#text'};
 	my $album = $track->{album}{'#text'};
@@ -96,7 +98,7 @@ sub _lastfm_result {
 	$response = $nowplaying ? "Now playing for $username: $response"
 		: "Last track played for $username: $response ".ago(time-$played_at);
 	
-	$network->reply($sender, $channel, $response);
+	$m->reply($response);
 }
 
 1;

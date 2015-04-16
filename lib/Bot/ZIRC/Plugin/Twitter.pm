@@ -67,9 +67,9 @@ sub register {
 		name => 'twitter',
 		help_text => 'Search tweets on Twitter',
 		usage_text => '(<query>|#<tweet id>|@<twitter user>)',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
 			
 			# Tweet ID
@@ -77,8 +77,8 @@ sub register {
 				my $id = $1;
 				$self->twitter_tweet_by_id($id, sub {
 					my ($err, $tweet) = @_;
-					return $network->reply($sender, $channel, $err) if $err;
-					return $self->_display_tweet($network, $sender, $channel, $tweet);
+					return $m->reply($err) if $err;
+					return $self->_display_tweet($m, $tweet);
 				});
 			}
 			
@@ -87,8 +87,8 @@ sub register {
 				my $user = $1;
 				$self->twitter_tweet_by_user($user, sub {
 					my ($err, $tweet) = @_;
-					return $network->reply($sender, $channel, $err) if $err;
-					return $self->_display_tweet($network, $sender, $channel, $tweet);
+					return $m->reply($err) if $err;
+					return $self->_display_tweet($m, $tweet);
 				});
 			}
 			
@@ -96,32 +96,33 @@ sub register {
 			else {
 				$self->twitter_search($query, sub {
 					my ($err, $tweets) = @_;
-					return $network->reply($sender, $channel, "No results for Twitter search") unless @$tweets;
+					return $m->reply("No results for Twitter search") unless @$tweets;
 					my $first_tweet = shift @$tweets;
-					my $channel_name = lc ($channel // $sender);
-					$self->results_cache->{$network}{$channel_name} = $tweets;
+					my $channel_name = lc ($m->channel // $m->sender);
+					$self->results_cache->{$m->network}{$channel_name} = $tweets;
 					my $show_more = @$tweets;
-					$self->_display_tweet($network, $sender, $channel, $first_tweet, $show_more);
+					$self->_display_tweet($m, $first_tweet, $show_more);
 				});
 			}
 		},
 		on_more => sub {
-			my ($network, $sender, $channel) = @_;
-			my $channel_name = lc ($channel // $sender);
-			my $tweets = $self->results_cache->{$network}{$channel_name} // [];
-			return $network->reply($sender, $channel, "No more results for Twitter search") unless @$tweets;
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $tweets = $self->results_cache->{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Twitter search") unless @$tweets;
 			my $next_tweet = shift @$tweets;
 			my $show_more = @$tweets;
-			$self->_display_tweet($network, $sender, $channel, $next_tweet, $show_more);
+			$self->_display_tweet($m, $next_tweet, $show_more);
 		},
 	);
 	
 	$bot->config->set_channel_default('twitter_trigger', 1);
 	
 	$bot->add_hook_privmsg(sub {
-		my ($network, $sender, $channel, $message) = @_;
-		return unless defined $channel;
-		return unless $network->config->get_channel($channel, 'twitter_trigger');
+		my $m = shift;
+		my $message = $m->text;
+		return unless defined $m->channel;
+		return unless $m->config->get_channel($m->channel, 'twitter_trigger');
 		return unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
 		my $token = $self->_access_token;
 		
@@ -129,11 +130,11 @@ sub register {
 		my $parts = $captured->path->parts;
 		my $tweet_id = $parts->[0] eq 'statuses' ? $parts->[1] : $parts->[2];
 		
-		$network->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
+		$m->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
 		$self->twitter_tweet_by_id($tweet_id, sub {
 			my ($err, $tweet) = @_;
-			return $network->logger->error("Error retrieving Twitter tweet data: $err") if $err;
-			return $self->_display_triggered($network, $sender, $channel, $tweet);
+			return $m->logger->error("Error retrieving Twitter tweet data: $err") if $err;
+			return $self->_display_triggered($m, $tweet);
 		});
 	});
 }
@@ -207,7 +208,7 @@ sub twitter_search {
 }
 
 sub _display_tweet {
-	my ($self, $network, $sender, $channel, $tweet, $show_more) = @_;
+	my ($self, $m, $tweet, $show_more) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
 	my $id = $tweet->{id_str};
@@ -229,11 +230,11 @@ sub _display_tweet {
 	
 	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	my $msg = "Tweeted by $name $ago$in_reply_to: $content ($url)$if_show_more";
-	$network->reply($sender, $channel, $msg);
+	$m->reply($msg);
 }
 
 sub _display_triggered {
-	my ($self, $network, $sender, $channel, $tweet) = @_;
+	my ($self, $m, $tweet) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
 	
@@ -251,8 +252,9 @@ sub _display_triggered {
 	my $name = $tweet->{user}{name};
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
+	my $sender = $m->sender;
 	my $msg = "Tweet linked by $sender: Tweeted by $name $ago$in_reply_to: $content";
-	$network->write(privmsg => $channel, ":$msg");
+	$m->reply_bare($msg);
 }
 
 sub _parse_tweet_text {

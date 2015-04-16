@@ -23,13 +23,13 @@ sub register {
 		name => 'calc',
 		help_text => 'Calculate the result of a mathematical expression',
 		usage_text => '<expression>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $expr) = @_;
+			my $m = shift;
+			my $expr = $m->args;
 			return 'usage' unless length $expr;
 			my ($err, $result) = $self->calc_expression($expr);
-			return $network->reply($sender, $channel, "Error evaluating expression: $err") if $err;
-			$network->reply($sender, $channel, "Result: $result");
+			return $m->reply("Error evaluating expression: $err") if $err;
+			$m->reply("Result: $result");
 		},
 	);
 }

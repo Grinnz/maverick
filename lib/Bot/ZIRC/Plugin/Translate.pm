@@ -145,9 +145,9 @@ sub register {
 		name => 'translate',
 		help_text => 'Translate text from one language to another (default: from detected language to English)',
 		usage_text => '["]<text>["] [from <language>] [to <language>]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $args) = @_;
+			my $m = shift;
+			my $args = $m->args;
 			
 			my ($text, $from, $to);
 			if ($args =~ s/\s+from\s+([^"]+?)(?:\s+to\s+([^"]+))?$//i) {
@@ -176,21 +176,21 @@ sub register {
 				}
 			}, sub {
 				my ($delay, $err, $from) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
+				return $m->reply($err) if $err;
 				my $from_code = $self->translate_language_code($from);
-				return $network->reply($sender, $channel, "Unknown from language $from")
+				return $m->reply("Unknown from language $from")
 					unless defined $from_code;
 				my $to_code = $self->translate_language_code($to);
-				return $network->reply($sender, $channel, "Unknown to language $to")
+				return $m->reply("Unknown to language $to")
 					unless defined $to_code;
 				$delay->data(from => $self->_language_name($from_code),
 					to => $self->_language_name($to_code));
 				$self->translate_text($text, $from_code, $to_code, $delay->begin(0));
 			}, sub {
 				my ($delay, $err, $translated) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
+				return $m->reply($err) if $err;
 				my ($from, $to) = @{$delay->data}{'from','to'};
-				$network->reply($sender, $channel, "Translated $from => $to: $translated");
+				$m->reply("Translated $from => $to: $translated");
 			});
 		},
 	);

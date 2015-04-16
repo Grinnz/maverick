@@ -10,14 +10,14 @@ sub register {
 		name => 'pick',
 		help_text => 'Pick a random item from a list',
 		usage_text => '<item>[, <item>...]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $items) = @_;
+			my $m = shift;
+			my $items = $m->args;
 			return 'usage' unless length $items;
 			my @items = split /\s*,\s*/, $items;
 			my $choice = 1+int rand @items;
 			my $item = $items[$choice-1];
-			$network->reply($sender, $channel, "$choice: $item");
+			$m->reply("$choice: $item");
 		},
 	);
 }

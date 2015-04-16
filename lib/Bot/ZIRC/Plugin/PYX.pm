@@ -19,9 +19,9 @@ sub register {
 		name => 'pyx',
 		help_text => 'Generate random Cards Against Humanity matches',
 		usage_text => '[<pick count>|<black card> [<pick count>]|w <white card> ...]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $args) = @_;
+			my $m = shift;
+			my $args = $m->args;
 			
 			my ($black_card_text, $white_cards, $black_card_pick, $white_card_count);
 			if (length $args) {
@@ -45,29 +45,29 @@ sub register {
 			
 			if (defined $black_card_text) {
 				$white_card_count = 1 if $white_card_count < 1;
-				$self->get_white_cards($network, $white_card_count, sub {
+				$self->get_white_cards($m, $white_card_count, sub {
 					my ($err, $cards) = @_;
-					return $network->reply($sender, $channel, $err) if $err;
-					show_pyx_match($network, $sender, $channel, $black_card_text, $cards);
+					return $m->reply($err) if $err;
+					show_pyx_match($m, $black_card_text, $cards);
 				});
 			} else {
-				$self->get_black_card($network, $black_card_pick, sub {
+				$self->get_black_card($m, $black_card_pick, sub {
 					my ($err, $black_card) = @_;
-					return $network->reply($sender, $channel, $err) if $err;
+					return $m->reply($err) if $err;
 					$white_card_count //= $black_card->{pick} // 1;
 					if ($white_card_count > 0) {
-						$self->get_white_cards($network, $white_card_count, sub {
+						$self->get_white_cards($m, $white_card_count, sub {
 							my ($err, $cards) = @_;
-							return $network->reply($sender, $channel, $err) if $err;
+							return $m->reply($err) if $err;
 							if (defined $white_cards) {
 								$_ //= shift @$cards for @$white_cards;
 							} else {
 								$white_cards = $cards;
 							}
-							show_pyx_match($network, $sender, $channel, $black_card->{text}, $white_cards);
+							show_pyx_match($m, $black_card->{text}, $white_cards);
 						});
 					} else {
-						show_pyx_match($network, $sender, $channel, $black_card->{text}, $white_cards);
+						show_pyx_match($m, $black_card->{text}, $white_cards);
 					}
 				});
 			}
@@ -76,15 +76,15 @@ sub register {
 }
 
 sub get_black_card {
-	my ($self, $network, $pick, $cb) = @_;
+	my ($self, $m, $pick, $cb) = @_;
 	if (defined $pick) {
 		$pick = 1 if $pick < 1;
 		$pick = PYX_MAX_PICK if $pick > PYX_MAX_PICK;
 	}
 	
-	my $endpoint = $network->config->get('apis','pyx_endpoint');
+	my $endpoint = $m->config->get('apis','pyx_endpoint');
 	die PYX_ENDPOINT_MISSING unless defined $endpoint;
-	my $card_sets = $network->config->get('apis','pyx_card_sets');
+	my $card_sets = $m->config->get('apis','pyx_card_sets');
 	my @card_sets = defined $card_sets ? split ' ', $card_sets : ();
 	
 	my $url = Mojo::URL->new($endpoint)->path('black/rand');
@@ -102,14 +102,14 @@ sub get_black_card {
 }
 
 sub get_white_cards {
-	my ($self, $network, $count, $cb) = @_;
+	my ($self, $m, $count, $cb) = @_;
 	$count //= 1;
 	$count = 1 if $count < 1;
 	$count = PYX_MAX_COUNT if $count > PYX_MAX_COUNT;
 	
-	my $endpoint = $network->config->get('apis','pyx_endpoint');
+	my $endpoint = $m->config->get('apis','pyx_endpoint');
 	die PYX_ENDPOINT_MISSING unless defined $endpoint;
-	my $card_sets = $network->config->get('apis','pyx_card_sets');
+	my $card_sets = $m->config->get('apis','pyx_card_sets');
 	my @card_sets = defined $card_sets ? split ' ', $card_sets : ();
 	
 	my $url = Mojo::URL->new($endpoint)->path('white/rand');
@@ -126,7 +126,7 @@ sub get_white_cards {
 }
 
 sub show_pyx_match {
-	my ($network, $sender, $channel, $black_card, $white_cards) = @_;
+	my ($m, $black_card, $white_cards) = @_;
 	$black_card //= '';
 	$white_cards //= [];
 	
@@ -138,7 +138,7 @@ sub show_pyx_match {
 		}
 	}
 	
-	$network->reply($sender, $channel, "PYX Match: $black_card");
+	$m->reply("PYX Match: $black_card");
 }
 
 sub format_pyx_card {

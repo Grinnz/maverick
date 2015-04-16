@@ -72,32 +72,32 @@ has 'usage_text' => (
 # Methods
 
 sub run {
-	my ($self, $network, $sender, $channel, @args) = @_;
-	my $before_hooks = $network->get_hooks('before_command');
-	my $after_hooks = $network->get_hooks('after_command');
+	my ($self, $m) = @_;
+	my $before_hooks = $m->network->get_hooks('before_command');
+	my $after_hooks = $m->network->get_hooks('after_command');
 	my $on_run = $self->on_run;
-	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $network->logger->warn($msg) };
+	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $m->logger->warn($msg) };
 	foreach my $hook (@$before_hooks) {
 		local $@;
-		eval { $self->$hook($network, $sender, $channel, @args) };
-		$network->logger->error("Error in before-command hook: $@") if $@;
+		eval { $hook->($m) };
+		$m->logger->error("Error in before-command hook: $@") if $@;
 	}
 	local $@;
-	my $rc = eval { $on_run->($network, $sender, $channel, @args) };
+	my $rc = eval { $on_run->($m) };
 	if ($@) {
 		my $err = $@;
 		chomp $err;
-		$network->logger->error("Error running command $self: $err");
-		$network->reply($sender, $channel, "Internal error");
+		$m->logger->error("Error running command $self: $err");
+		$m->reply("Internal error");
 	} elsif (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
-		$network->reply($sender, $channel, $self->parse_usage_text($network, $text));
+		$m->reply($self->parse_usage_text($m->network, $text));
 	}
 	foreach my $hook (@$after_hooks) {
 		local $@;
-		eval { $self->$hook($network, $sender, $channel, @args) };
-		$network->logger->error("Error in after-command hook: $@") if $@;
+		eval { $hook->($m) };
+		$m->logger->error("Error in after-command hook: $@") if $@;
 	}
 	return $self;
 }

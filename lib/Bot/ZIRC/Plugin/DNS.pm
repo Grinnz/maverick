@@ -88,24 +88,25 @@ sub register {
 		help_text => 'Resolve the DNS of a user or hostname',
 		usage_text => '[<nick>|<hostname>]',
 		on_run => sub {
-			my ($network, $sender, $channel, $target) = @_;
-			$target //= "$sender";
+			my $m = shift;
+			my ($target) = $m->args_list;
+			$target //= $m->sender->nick;
 			my ($hostname, $say_result);
-			if (exists $network->users->{lc $target}) {
-				$hostname = $network->user($target)->host || 'unknown';
+			if (exists $m->network->users->{lc $target}) {
+				$hostname = $m->network->user($target)->host || 'unknown';
 				$say_result = "$target ($hostname)";
 			} else {
 				$say_result = $hostname = $target;
 			}
 			
-			$network->logger->debug("Resolving $hostname");
+			$m->logger->debug("Resolving $hostname");
 			$self->bot->dns_resolve($hostname, sub {
 				my ($err, @results) = @_;
-				return $network->reply($sender, $channel, "Failed to resolve $hostname: $err") if $err;
+				return $m->reply("Failed to resolve $hostname: $err") if $err;
 				my $addrs = $self->bot->dns_ip_results(\@results);
-				return $network->reply($sender, $channel, "No DNS info found for $say_result") unless @$addrs;
+				return $m->reply("No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
-				$network->reply($sender, $channel, "DNS results for $say_result: $addr_list");
+				$m->reply("DNS results for $say_result: $addr_list");
 			});
 		},
 	);

@@ -38,20 +38,20 @@ sub register {
 		name => 'weather',
 		help_text => 'Display current weather conditions for a location or user',
 		usage_text => '[<nick>|<location>]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $target) = @_;
-			$target = $sender unless length $target;
-			if (exists $network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
-				my $hostname = $network->user($target)->host;
-				return $network->reply($sender, $channel, "Unable to find hostname for $target")
+			my $m = shift;
+			my $target = $m->args;
+			$target = $m->sender unless length $target;
+			if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
+				my $hostname = $m->network->user($target)->host;
+				return $m->reply("Unable to find hostname for $target")
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
 					$self->bot->geoip_locate_host($hostname, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $record) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					my @location_parts = ($record->city->name);
 					push @location_parts, $record->country->iso_code eq 'US'
 						? $record->most_specific_subdivision->iso_code : $record->country->name;
@@ -59,24 +59,24 @@ sub register {
 					$self->weather_autocomplete_location_code($location, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $code) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					$self->weather_location_data($code, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $data) = @_;
-					return $network->reply($sender, $channel, "Error retrieving weather data for $target: $err") if $err;
-					return $self->_display_weather($network, $sender, $channel, $data);
+					return $m->reply("Error retrieving weather data for $target: $err") if $err;
+					return $self->_display_weather($m, $data);
 				});
 			} else {
 				Mojo::IOLoop->delay(sub {
 					$self->weather_autocomplete_location_code($target, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $code) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					$self->weather_location_data($code, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $data) = @_;
-					return $network->reply($sender, $channel, "Error retrieving weather data for $target: $err") if $err;
-					return $self->_display_weather($network, $sender, $channel, $data);
+					return $m->reply("Error retrieving weather data for $target: $err") if $err;
+					return $self->_display_weather($m, $data);
 				});
 			}
 		},
@@ -86,26 +86,26 @@ sub register {
 		name => 'forecast',
 		help_text => 'Display weather forecast for a location or user',
 		usage_text => '[<nick>|<location>] [<days>]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $target) = @_;
+			my $m = shift;
+			my $target = $m->args;
 			my $max_days = 4;
 			if ($target =~ s/(?:^|\s+)(\d)$//) {
 				$max_days = $1;
 			}
-			$target = $sender unless length $target;
-			if (exists $network->users->{lc $target}) {
-				return $network->reply($sender, $channel, "GeoIP plugin is required to display weather for a user")
+			$target = $m->sender unless length $target;
+			if (exists $m->network->users->{lc $target}) {
+				return $m->reply("GeoIP plugin is required to display weather for a user")
 					unless $self->bot->has_plugin_method('geoip_locate_host');
-				my $hostname = $network->user($target)->host;
-				return $network->reply($sender, $channel, "Unable to find hostname for $target")
+				my $hostname = $m->network->user($target)->host;
+				return $m->reply("Unable to find hostname for $target")
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
 					$self->bot->geoip_locate_host($hostname, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $record) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					my @location_parts = ($record->city->name);
 					push @location_parts, $record->country->iso_code eq 'US'
 						? $record->most_specific_subdivision->iso_code : $record->country->name;
@@ -113,26 +113,26 @@ sub register {
 					$self->weather_autocomplete_location_code($location, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $code) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					$self->weather_location_data($code, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $data) = @_;
-					return $network->reply($sender, $channel, "Error retrieving forecast data for $target: $err") if $err;
-					return $self->_display_forecast($network, $sender, $channel, $data, $max_days);
+					return $m->reply("Error retrieving forecast data for $target: $err") if $err;
+					return $self->_display_forecast($m, $data, $max_days);
 				});
 			} else {
 				Mojo::IOLoop->delay(sub {
 					$self->weather_autocomplete_location_code($target, shift->begin(0));
 				}, sub {
 					my ($delay, $err, $code) = @_;
-					return $network->reply($sender, $channel, "Error locating $target: $err") if $err;
+					return $m->reply("Error locating $target: $err") if $err;
 					$self->weather_location_data($code, $delay->begin(0));
 				}, sub {
 					my ($delay, $err, $data) = @_;
-					return $network->reply($sender, $channel, "Error retrieving forecast data for $target: $err") if $err;
-					return $self->_display_forecast($network, $sender, $channel, $data, $max_days);
+					return $m->reply("Error retrieving forecast data for $target: $err") if $err;
+					return $self->_display_forecast($m, $data, $max_days);
 				});
-			}			
+			}
 		},
 	);
 }
@@ -207,7 +207,7 @@ sub _cache_location_data {
 }
 
 sub _display_weather {
-	my ($self, $network, $sender, $channel, $data) = @_;
+	my ($self, $m, $data) = @_;
 	
 	my $location = $data->{location} // $data->{current_observation}{display_location};
 	my $location_str = _location_string($location);
@@ -245,11 +245,11 @@ sub _display_weather {
 	my $weather_str = join '; ', @weather_strings;
 	
 	my $b_code = chr 2;
-	$network->reply($sender, $channel, "Current weather at $b_code$location_str$b_code: $weather_str");
+	$m->reply("Current weather at $b_code$location_str$b_code: $weather_str");
 }
 
 sub _display_forecast {
-	my ($self, $network, $sender, $channel, $data, $max_days) = @_;
+	my ($self, $m, $data, $max_days) = @_;
 	
 	my $location_str = _location_string($data->{location});
 	my @forecast_strings;
@@ -285,7 +285,7 @@ sub _display_forecast {
 	}
 	
 	my $forecast_str = join '; ', @forecast_strings;
-	$network->reply($sender, $channel, "Weather forecast for $b_code$location_str$b_code: $forecast_str");
+	$m->reply("Weather forecast for $b_code$location_str$b_code: $forecast_str");
 }
 
 sub _location_string {

@@ -42,32 +42,32 @@ sub register {
 		name => 'google',
 		help_text => 'Search the web with Google',
 		usage_text => '<query>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
 			
 			$self->google_search_web($query, sub {
 				my ($err, $results) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, "No results for Google search") unless @$results;
+				return $m->reply($err) if $err;
+				return $m->reply("No results for Google search") unless @$results;
 				
 				my $first_result = shift @$results;
-				my $channel_name = lc ($channel // $sender);
-				$self->_results_cache->{web}{$network}{$channel_name} = $results;
+				my $channel_name = lc ($m->channel // $m->sender);
+				$self->_results_cache->{web}{$m->network}{$channel_name} = $results;
 				my $show_more = @$results;
-				$self->_google_result_web($network, $sender, $channel, $first_result, $show_more);
+				$self->_google_result_web($m, $first_result, $show_more);
 			});
 		},
 		on_more => sub {
-			my ($network, $sender, $channel) = @_;
-			my $channel_name = lc ($channel // $sender);
-			my $results = $self->_results_cache->{web}{$network}{$channel_name} // [];
-			return $network->reply($sender, $channel, "No more results for Google search") unless @$results;
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $results = $self->_results_cache->{web}{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Google search") unless @$results;
 			
 			my $next_result = shift @$results;
 			my $show_more = @$results;
-			$self->_google_result_web($network, $sender, $channel, $next_result, $show_more);
+			$self->_google_result_web($m, $next_result, $show_more);
 		},
 	);
 	
@@ -75,32 +75,32 @@ sub register {
 		name => 'image',
 		help_text => 'Search for images with Google',
 		usage_text => '<query>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
 			
 			$self->google_search_image($query, sub {
 				my ($err, $results) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, "No results for Google image search") unless @$results;
+				return $m->reply($err) if $err;
+				return $m->reply("No results for Google image search") unless @$results;
 				
 				my $first_result = shift @$results;
-				my $channel_name = lc ($channel // $sender);
-				$self->_results_cache->{image}{$network}{$channel_name} = $results;
+				my $channel_name = lc ($m->channel // $m->sender);
+				$self->_results_cache->{image}{$m->network}{$channel_name} = $results;
 				my $show_more = @$results;
-				$self->_google_result_image($network, $sender, $channel, $first_result, $show_more);
+				$self->_google_result_image($m, $first_result, $show_more);
 			});
 		},
 		on_more => sub {
-			my ($network, $sender, $channel) = @_;
-			my $channel_name = lc ($channel // $sender);
-			my $results = $self->_results_cache->{image}{$network}{$channel_name} // [];
-			return $network->reply($sender, $channel, "No more results for Google image search") unless @$results;
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $results = $self->_results_cache->{image}{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Google image search") unless @$results;
 			
 			my $next_result = shift @$results;
 			my $show_more = @$results;
-			$self->_google_result_image($network, $sender, $channel, $next_result, $show_more);
+			$self->_google_result_image($m, $next_result, $show_more);
 		},
 	);
 	
@@ -108,9 +108,9 @@ sub register {
 		name => 'fight',
 		help_text => 'Compare two or more searches in a Google fight',
 		usage_text => '<query1> (vs.|versus) <query2> [(vs.|versus) <query3> ...]',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $args) = @_;
+			my $m = shift;
+			my $args = $m->args;
 			my @challengers;
 			while ($args =~ /\s*(".+?"|.+?)(?:\s+(?:vs\.?|versus)\s+|\s*$)/g) {
 				push @challengers, $1;
@@ -126,7 +126,7 @@ sub register {
 				my %counts;
 				foreach my $challenger (@challengers) {
 					my ($err, $count) = (shift, shift);
-					return $network->reply($sender, $channel, $err) if $err;
+					return $m->reply($err) if $err;
 					$counts{$challenger} = $count // 0;
 				}
 				my @winners = max_by { $counts{$_} } @challengers;
@@ -138,7 +138,7 @@ sub register {
 				) foreach values %counts;
 				my $reply_str = join '; ', map { "$_: $counts{$_}" } @challengers;
 				my $winner_str = @winners > 1 ? 'Tie between '.join(' / ', @winners) : "Winner: $winners[0]";
-				$network->reply($sender, $channel, "Google Fight! $reply_str. $winner_str!");
+				$m->reply("Google Fight! $reply_str. $winner_str!");
 			});
 		},
 	);
@@ -205,7 +205,7 @@ sub google_search_image {
 }
 
 sub _google_result_web {
-	my ($self, $network, $sender, $channel, $result, $show_more) = @_;
+	my ($self, $m, $result, $show_more) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $snippet = $result->{snippet} // '';
@@ -217,11 +217,11 @@ sub _google_result_web {
 	my $b_code = chr 2;
 	my $response = "Google search result: $b_code$title$b_code - " .
 		"$url$snippet$if_show_more";
-	$network->reply($sender, $channel, $response);
+	$m->reply($response);
 }
 
 sub _google_result_image {
-	my ($self, $network, $sender, $channel, $result, $show_more) = @_;
+	my ($self, $m, $result, $show_more) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $context_url = $result->{image}{contextLink} // '';
@@ -230,7 +230,7 @@ sub _google_result_image {
 	my $b_code = chr 2;
 	my $response = "Image search result: $b_code$title$b_code - " .
 		"$url ($context_url)$if_show_more";
-	$network->reply($sender, $channel, $response);
+	$m->reply($response);
 }
 
 1;

@@ -28,14 +28,14 @@ sub register {
 		name => 'wolframalpha',
 		help_text => 'Query the Wolfram|Alpha computational knowledge engine',
 		usage_text => '<query>',
-		tokenize => 0,
 		on_run => sub {
-			my ($network, $sender, $channel, $query) = @_;
+			my $m = shift;
+			my $query = $m->args;
 			return 'usage' unless length $query;
-			my $api_key = $network->config->get('apis','wolfram_api_key');
+			my $api_key = $m->config->get('apis','wolfram_api_key');
 			die WOLFRAM_API_KEY_MISSING unless defined $api_key;
 			
-			my $host = $sender->host;
+			my $host = $m->sender->host;
 			Mojo::IOLoop->delay(sub {
 				my $delay = shift;
 				if (is_ipv4 $host or is_ipv6 $host) {
@@ -55,14 +55,14 @@ sub register {
 				$self->wolfram_query($query, $ip, $delay->begin(0));
 			}, sub {
 				my ($delay, $err, $result) = @_;
-				return $network->reply($sender, $channel, $err) if $err;
-				return $network->reply($sender, $channel, 'No results from Wolfram|Alpha') unless defined $result;
+				return $m->reply($err) if $err;
+				return $m->reply('No results from Wolfram|Alpha') unless defined $result;
 				
 				my $success = $result->attr('success');
 				if (defined $success and $success eq 'false') {
-					$self->_reply_wolfram_error($network, $sender, $channel, $result);
+					$self->_reply_wolfram_error($m, $result);
 				} else {
-					$self->_reply_wolfram_success($network, $sender, $channel, $result);
+					$self->_reply_wolfram_success($m, $result);
 				}
 			});
 		},
@@ -93,12 +93,12 @@ sub wolfram_query {
 }
 
 sub _reply_wolfram_error {
-	my ($self, $network, $sender, $channel, $result) = @_;
+	my ($self, $m, $result) = @_;
 	
 	my $error = $result->attr('error');
 	if (defined $error and $error eq 'true') {
 		my $err_msg = $result->children('error > msg')->first->text;
-		return $network->reply($sender, $channel, "Error querying Wolfram|Alpha: $err_msg");
+		return $m->reply("Error querying Wolfram|Alpha: $err_msg");
 	}
 	
 	my @warning_output;
@@ -137,14 +137,14 @@ sub _reply_wolfram_error {
 	
 	if (@warning_output) {
 		my $output_str = join ' || ', @warning_output;
-		return $network->reply($sender, $channel, $output_str);
+		return $m->reply($output_str);
 	} else {
-		return $network->reply($sender, $channel, "Wolfram|Alpha query was unsuccessful");
+		return $m->reply("Wolfram|Alpha query was unsuccessful");
 	}
 }
 
 sub _reply_wolfram_success {
-	my ($self, $network, $sender, $channel, $result) = @_;
+	my ($self, $m, $result) = @_;
 	
 	my @pod_contents;
 	my $pods = $result->find('pod');
@@ -167,9 +167,9 @@ sub _reply_wolfram_success {
 	
 	if (@pod_contents) {
 		my $output = join ' || ', @pod_contents;
-		$network->reply($sender, $channel, $output);
+		$m->reply($output);
 	} else {
-		$network->reply($sender, $channel, "Empty response to Wolfram|Alpha query");
+		$m->reply("Empty response to Wolfram|Alpha query");
 	}
 }
 

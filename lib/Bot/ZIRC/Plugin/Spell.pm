@@ -48,15 +48,16 @@ sub register {
 		help_text => 'Check the spelling of a word',
 		usage_text => '<word> [<dict>]',
 		on_run => sub {
-			my ($network, $sender, $channel, $word, $lang) = @_;
+			my $m = shift;
+			my ($word, $lang) = $m->args_list;
 			return 'usage' unless defined $word and length $word;
 			$lang //= $self->default_lang;
 			my $dict = $self->spell_dict($lang);
-			return $network->reply($sender, $channel, "Dictionary for $lang not found") unless defined $dict;
-			return $network->reply($sender, $channel, "$word is a word.") if $dict->check($word);
+			return $m->reply("Dictionary for $lang not found") unless defined $dict;
+			return $m->reply("$word is a word.") if $dict->check($word);
 			my @suggestions = $dict->suggest($word);
 			my $msg = "$word is not a word. Did you mean: ".join ' ', @suggestions;
-			$network->reply($sender, $channel, $msg);
+			$m->reply($msg);
 		},
 	);
 }

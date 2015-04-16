@@ -40,20 +40,21 @@ sub register {
 		help_text => 'Locate user or hostname based on IP address',
 		usage_text => '[<nick>|<hostname>]',
 		on_run => sub {
-			my ($network, $sender, $channel, $target) = @_;
-			$target //= $sender;
+			my $m = shift;
+			my ($target) = $m->args_list;
+			$target //= $m->sender->nick;
 			my $say_target = my $host = $target;
-			if (exists $network->users->{lc $target}) {
-				$host = $network->user($target)->host;
-				return $network->reply($sender, $channel, "Could not find hostname for $target")
+			if (exists $m->network->users->{lc $target}) {
+				$host = $m->network->user($target)->host;
+				return $m->reply("Could not find hostname for $target")
 					unless defined $host;
 				$say_target = "$target ($host)";
 			}
 			
 			$self->bot->geoip_locate_host($host, sub {
 				my ($err, $record) = @_;
-				return $network->reply($sender, $channel, "Error locating $say_target: $err") if $err;
-				return $network->reply($sender, $channel, "GeoIP location for $say_target: "._location_str($record));
+				return $m->reply("Error locating $say_target: $err") if $err;
+				return $m->reply("GeoIP location for $say_target: "._location_str($record));
 			});
 		},
 	);

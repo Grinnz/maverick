@@ -12,13 +12,12 @@ use Bot::ZIRC;
 use Bot::ZIRC::Access qw/:access channel_access_level/;
 use Bot::ZIRC::Channel;
 use Bot::ZIRC::User;
+use Bot::ZIRC::Message;
 
 use Moo;
 use namespace::clean;
 
 use overload '""' => sub { shift->name };
-
-use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
 
@@ -320,134 +319,38 @@ sub autojoin {
 	}
 }
 
-sub reply {
-	my ($self, $sender, $channel, $message, $cb) = @_;
-	croak "Missing arguments" unless defined $self and defined $sender and defined $message;
-	
-	if (defined $channel) {
-		$message = "$sender: $message";
-		my @reply = $self->limit_reply(privmsg => $channel, $message);
-		push @reply, $cb if $cb;
-		$self->write(@reply);
-	} else {
-		my @writes;
-		foreach my $reply ($self->split_reply(privmsg => $sender, $message)) {
-			push @writes, sub { $self->write(@$reply, shift->begin) };
-		}
-		push @writes, $cb if $cb;
-		Mojo::IOLoop->delay(@writes);
-	}
-	
-	if ($self->config->get('echo')) {
-		my $nick = $self->nick;
-		my $target = $channel // $sender;
-		$self->logger->info("[to $target] <$nick> $message");
-	}
-	
-	return $self;
-}
-
-sub limit_reply {
-	my ($self, @args) = @_;
-	my $msg = pop @args;
-	my $hostmask = $self->user($self->nick)->hostmask;
-	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
-	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
-	$msg = substr($msg, 0, ($allowed_len-3)).'...' if length $msg > $allowed_len;
-	return (@args, ":$msg");
-}
-
-sub split_reply {
-	my ($self, @args) = @_;
-	my $msg = pop @args;
-	my $hostmask = $self->user($self->nick)->hostmask;
-	my $prefix_len = length ":$hostmask " . join(' ', @args, ':');
-	my $allowed_len = IRC_MAX_MESSAGE_LENGTH - $prefix_len;
-	my @returns;
-	while (my $chunk = substr $msg, 0, $allowed_len, '') {
-		push @returns, [@args, ":$chunk"];
-	}
-	return @returns;
-}
-
 # Command parsing
 
 sub check_privmsg {
-	my ($self, $sender, $channel, $message) = @_;
-	my ($command, @args) = $self->parse_command($sender, $channel, $message);
+	my ($self, $message) = @_;
+	my $sender = $message->sender;
+	my $channel = $message->channel;
 	
-	if (defined $command) {
-		return unless length $command;
+	if (defined $message->parse_command) {
+		return unless my $command = $message->command;
 		
-		my $args_str = join ' ', @args;
+		my $args_str = $message->args;
 		$self->logger->debug("<$sender> [command] $command $args_str");
 			
 		$sender->check_access($command->required_access, $channel, sub {
 			my ($sender, $has_access) = @_;
 			if ($has_access) {
 				$sender->logger->debug("$sender has access to run command $command");
-				$command->run($sender->network, $sender, $channel, @args);
+				$command->run($message);
 			} else {
 				$sender->logger->debug("$sender does not have access to run command $command");
 				my $channel_str = defined $channel ? " in $channel" : '';
-				$sender->network->reply($sender, undef, "You do not have access to run $command$channel_str");
+				$message->reply_private("You do not have access to run $command$channel_str");
 			}
 		});
 	} else {
 		my $hooks = $self->get_hooks('privmsg');
 		foreach my $hook (@$hooks) {
 			local $@;
-			eval { $self->$hook($sender, $channel, $message) };
+			eval { $hook->($message) };
 			$self->logger->error("Error in privmsg hook: $@") if $@;
 		}
 	}
-}
-
-sub parse_command {
-	my ($self, $sender, $channel, $message) = @_;
-	my $trigger = $self->config->get('commands','trigger') // '';
-	my $by_nick = $self->config->get('commands','by_nick');
-	my $bare = $self->config->get('commands','bare');
-	my $bot_nick = $self->nick;
-	
-	my ($cmd_name, $args_str);
-	$trigger = quotemeta $trigger;
-	if (length $trigger and $message =~ /^[$trigger](\w+)\s*(.*?)$/i) {
-		($cmd_name, $args_str) = ($1, $2);
-	} elsif ($by_nick and $message =~ /^\Q$bot_nick\E[:,]?\s+(\w+)\s*(.*?)$/i) {
-		($cmd_name, $args_str) = ($1, $2);
-	} elsif (($bare or !defined $channel) and $message =~ /^(\w+)\s*(.*?)$/) {
-		($cmd_name, $args_str) = ($1, $2);
-	} else {
-		return undef;
-	}
-	
-	my $command = $self->bot->get_command($cmd_name);
-	if (!defined $command and $self->config->get('commands','prefixes')) {
-		my $cmds = $self->bot->get_commands_by_prefix($cmd_name);
-		return undef unless $cmds and @$cmds;
-		if (@$cmds > 1) {
-			my $suggestions = join ', ', sort @$cmds;
-			$self->reply($sender, $channel,
-				"Command $cmd_name is ambiguous. Did you mean: $suggestions");
-			return '';
-		}
-		$command = $self->bot->get_command($cmds->[0]);
-	}
-	
-	return undef unless defined $command;
-	
-	unless ($command->is_enabled) {
-		$self->reply($sender, undef, "Command $command is currently disabled.");
-		return '';
-	}
-	
-	$args_str = IRC::Utils::strip_formatting($args_str) if $command->strip_formatting;
-	$args_str =~ s/^\s+//;
-	$args_str =~ s/\s+$//;
-	my @args = $command->tokenize ? (split /\s+/, $args_str) : $args_str;
-	
-	return ($command, @args);
 }
 
 # Queue future events
@@ -581,15 +484,14 @@ sub irc_notice {
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[notice $to] <$from> $msg") if $self->config->get('echo');
+	my $sender = $self->user($from);
+	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
+	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $sender, channel => $channel, text => $msg);
 	my $hooks = $self->get_hooks('notice');
-	if (@$hooks) {
-		my $sender = $self->user($from);
-		my $channel = lc $to eq lc $self->nick ? undef : $to;
-		foreach my $hook (@$hooks) {
-			local $@;
-			eval { $self->$hook($sender, $channel, $msg) };
-			$self->logger->error("Error in notice hook: $@") if $@;
-		}
+	foreach my $hook (@$hooks) {
+		local $@;
+		eval { $hook->($obj) };
+		$self->logger->error("Error in notice hook: $@") if $@;
 	}
 }
 
@@ -610,7 +512,8 @@ sub irc_privmsg {
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->get('echo');
 	my $user = $self->user($from);
-	$self->check_privmsg($user, undef, $msg) unless $user->is_bot and $self->config->get('users','ignore_bots');
+	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $user, text => $msg);
+	$self->check_privmsg($obj) unless $user->is_bot and $self->config->get('users','ignore_bots');
 }
 
 sub irc_public {
@@ -619,7 +522,9 @@ sub irc_public {
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->get('echo');
 	my $user = $self->user($from);
-	$self->check_privmsg($user, $channel, $msg) unless $user->is_bot and $self->config->get('users','ignore_bots');
+	$channel = $self->channel($channel);
+	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $user, channel => $channel, text => $msg);
+	$self->check_privmsg($obj) unless $user->is_bot and $self->config->get('users','ignore_bots');
 }
 
 sub irc_quit {
