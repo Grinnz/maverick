@@ -56,7 +56,11 @@ sub register {
 		my $reply = $self->hailo->reply($message);
 		$m->logger->debug("Reply: $reply");
 		
-		$m->reply($reply);
+		if ($addressed) {
+			$m->reply($reply);
+		} else {
+			$m->reply_bare($reply);
+		}
 	});
 }
 
