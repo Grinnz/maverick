@@ -100,8 +100,8 @@ sub register {
 					my $first_tweet = shift @$tweets;
 					my $channel_name = lc ($m->channel // $m->sender);
 					$self->results_cache->{$m->network}{$channel_name} = $tweets;
-					my $show_more = @$tweets;
-					$self->_display_tweet($m, $first_tweet, $show_more);
+					$m->show_more(scalar @$tweets);
+					$self->_display_tweet($m, $first_tweet);
 				});
 			}
 		},
@@ -111,8 +111,8 @@ sub register {
 			my $tweets = $self->results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Twitter search") unless @$tweets;
 			my $next_tweet = shift @$tweets;
-			my $show_more = @$tweets;
-			$self->_display_tweet($m, $next_tweet, $show_more);
+			$m->show_more(scalar @$tweets);
+			$self->_display_tweet($m, $next_tweet);
 		},
 	);
 	
@@ -208,7 +208,7 @@ sub twitter_search {
 }
 
 sub _display_tweet {
-	my ($self, $m, $tweet, $show_more) = @_;
+	my ($self, $m, $tweet) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
 	my $id = $tweet->{id_str};
@@ -228,8 +228,7 @@ sub _display_tweet {
 	my $name = $tweet->{user}{name};
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
-	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
-	my $msg = "Tweeted by $name $ago$in_reply_to: $content ($url)$if_show_more";
+	my $msg = "Tweeted by $name $ago$in_reply_to: $content ($url)";
 	$m->reply($msg);
 }
 

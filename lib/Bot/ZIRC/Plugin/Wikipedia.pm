@@ -38,8 +38,8 @@ sub register {
 				my $first_title = shift @$titles;
 				my $channel_name = lc ($m->channel // $m->sender);
 				$self->_results_cache->{$m->network}{$channel_name} = $titles;
-				my $show_more = @$titles;
-				$self->_display_wiki_page($m, $first_title, $show_more);
+				$m->show_more(scalar @$titles);
+				$self->_display_wiki_page($m, $first_title);
 			});
 		},
 		on_more => sub {
@@ -49,8 +49,8 @@ sub register {
 			return $m->reply("No more results for Wikipedia search") unless @$titles;
 			
 			my $next_title = shift @$titles;
-			my $show_more = @$titles;
-			$self->_display_wiki_page($m, $next_title, $show_more);
+			$m->show_more(scalar @$titles);
+			$self->_display_wiki_page($m, $next_title);
 		},
 	);
 }
@@ -99,13 +99,12 @@ sub wikipedia_page {
 }
 
 sub _display_wiki_page {
-	my ($self, $m, $title, $show_more) = @_;
+	my ($self, $m, $title) = @_;
 	
-	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	$self->wikipedia_page($title, sub {
 		my ($err, $page) = @_;
 		return $m->reply($err) if $err;
-		return $m->reply("Wikipedia page $title not found$if_show_more") unless defined $page;
+		return $m->reply("Wikipedia page $title not found") unless defined $page;
 		
 		my $title = $page->{title} // '';
 		my $url = $page->{fullurl} // '';
@@ -113,7 +112,7 @@ sub _display_wiki_page {
 		$extract =~ s/\n/ /g;
 		
 		my $b_code = chr 2;
-		my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract$if_show_more";
+		my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract";
 		return $m->reply($response);
 	});
 }

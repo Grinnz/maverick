@@ -57,6 +57,12 @@ sub args_list {
 	return split ' ', ($self->args // '');
 }
 
+has 'show_more' => (
+	is => 'rw',
+	isa => sub { croak "Invalid show-more count"
+		if defined $_[0] and $_[0] !~ m/^\d+\z/ },
+);
+
 sub parse_command {
 	my $self = shift;
 	my $trigger = $self->config->get('commands','trigger') // '';
@@ -121,20 +127,20 @@ sub reply_bare {
 }
 
 sub _reply {
-	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
 	my ($self, $sender, $channel, $message) = @_;
 	
+	my $show_more = $self->show_more // 0;
+	my $more_str = $show_more > 0 ? " [ $show_more more results ]" : '';
 	if (defined $channel) {
 		$message = "$sender: $message" if defined $sender;
-		my @reply = $self->_limit_reply(privmsg => $channel, $message);
-		push @reply, $cb if $cb;
-		$self->network->write(@reply);
+		my $reply = $self->_limit_reply(privmsg => $channel, $more_str, $message);
+		$self->network->write(privmsg => $channel, $reply . $more_str);
 	} elsif (defined $sender) {
 		my @writes;
+		$message .= $more_str;
 		foreach my $reply ($self->_split_reply(privmsg => $sender, $message)) {
-			push @writes, sub { $self->network->write(@$reply, shift->begin) };
+			push @writes, sub { $self->network->write(privmsg => $sender, $reply, shift->begin) };
 		}
-		push @writes, $cb if $cb;
 		Mojo::IOLoop->delay(@writes);
 	} else {
 		croak "No sender or channel specified for reply";
@@ -154,7 +160,7 @@ sub _limit_reply {
 	my $msg = pop @args;
 	my $allowed_len = $self->_allowed_message_length(@args);
 	$msg = substr($msg, 0, ($allowed_len-3)).'...' if length $msg > $allowed_len;
-	return (@args, ":$msg");
+	return $msg;
 }
 
 sub _split_reply {
@@ -163,7 +169,7 @@ sub _split_reply {
 	my $allowed_len = $self->_allowed_message_length(@args);
 	my @returns;
 	while (my $chunk = substr $msg, 0, $allowed_len, '') {
-		push @returns, [@args, ":$chunk"];
+		push @returns, $chunk;
 	}
 	return @returns;
 }

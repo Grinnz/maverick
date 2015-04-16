@@ -55,8 +55,8 @@ sub register {
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
 				$self->_results_cache->{web}{$m->network}{$channel_name} = $results;
-				my $show_more = @$results;
-				$self->_google_result_web($m, $first_result, $show_more);
+				$m->show_more(scalar @$results);
+				$self->_google_result_web($m, $first_result);
 			});
 		},
 		on_more => sub {
@@ -66,8 +66,8 @@ sub register {
 			return $m->reply("No more results for Google search") unless @$results;
 			
 			my $next_result = shift @$results;
-			my $show_more = @$results;
-			$self->_google_result_web($m, $next_result, $show_more);
+			$m->show_more(scalar @$results);
+			$self->_google_result_web($m, $next_result);
 		},
 	);
 	
@@ -88,8 +88,8 @@ sub register {
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
 				$self->_results_cache->{image}{$m->network}{$channel_name} = $results;
-				my $show_more = @$results;
-				$self->_google_result_image($m, $first_result, $show_more);
+				$m->show_more(scalar @$results);
+				$self->_google_result_image($m, $first_result);
 			});
 		},
 		on_more => sub {
@@ -99,8 +99,8 @@ sub register {
 			return $m->reply("No more results for Google image search") unless @$results;
 			
 			my $next_result = shift @$results;
-			my $show_more = @$results;
-			$self->_google_result_image($m, $next_result, $show_more);
+			$m->show_more(scalar @$results);
+			$self->_google_result_image($m, $next_result);
 		},
 	);
 	
@@ -205,31 +205,26 @@ sub google_search_image {
 }
 
 sub _google_result_web {
-	my ($self, $m, $result, $show_more) = @_;
+	my ($self, $m, $result) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $snippet = $result->{snippet} // '';
 	$snippet =~ s/\s?\r?\n/ /g;
-	$snippet = substr($snippet, 0, 200) . '...' if length $snippet > 200;
 	$snippet = " - $snippet" if length $snippet;
-	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	
 	my $b_code = chr 2;
-	my $response = "Google search result: $b_code$title$b_code - " .
-		"$url$snippet$if_show_more";
+	my $response = "Google search result: $b_code$title$b_code - $url$snippet";
 	$m->reply($response);
 }
 
 sub _google_result_image {
-	my ($self, $m, $result, $show_more) = @_;
+	my ($self, $m, $result) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $context_url = $result->{image}{contextLink} // '';
-	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	
 	my $b_code = chr 2;
-	my $response = "Image search result: $b_code$title$b_code - " .
-		"$url ($context_url)$if_show_more";
+	my $response = "Image search result: $b_code$title$b_code - $url ($context_url)";
 	$m->reply($response);
 }
 

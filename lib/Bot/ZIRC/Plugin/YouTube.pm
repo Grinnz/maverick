@@ -49,8 +49,8 @@ sub register {
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
 				$self->_results_cache->{$m->network}{$channel_name} = $results;
-				my $show_more = @$results;
-				$self->_display_result($m, $first_result, $show_more);
+				$m->show_more(scalar @$results);
+				$self->_display_result($m, $first_result);
 			});
 		},
 		on_more => sub {
@@ -60,8 +60,8 @@ sub register {
 			return $m->reply("No more results for YouTube search") unless @$results;
 			
 			my $next_result = shift @$results;
-			my $show_more = @$results;
-			$self->_display_result($m, $next_result, $show_more);
+			$m->show_more(scalar @$results);
+			$self->_display_result($m, $next_result);
 		},
 	);
 	
@@ -131,7 +131,7 @@ sub youtube_video {
 }
 
 sub _display_result {
-	my ($self, $m, $result, $show_more) = @_;
+	my ($self, $m, $result) = @_;
 	my $video_id = $result->{id}{videoId} // '';
 	my $title = $result->{snippet}{title} // '';
 	
@@ -139,13 +139,11 @@ sub _display_result {
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
 	
 	my $description = $result->{snippet}{description} // '';
-	$description = substr($description, 0, 200) . '...' if length $description > 200;
 	$description = " - $description" if length $description;
-	my $if_show_more = $show_more ? " [ $show_more more results, use 'more' command to display ]" : '';
 	
 	my $b_code = chr 2;
 	my $response = "YouTube search result: $b_code$title$b_code - " .
-		"published by $b_code$ytchannel$b_code - $url$description$if_show_more";
+		"published by $b_code$ytchannel$b_code - $url$description";
 	$m->reply($response);
 }
 
@@ -157,7 +155,6 @@ sub _display_triggered {
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
 	
 	my $description = $result->{snippet}{description} // '';
-	$description = substr($description, 0, 200) . '...' if length $description > 200;
 	$description = " - $description" if length $description;
 	
 	my $b_code = chr 2;
