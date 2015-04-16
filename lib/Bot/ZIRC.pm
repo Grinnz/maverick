@@ -17,6 +17,8 @@ use Bot::ZIRC::Storage;
 use Moo;
 use namespace::clean;
 
+extends 'Mojo::EventEmitter';
+
 use Exporter 'import';
 
 our $AUTOLOAD;
@@ -71,13 +73,6 @@ has 'command_prefixes' => (
 	default => sub { {} },
 	init_arg => undef,
 	clearer => 1,
-);
-
-has 'hooks' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
 );
 
 has 'init_config' => (
@@ -367,26 +362,6 @@ sub reload_command_prefixes {
 	$self->add_command_prefixes($_) for $self->get_command_names;
 }
 
-# Hooks
-
-sub get_hooks {
-	my ($self, $type) = @_;
-	return [] unless defined $type;
-	return $self->hooks->{$type} // [];
-}
-
-sub add_hook {
-	my ($self, $type, $cb) = @_;
-	croak "Unspecified hook type" unless defined $type;
-	croak "Invalid hook callback $cb" unless ref $cb eq 'CODE';
-	push @{$self->hooks->{$type}//=[]}, $cb;
-	return $self;
-}
-
-sub add_hook_before_command { $_[0]->add_hook(before_command => $_[1]) }
-sub add_hook_after_command { $_[0]->add_hook(after_command => $_[1]) }
-sub add_hook_privmsg { $_[0]->add_hook(privmsg => $_[1]) }
-
 # Bot actions
 
 sub start {
@@ -536,9 +511,7 @@ the default for any configuration not in a section.
 
 IRC networks are represented by L<Bot::ZIRC::Network> (or subclassed) objects
 that handle all communication with that network. Networks can be specified in
-the bot's constructor, or added later with the L</"add_network"> method. The
-network object is provided to command and hook callbacks and can be used to
-send responses or perform actions.
+the bot's constructor, or added later with the L</"add_network"> method.
 
 =head1 PLUGINS
 
@@ -562,33 +535,28 @@ a powerful way to add global functionality.
 
 =head2 privmsg
 
-  $bot->add_hook(privmsg => sub { my ($network, $sender, $channel, $message) = @_; ... });
+  $bot->on(privmsg => sub { my ($bot, $m) = @_; ... });
 
 The C<privmsg> hook is called whenever the bot receives a channel or private
-message ("privmsg") from an IRC user. The callback will receive the appropriate
-L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
-channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
-and the message string.
+message ("privmsg") from an IRC user. The callback will receive the
+L<Bot::ZIRC> object and the L<Bot::ZIRC::Message> object containing the message
+details.
 
 =head2 before_command
 
-  $bot->add_hook(before_command => sub { my ($command, $network, $sender, $channel, @args) = @_; ... });
+  $bot->on(before_command => sub { my ($bot, $m) = @_; ... });
 
 The C<before_command> hook is called before a recognized command is executed.
-The callback will receive the L<Bot::ZIRC::Command> object, the appropriate
-L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
-channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
-and the command arguments as they will be received by the command.
+The callback will receive the L<Bot::ZIRC> object and the L<Bot::ZIRC::Message>
+object containing the message details.
 
 =head2 after_command
 
-  $bot->add_hook(after_command => sub { my ($command, $network, $sender, $channel, @args) = @_; ... });
+  $bot->on(after_command => sub { my ($bot, $m) = @_; ... });
 
 The C<after_command> hook is called after a command has been executed. The
-callback will receive the L<Bot::ZIRC::Command> object, the appropriate
-L<Bot::ZIRC::Network> object, the sender as a L<Bot::ZIRC::User> object, the
-channel as a L<Bot::ZIRC::Channel> object (or undefined for private messages),
-and the command arguments as they were received by the command.
+callback will receive the L<Bot::ZIRC> object and the L<Bot::ZIRC::Message>
+object containing the message details.
 
 =head1 METHODS
 

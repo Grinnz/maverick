@@ -31,8 +31,8 @@ sub register {
 	$bot->config->set_channel_default('hailo_speak', 0);
 	$bot->config->set_channel_default('hailo_reply_when_addressed', 1);
 	
-	$bot->add_hook_privmsg(sub {
-		my $m = shift;
+	$bot->on(privmsg => sub {
+		my ($bot, $m) = @_;
 		my $message = $m->text;
 		return if $m->sender->is_bot;
 		

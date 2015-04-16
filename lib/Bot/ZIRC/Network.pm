@@ -42,7 +42,7 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::ZIRC->new },
 	weak_ref => 1,
-	handles => [qw/bot_version config_dir get_hooks is_stopping storage ua/],
+	handles => [qw/bot_version config_dir get_is_stopping storage ua/],
 );
 
 has 'init_config' => (
@@ -344,11 +344,10 @@ sub check_privmsg {
 			}
 		});
 	} else {
-		my $hooks = $self->get_hooks('privmsg');
-		foreach my $hook (@$hooks) {
-			local $@;
-			eval { $hook->($message) };
-			$self->logger->error("Error in privmsg hook: $@") if $@;
+		local $@;
+		unless (eval { $self->bot->emit(privmsg => $message); 1 }) {
+			chomp (my $err = $@);
+			$self->logger->error("Error in privmsg hook: $err");
 		}
 	}
 }
@@ -481,17 +480,18 @@ sub irc_nick {
 
 sub irc_notice {
 	my ($self, $message) = @_;
-	my ($to, $msg) = @{$message->{params}};
-	my $from = parse_user($message->{prefix});
-	$self->logger->info("[notice $to] <$from> $msg") if $self->config->get('echo');
+	my ($to, $text) = @{$message->{params}};
+	my $from = parse_user($message->{prefix}) // '';
+	$self->logger->info("[notice $to] <$from> $text") if $self->config->get('echo');
 	my $sender = $self->user($from);
 	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
-	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $sender, channel => $channel, text => $msg);
-	my $hooks = $self->get_hooks('notice');
-	foreach my $hook (@$hooks) {
+	my $m = Bot::ZIRC::Message->new(network => $self, sender => $sender, channel => $channel, text => $text);
+	{
 		local $@;
-		eval { $hook->($obj) };
-		$self->logger->error("Error in notice hook: $@") if $@;
+		unless (eval { $self->bot->emit(notice => $m); 1 }) {
+			chomp (my $err = $@);
+			$self->logger->error("Error in notice hook: $err");
+		}
 	}
 }
 

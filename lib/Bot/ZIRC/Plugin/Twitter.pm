@@ -118,8 +118,8 @@ sub register {
 	
 	$bot->config->set_channel_default('twitter_trigger', 1);
 	
-	$bot->add_hook_privmsg(sub {
-		my $m = shift;
+	$bot->on(privmsg => sub {
+		my ($bot, $m) = @_;
 		my $message = $m->text;
 		return unless defined $m->channel;
 		return unless $m->config->get_channel($m->channel, 'twitter_trigger');

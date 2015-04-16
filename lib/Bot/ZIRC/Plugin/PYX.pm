@@ -45,18 +45,18 @@ sub register {
 			
 			if (defined $black_card_text) {
 				$white_card_count = 1 if $white_card_count < 1;
-				$self->get_white_cards($m, $white_card_count, sub {
+				$self->_get_white_cards($m, $white_card_count, sub {
 					my ($err, $cards) = @_;
 					return $m->reply($err) if $err;
-					show_pyx_match($m, $black_card_text, $cards);
+					$self->_show_pyx_match($m, $black_card_text, $cards);
 				});
 			} else {
-				$self->get_black_card($m, $black_card_pick, sub {
+				$self->_get_black_card($m, $black_card_pick, sub {
 					my ($err, $black_card) = @_;
 					return $m->reply($err) if $err;
 					$white_card_count //= $black_card->{pick} // 1;
 					if ($white_card_count > 0) {
-						$self->get_white_cards($m, $white_card_count, sub {
+						$self->_get_white_cards($m, $white_card_count, sub {
 							my ($err, $cards) = @_;
 							return $m->reply($err) if $err;
 							if (defined $white_cards) {
@@ -64,10 +64,10 @@ sub register {
 							} else {
 								$white_cards = $cards;
 							}
-							show_pyx_match($m, $black_card->{text}, $white_cards);
+							$self->_show_pyx_match($m, $black_card->{text}, $white_cards);
 						});
 					} else {
-						show_pyx_match($m, $black_card->{text}, $white_cards);
+						$self->_show_pyx_match($m, $black_card->{text}, $white_cards);
 					}
 				});
 			}
@@ -75,7 +75,7 @@ sub register {
 	);
 }
 
-sub get_black_card {
+sub _get_black_card {
 	my ($self, $m, $pick, $cb) = @_;
 	if (defined $pick) {
 		$pick = 1 if $pick < 1;
@@ -96,12 +96,12 @@ sub get_black_card {
 		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		my $card = $tx->res->json->{card};
 		return $cb->('No applicable black cards') unless defined $card and defined $card->{text};
-		$card->{text} = format_pyx_card($card->{text});
+		$card->{text} = _format_pyx_card($card->{text});
 		$cb->(undef, $card);
 	});
 }
 
-sub get_white_cards {
+sub _get_white_cards {
 	my ($self, $m, $count, $cb) = @_;
 	$count //= 1;
 	$count = 1 if $count < 1;
@@ -120,13 +120,13 @@ sub get_white_cards {
 		my ($ua, $tx) = @_;
 		return $cb->($self->ua_error($tx->error)) if $tx->error;
 		my $cards = $tx->res->json->{cards} // [];
-		$_ = format_pyx_card($_->{text}) for @$cards;
+		$_ = _format_pyx_card($_->{text}) for @$cards;
 		$cb->(undef, $cards);
 	});
 }
 
-sub show_pyx_match {
-	my ($m, $black_card, $white_cards) = @_;
+sub _show_pyx_match {
+	my ($self, $m, $black_card, $white_cards) = @_;
 	$black_card //= '';
 	$white_cards //= [];
 	
@@ -138,10 +138,10 @@ sub show_pyx_match {
 		}
 	}
 	
-	$m->reply("PYX Match: $black_card");
+	$m->reply_bare("PYX Match: $black_card");
 }
 
-sub format_pyx_card {
+sub _format_pyx_card {
 	my $text = shift // return undef;
 	my $b_code = chr 2;
 	$text =~ s!</?i>!/!g;

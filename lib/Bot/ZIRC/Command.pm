@@ -73,31 +73,26 @@ has 'usage_text' => (
 
 sub run {
 	my ($self, $m) = @_;
-	my $before_hooks = $m->network->get_hooks('before_command');
-	my $after_hooks = $m->network->get_hooks('after_command');
-	my $on_run = $self->on_run;
-	local $SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $m->logger->warn($msg) };
-	foreach my $hook (@$before_hooks) {
-		local $@;
-		eval { $hook->($m) };
-		$m->logger->error("Error in before-command hook: $@") if $@;
-	}
+	local $SIG{__WARN__} = sub { chomp(my $msg = shift); $m->logger->warn($msg) };
 	local $@;
-	my $rc = eval { $on_run->($m) };
-	if ($@) {
-		my $err = $@;
-		chomp $err;
+	unless (eval { $self->bot->emit(before_command => $m); 1 }) {
+		chomp (my $err = $@);
+		$m->logger->error("Error in before-command hook: $err");
+	}
+	my $rc;
+	unless (eval { $rc = $self->on_run->($m); 1 }) {
+		chomp (my $err = $@);
 		$m->logger->error("Error running command $self: $err");
 		$m->reply("Internal error");
-	} elsif (defined $rc and lc $rc eq 'usage') {
+	}
+	if (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));
 	}
-	foreach my $hook (@$after_hooks) {
-		local $@;
-		eval { $hook->($m) };
-		$m->logger->error("Error in after-command hook: $@") if $@;
+	unless (eval { $self->bot->emit(after_command => $m); 1 }) {
+		chomp (my $err = $@);
+		$m->logger->error("Error in after-command hook: $err");
 	}
 	return $self;
 }
