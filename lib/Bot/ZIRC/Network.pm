@@ -42,7 +42,7 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::ZIRC->new },
 	weak_ref => 1,
-	handles => [qw/bot_version config_dir get_is_stopping storage ua/],
+	handles => [qw/bot_version config_dir is_stopping storage ua/],
 );
 
 has 'init_config' => (

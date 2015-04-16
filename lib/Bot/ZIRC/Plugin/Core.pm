@@ -106,6 +106,13 @@ sub register {
 			$command_name //= $self->more_commands->{$m->network}{$channel_name};
 			return $m->reply("No more to display") unless defined $command_name;
 			my $command = $self->bot->get_command($command_name);
+			if (!defined $command and $m->config->get('commands','prefixes')) {
+				my $cmds = $self->bot->get_commands_by_prefix($command_name);
+				foreach my $name (@$cmds) {
+					$command = $self->bot->get_command($cmds->[0]);
+					last if $command->has_on_more;
+				}
+			}
 			return $m->reply("No more to display for $command_name")
 				unless $command and $command->has_on_more;
 			$self->more_commands->{$m->network}{$channel_name} = lc $command->name;

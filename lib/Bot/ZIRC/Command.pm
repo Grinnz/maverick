@@ -75,7 +75,7 @@ sub run {
 	my ($self, $m) = @_;
 	local $SIG{__WARN__} = sub { chomp(my $msg = shift); $m->logger->warn($msg) };
 	local $@;
-	unless (eval { $self->bot->emit(before_command => $m); 1 }) {
+	unless (eval { $m->bot->emit(before_command => $m); 1 }) {
 		chomp (my $err = $@);
 		$m->logger->error("Error in before-command hook: $err");
 	}
@@ -90,7 +90,7 @@ sub run {
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));
 	}
-	unless (eval { $self->bot->emit(after_command => $m); 1 }) {
+	unless (eval { $m->bot->emit(after_command => $m); 1 }) {
 		chomp (my $err = $@);
 		$m->logger->error("Error in after-command hook: $err");
 	}
