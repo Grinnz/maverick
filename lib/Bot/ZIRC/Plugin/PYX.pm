@@ -25,7 +25,7 @@ sub register {
 			
 			my ($black_card_text, $white_cards, $black_card_pick, $white_card_count);
 			if (length $args) {
-				if ($args =~ m/^w\s/) {
+				if ($args =~ m/^w\s/i) {
 					my @white_cards = $args =~ m/w\s+(.+?)(?=(?:\s+w\s|$))/ig;
 					undef $_ for grep { m/^[?_]+$/ } @white_cards;
 					splice @white_cards, PYX_MAX_PICK if @white_cards > PYX_MAX_PICK;
