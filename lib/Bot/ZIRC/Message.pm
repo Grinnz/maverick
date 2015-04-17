@@ -134,12 +134,12 @@ sub _reply {
 	if (defined $channel) {
 		$message = "$sender: $message" if defined $sender;
 		my $reply = $self->_limit_reply(privmsg => $channel, $more_str, $message);
-		$self->network->write(privmsg => $channel, $reply . $more_str);
+		$self->network->write(privmsg => $channel, ":$reply$more_str");
 	} elsif (defined $sender) {
 		my @writes;
 		$message .= $more_str;
 		foreach my $reply ($self->_split_reply(privmsg => $sender, $message)) {
-			push @writes, sub { $self->network->write(privmsg => $sender, $reply, shift->begin) };
+			push @writes, sub { $self->network->write(privmsg => $sender, ":$reply", shift->begin) };
 		}
 		Mojo::IOLoop->delay(@writes);
 	} else {
