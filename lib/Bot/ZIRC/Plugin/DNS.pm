@@ -32,9 +32,13 @@ has 'watchers' => (
 sub BUILD {
 	my $self = shift;
 	return unless $self->native;
-	eval { require Net::DNS::Native };
-	if ($@) {
-		warn $@;
+	my $err;
+	{
+		local $@;
+		eval { require Net::DNS::Native; 1 } or $err = $@;
+	}
+	if (defined $err) {
+		warn $err;
 		$self->_set_native(0);
 	}
 }

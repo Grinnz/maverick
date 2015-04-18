@@ -201,13 +201,17 @@ sub get_network_names {
 sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
-	croak "Network name $name contains invalid characters" unless $name =~ /^[-.\w]+$/;
+	croak "Network name $name contains invalid characters" if $name =~ /[^-.\w]/;
 	croak "Network $name already exists" if exists $self->networks->{lc $name};
 	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
 	my $class = delete $config->{class} // 'Bot::ZIRC::Network';
 	$class = "Bot::ZIRC::Network::$class" unless $class =~ /::/;
-	local $@;
-	eval "require $class; 1" or croak $@;
+	my $err;
+	{
+		local $@;
+		eval "require $class; 1" or $err = $@;
+	}
+	croak $err if defined $err;
 	$self->networks->{lc $name} = $class->new(name => $name, bot => $self, config => $config);
 	return $self;
 }
@@ -237,18 +241,24 @@ sub register_plugin {
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
 	return $self if $self->has_plugin($class);
 	$self->plugins->{$class} = undef; # Avoid circular dependency issues
-	local $@;
-	my $plugin = eval {
-		eval "require $class; 1" or die $@;
-		die "$class is not a Bot::ZIRC::Plugin\n"
-			unless "$class"->isa('Bot::ZIRC::Plugin');
-		my @params = ref $params eq 'HASH' ? %$params : ();
-		my $plugin = $class->new(@params, bot => $self);
-		$plugin->register($self);
-		return $plugin;
-	};
-	if ($@) {
-		my $err = $@;
+	my ($plugin, $err);
+	{
+		local $@;
+		my $loaded = eval "require $class; 1";
+		if ($loaded) {
+			eval {
+				die "$class is not a Bot::ZIRC::Plugin\n"
+					unless $class->isa('Bot::ZIRC::Plugin');
+				my @params = ref $params eq 'HASH' ? %$params : ();
+				$plugin = $class->new(@params, bot => $self);
+				$plugin->register($self);
+				1;
+			} or $err = $@;
+		} else {
+			$err = $@;
+		}
+	}
+	if (defined $err) {
 		delete $self->plugins->{$class};
 		croak "Plugin $class could not be registered: $err";
 	}

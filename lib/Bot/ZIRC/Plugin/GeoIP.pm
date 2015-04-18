@@ -21,9 +21,12 @@ sub _build_geoip {
 	my $self = shift;
 	my $file = $self->bot->config->get('apis', 'geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
-	local $@;
-	my $geoip = eval { GeoIP2::Database::Reader->new(file => $file) };
-	die $@ if $@;
+	my ($geoip, $err);
+	{
+		local $@;
+		eval { $geoip = GeoIP2::Database::Reader->new(file => $file); 1 } or $err = $@;
+	}
+	die $err if defined $err;
 	return $geoip;
 }
 
@@ -64,11 +67,12 @@ sub geoip_locate {
 	my ($self, $ip) = @_;
 	croak 'Undefined IP address' unless defined $ip;
 	die "Invalid IP address $ip\n" unless is_ipv4 $ip or is_ipv6 $ip;
-	local $@;
-	my $record = eval { $self->geoip->city(ip => $ip) };
-	my $err;
-	if ($@) {
-		$err = $@;
+	my ($record, $err);
+	{
+		local $@;
+		eval { $record = $self->geoip->city(ip => $ip); 1 } or $err = $@;
+	}
+	if (defined $err) {
 		die $err unless blessed $err and $err->isa('Throwable::Error');
 		$err = $err->message;
 	}
