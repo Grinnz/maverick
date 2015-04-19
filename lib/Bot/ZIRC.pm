@@ -408,10 +408,10 @@ sub stop {
 
 sub reload {
 	my $self = shift;
-	$self->clear_logger;
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
 	$_->reload for values %{$self->networks}, values %{$self->plugins};
+	$self->clear_logger;
 	return $self;
 }
 

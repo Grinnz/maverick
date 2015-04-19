@@ -203,9 +203,9 @@ sub stop {
 
 sub reload {
 	my $self = shift;
-	$self->clear_logger;
 	$self->logger->debug("Reloading network $self");
 	$self->config->reload;
+	$self->clear_logger;
 	return $self;
 }
 
