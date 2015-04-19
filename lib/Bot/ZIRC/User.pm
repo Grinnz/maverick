@@ -186,7 +186,7 @@ sub check_access {
 	}
 	
 	# Check for sufficient bot access
-	unless ($self->has_identity or $self->has_bot_access($required)) {
+	unless (defined $self->identity or $self->has_bot_access($required)) {
 		$self->logger->debug("Rechecking access for $self after whois");
 		return $network->after_whois($self->nick, sub {
 			my ($network, $self) = @_;
