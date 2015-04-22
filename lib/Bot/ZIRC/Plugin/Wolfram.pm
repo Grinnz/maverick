@@ -40,13 +40,12 @@ sub register {
 				my $delay = shift;
 				if (is_ipv4 $host or is_ipv6 $host) {
 					$delay->pass($host);
-				} elsif ($self->bot->has_plugin_method('dns_resolve')) {
+				} elsif ($self->bot->has_plugin_method('dns_resolve_ips')) {
 					my $cb = $delay->begin(0);
-					$self->bot->dns_resolve($host, sub {
-						my ($err, @results) = @_;
-						my $addrs = $self->bot->dns_ip_results(\@results);
+					$self->bot->dns_resolve_ips($host, sub {
+						my $addrs = shift;
 						$cb->($addrs->[0]);
-					});
+					})->catch(sub { $cb->(undef) });
 				} else {
 					$delay->pass(undef);
 				}

@@ -46,25 +46,41 @@ sub BUILD {
 sub dns_resolve {
 	my ($self, $host, $cb) = @_;
 	croak "No hostname to resolve" unless defined $host;
-	if ($self->native and $cb) {
-		croak "Invalid dns_resolve callback" unless ref $cb eq 'CODE';
-		my $dns = $self->resolver;
-		my $sock = $dns->getaddrinfo($host);
-		$self->watchers->{fileno $sock} = $sock;
-		Mojo::IOLoop->singleton->reactor->io($sock, sub {
-			Mojo::IOLoop->singleton->reactor->remove($sock);
-			delete $self->watchers->{fileno $sock};
-			$cb->($dns->get_result($sock));
-		})->watch($sock, 1, 0);
-	} elsif ($cb) {
-		$cb->(getaddrinfo $host);
-	} else {
-		return getaddrinfo $host;
+	unless ($cb) {
+		my ($err, @results) = getaddrinfo $host;
+		die $err if defined $err;
+		return \@results;
 	}
-	return undef;
+	croak "Invalid dns_resolve callback" unless ref $cb eq 'CODE';
+	return Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		my $next = $delay->begin(0);
+		if ($self->native) {
+			my $dns = $self->resolver;
+			my $sock = $dns->getaddrinfo($host);
+			$self->watchers->{fileno $sock} = $sock;
+			Mojo::IOLoop->singleton->reactor->io($sock, sub {
+				Mojo::IOLoop->singleton->reactor->remove($sock);
+				delete $self->watchers->{fileno $sock};
+				$next->($dns->get_result($sock));
+			})->watch($sock, 1, 0);
+		} else {
+			$next->(getaddrinfo $host);
+		}
+	}, sub {
+		my ($delay, $err, @results) = @_;
+		die "$err\n" if $err;
+		$cb->(\@results);
+	});
 }
 
-sub dns_ip_results {
+sub dns_resolve_ips {
+	my ($self, $host, $cb) = @_;
+	return $self->_ip_results($self->dns_resolve($host)) unless $cb;
+	return $self->dns_resolve($host, sub { $cb->($self->_ip_results($_[0])) });
+}
+
+sub _ip_results {
 	my ($self, $results) = @_;
 	my %found;
 	my @parsed;
@@ -85,7 +101,7 @@ sub register {
 	my ($self, $bot) = @_;
 	
 	$bot->add_plugin_method($self, 'dns_resolve');
-	$bot->add_plugin_method($self, 'dns_ip_results');
+	$bot->add_plugin_method($self, 'dns_resolve_ips');
 	
 	$bot->add_command(
 		name => 'dns',
@@ -104,14 +120,12 @@ sub register {
 			}
 			
 			$m->logger->debug("Resolving $hostname");
-			$self->bot->dns_resolve($hostname, sub {
-				my ($err, @results) = @_;
-				return $m->reply("Failed to resolve $hostname: $err") if $err;
-				my $addrs = $self->bot->dns_ip_results(\@results);
+			$self->bot->dns_resolve_ips($hostname, sub {
+				my $addrs = shift;
 				return $m->reply("No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
 				$m->reply("DNS results for $say_result: $addr_list");
-			});
+			})->catch(sub { $m->reply("Failed to resolve $hostname: $_[1]") });
 		},
 	);
 }
@@ -163,22 +177,24 @@ will fallback to a blocking method.
 
 head2 dns_resolve
 
- my ($err, $results) = $bot->dns_resolve($hostname);
+ my $results = $bot->dns_resolve($hostname);
  $bot->dns_resolve($hostname, sub {
-   my ($err, $results) = @_;
- });
+   my $results = shift;
+ })->catch(sub { $m->reply("DNS error: $_[1]") });
 
-Attempt to resolve a hostname, returning any error as the first return value
-and an arrayref of results as the second return value, in the format returned
-by C<getaddrinfo> in L<Socket>.
+Attempt to resolve a hostname, returning an arrayref of results in the format
+returned by C<getaddrinfo> in L<Socket>. Pass a callback to run the query
+non-blocking if possible. Throws an exception on DNS error.
 
-head2 dns_ip_results
+head2 dns_resolve_ips
 
- my $ips = $bot->dns_ip_results($results);
+ my $ips = $bot->dns_resolve_ips($hostname);
+ $bot->dns_resolve_ips($hostname, sub {
+   my $ips = shift;
+ })->catch(sub { $m->reply("DNS error: $_[1]") });
 
-Translate an arrayref of C<getaddrinfo> results such as returned by
-L</"dns_resolve"> into an arrayref of IPv4 or IPv6 address strings, removing
-duplicates and unknown results.
+Attempt to resolve a hostname with L</"dns_resolve">, returning an arrayref of
+IPv4 and IPv6 address strings with duplicates and other results removed.
 
 =head1 COMMANDS
 

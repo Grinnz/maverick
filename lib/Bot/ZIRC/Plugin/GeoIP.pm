@@ -3,6 +3,7 @@ package Bot::ZIRC::Plugin::GeoIP;
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
+use Mojo::IOLoop;
 use Scalar::Util 'blessed';
 
 use Moo;
@@ -55,59 +56,70 @@ sub register {
 			}
 			
 			$self->bot->geoip_locate_host($host, sub {
-				my ($err, $record) = @_;
-				return $m->reply("Error locating $say_target: $err") if $err;
+				my $record = shift;
 				return $m->reply("GeoIP location for $say_target: "._location_str($record));
-			});
+			})->catch(sub { $m->reply("Error locating $say_target: $_[1]") });
 		},
 	);
 }
 
 sub geoip_locate {
 	my ($self, $ip) = @_;
-	croak 'Undefined IP address' unless defined $ip;
-	die "Invalid IP address $ip\n" unless is_ipv4 $ip or is_ipv6 $ip;
+	die "Invalid IP address $ip\n" unless defined $ip and (is_ipv4 $ip or is_ipv6 $ip);
 	my ($record, $err);
 	{
 		local $@;
 		eval { $record = $self->geoip->city(ip => $ip); 1 } or $err = $@;
 	}
 	if (defined $err) {
-		die $err unless blessed $err and $err->isa('Throwable::Error');
-		$err = $err->message;
+		die $err->message."\n" if blessed $err and $err->isa('Throwable::Error');
+		chomp $err;
+		die "$err\n";
 	}
-	return ($err, $record);
+	return $record;
 }
 
 sub geoip_locate_host {
 	my ($self, $host, $cb) = @_;
 	croak 'Undefined hostname' unless defined $host;
-	return $cb ? $cb->($self->bot->geoip_locate($host)) : $self->bot->geoip_locate($host)
-		if is_ipv4 $host or is_ipv6 $host or !$self->bot->has_plugin_method('dns_resolve');
-	if ($cb) {
-		$self->bot->dns_resolve($host, sub {
-			$cb->($self->_on_dns_host(@_));
-		});
-	} else {
-		return $self->_on_dns_host($self->bot->dns_resolve($host));
+	unless ($cb) {
+		return $self->bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
+		die "DNS plugin is required to resolve hostnames\n"
+			unless $self->bot->has_plugin_method('dns_resolve_ips');
+		return $self->_on_dns_host($self->bot->dns_resolve_ips($host));
 	}
+	return Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		return $cb->($self->bot->geoip_locate($host))
+			if is_ipv4 $host or is_ipv6 $host;
+		die "DNS plugin is required to resolve hostnames\n"
+			unless $self->bot->has_plugin_method('dns_resolve_ips');
+		$self->bot->dns_resolve_ips($host, sub {
+			$cb->($self->_on_dns_host($_[0]));
+		})->catch(sub { $delay->emit(error => $_[1]) });
+	});
 }
 
 sub _on_dns_host {
-	my ($self, $err, @results) = @_;
-	return $err if $err;
-	my $addrs = $self->bot->dns_ip_results(\@results);
-	return 'No DNS results' unless @$addrs;
+	my ($self, $addrs) = @_;
+	die "No DNS results\n" unless @$addrs;
 	my $last_err = 'No valid DNS results';
 	my $best_record;
 	foreach my $addr (@$addrs) {
 		next unless is_ipv4 $addr or is_ipv6 $addr;
-		my ($err, $record) = $self->bot->geoip_locate($addr);
-		return (undef, $record) if !$err and defined $record->city->name;
-		$best_record //= $record if !$err;
-		$last_err = $err if $err;
+		my ($record, $err);
+		{
+			local $@;
+			eval { $record = $self->bot->geoip_locate($addr); 1 } or $err = $@;
+		}
+		if ($err) {
+			$last_err = $err;
+		} else {
+			return $record if defined $record->city->name;
+			$best_record //= $record;
+		}
 	}
-	return defined $best_record ? (undef, $best_record) : $last_err;
+	return $best_record // die $last_err;
 }
 
 sub _location_str {
@@ -146,22 +158,22 @@ requires the libmaxminddb library; it will be automatically used if present.
 
 =head2 geoip_locate
 
- my ($err, $record) = $bot->geoip_locate($ip);
+ my $record = $bot->geoip_locate($ip);
 
-Attempt to locate an IP address in the GeoIP database. On error, returns an
-error message as the first return value. On success, the GeoIP record as a
-L<GeoIP2::Model::City> object is returned as the second return value.
+Attempt to locate an IP address in the GeoIP database. Returns the GeoIP record
+as a L<GeoIP2::Model::City> object. Throws an exception on error.
 
 =head2 geoip_locate_host
 
- my ($err, $record) = $bot->geoip_locate_host($hostname);
+ my $record = $bot->geoip_locate_host($hostname);
  $bot->geoip_locate_host($hostname, sub {
-   my ($err, $record) = @_;
- });
+   my $record = shift;
+ })->catch(sub { $m->reply("Error locating $hostname: $_[1]") });
 
 Attempt to resolve a hostname and locate the resulting IP address in the GeoIP
-database. If a callback is passed, non-blocking DNS resolution will be used if
-available. Requires the L<Bot::ZIRC::Plugin::DNS> plugin.
+database with L</"geoip_locate">. If a callback is passed, non-blocking DNS
+resolution will be used if available. Throws an exception on error. Requires
+the L<Bot::ZIRC::Plugin::DNS> plugin.
 
 =head1 COMMANDS
 
