@@ -139,6 +139,7 @@ sub _display_result {
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
 	
 	my $description = $result->{snippet}{description} // '';
+	$description =~ s/\n/ /g;
 	$description = " - $description" if length $description;
 	
 	my $b_code = chr 2;
@@ -155,6 +156,7 @@ sub _display_triggered {
 	my $ytchannel = $result->{snippet}{channelTitle} // '';
 	
 	my $description = $result->{snippet}{description} // '';
+	$description =~ s/\n/ /g;
 	$description = " - $description" if length $description;
 	
 	my $b_code = chr 2;
