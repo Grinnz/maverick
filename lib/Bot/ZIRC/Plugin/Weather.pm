@@ -319,26 +319,26 @@ C<wunderground_api_key> in section C<apis>.
 
 =head2 weather_autocomplete_location_code
 
- my ($err, $code) = $bot->weather_autocomplete_location_code($query);
+ my $code = $bot->weather_autocomplete_location_code($query);
  $bot->weather_autocomplete_location_code($query, sub {
-   my ($err, $code) = @_;
- });
+   my $code = shift;
+ })->catch(sub { $m->reply("Error locating $query: $_[1]") });
 
-Attempt to find a location based on a string. On error, the first return value
-contains the error message. On success, the second return value contains the
-location code. Pass a callback to perform the query non-blocking.
+Attempt to find a location based on a string. Returns the location code on
+success, or throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head2 weather_location_data
 
- my ($err, $data) = $bot->weather_location_data($code);
+ my $data = $bot->weather_location_data($code);
  $bot->weather_location_data($code, sub {
-   my ($err, $data) = @_;
- });
+   my $data = shift;
+ })->catch(sub { $m->reply("Error retrieving weather data: $_[1]") });
 
-Retrieve the weather and forecast data for a location code. On error, the first
-return value contains the error message. On success, the second return value
-contains the weather data, consisting of C<location>, C<current_observation>,
-and C<forecast>. Pass a callback to perform the query non-blocking.
+Retrieve the weather and forecast data for a location code. Returns a hashref
+containing the weather data, consisting of C<location>, C<current_observation>,
+and C<forecast>. Throws an exception on error. Pass a callback to perform the
+query non-blocking.
 
 =head1 COMMANDS
 
