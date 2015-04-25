@@ -48,10 +48,10 @@ sub register {
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
-					$self->bot->geoip_locate_host($hostname, shift->begin(0));
+					$self->bot->geoip_locate_host($hostname, shift->begin(0))
+						->catch(sub { $m->reply("Error locating $target: $_[1]") });
 				}, sub {
-					my ($delay, $err, $record) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
+					my ($delay, $record) = @_;
 					my @location_parts = ($record->city->name);
 					push @location_parts, $record->country->iso_code eq 'US'
 						? $record->most_specific_subdivision->iso_code : $record->country->name;
@@ -102,10 +102,10 @@ sub register {
 					unless defined $hostname;
 				
 				Mojo::IOLoop->delay(sub {
-					$self->bot->geoip_locate_host($hostname, shift->begin(0));
+					$self->bot->geoip_locate_host($hostname, shift->begin(0))
+						->catch(sub { $m->reply("Error locating $target: $_[1]") });
 				}, sub {
-					my ($delay, $err, $record) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
+					my ($delay, $record) = @_;
 					my @location_parts = ($record->city->name);
 					push @location_parts, $record->country->iso_code eq 'US'
 						? $record->most_specific_subdivision->iso_code : $record->country->name;

@@ -96,7 +96,7 @@ sub geoip_locate_host {
 			unless $self->bot->has_plugin_method('dns_resolve_ips');
 		$self->bot->dns_resolve_ips($host, sub {
 			$cb->($self->_on_dns_host($_[0]));
-		})->catch(sub { $delay->emit(error => $_[1]) });
+		})->catch(sub { $delay->emit(error => "DNS error: $_[1]") });
 	});
 }
 
@@ -112,7 +112,7 @@ sub _on_dns_host {
 			local $@;
 			eval { $record = $self->bot->geoip_locate($addr); 1 } or $err = $@;
 		}
-		if ($err) {
+		if (defined $err) {
 			$last_err = $err;
 		} else {
 			return $record if defined $record->city->name;
