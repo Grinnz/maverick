@@ -2,6 +2,7 @@
 requires 'Carp';
 requires 'Data::Validate::IP';
 requires 'GeoIP2', '2.000';
+requires 'Mojolicious', '6.0';
 requires 'Moo', '2.000';
 requires 'Scalar::Util';
 recommends 'MaxMind::DB::Reader::XS';
