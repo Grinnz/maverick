@@ -158,7 +158,7 @@ sub weather_location_data {
 	
 	my $cached = $self->_weather_cache->{$code};
 	if (defined $cached and $cached->{expiration} > time) {
-		return $cb ? $cb->($cached) : $cached;
+		return $cb ? Mojo::IOLoop->delay(sub { $cb->($cached) }) : $cached;
 	}
 	
 	die WEATHER_API_KEY_MISSING unless defined $self->api_key;
