@@ -191,7 +191,7 @@ sub register {
 				return $m->reply($err) if $err;
 				my ($from, $to) = @{$delay->data}{'from','to'};
 				$m->reply("Translated $from => $to: $translated");
-			});
+			})->catch(sub { $m->reply("Internal error") });
 		},
 	);
 }

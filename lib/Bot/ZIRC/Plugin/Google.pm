@@ -139,7 +139,7 @@ sub register {
 				my $reply_str = join '; ', map { "$_: $counts{$_}" } @challengers;
 				my $winner_str = @winners > 1 ? 'Tie between '.join(' / ', @winners) : "Winner: $winners[0]";
 				$m->reply("Google Fight! $reply_str. $winner_str!");
-			});
+			})->catch(sub { $m->reply("Internal error") });
 		},
 	);
 }
