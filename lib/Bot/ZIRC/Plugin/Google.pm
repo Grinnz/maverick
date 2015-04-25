@@ -3,6 +3,7 @@ package Bot::ZIRC::Plugin::Google;
 use Carp 'croak';
 use Lingua::EN::Number::Format::MixWithWords 'format_number_mix';
 use List::UtilsBy 'max_by';
+use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -48,8 +49,7 @@ sub register {
 			return 'usage' unless length $query;
 			
 			$self->google_search_web($query, sub {
-				my ($err, $results) = @_;
-				return $m->reply($err) if $err;
+				my $results = shift;
 				return $m->reply("No results for Google search") unless @$results;
 				
 				my $first_result = shift @$results;
@@ -57,7 +57,7 @@ sub register {
 				$self->_results_cache->{web}{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
 				$self->_google_result_web($m, $first_result);
-			});
+			})->catch(sub { $m->reply("Google search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
@@ -81,8 +81,7 @@ sub register {
 			return 'usage' unless length $query;
 			
 			$self->google_search_image($query, sub {
-				my ($err, $results) = @_;
-				return $m->reply($err) if $err;
+				my $results = shift;
 				return $m->reply("No results for Google image search") unless @$results;
 				
 				my $first_result = shift @$results;
@@ -90,7 +89,7 @@ sub register {
 				$self->_results_cache->{image}{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
 				$self->_google_result_image($m, $first_result);
-			});
+			})->catch(sub { $m->reply("Google search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
@@ -119,14 +118,14 @@ sub register {
 			Mojo::IOLoop->delay(sub {
 				my $delay = shift;
 				foreach my $challenger (@challengers) {
-					$self->google_search_web_count($challenger, $delay->begin(0));
+					$self->google_search_web_count($challenger, $delay->begin(0))
+						->catch(sub { $m->reply("Google search error: $_[1]") });
 				}
 			}, sub {
 				my $delay = shift;
 				my %counts;
 				foreach my $challenger (@challengers) {
-					my ($err, $count) = (shift, shift);
-					return $m->reply($err) if $err;
+					my $count = shift;
 					$counts{$challenger} = $count // 0;
 				}
 				my @winners = max_by { $counts{$_} } @challengers;
@@ -151,17 +150,18 @@ sub google_search_web {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
 		cx => $self->cse_id, q => $query, safe => 'high');
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->{items}//[]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->{items}//[]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->{items}//[];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->{items}//[]);
+	});
 }
 
 sub google_search_web_count {
@@ -171,17 +171,18 @@ sub google_search_web_count {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
 		cx => $self->cse_id, q => $query, safe => 'off', num => 1);
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->{searchInformation}{totalResults}//0);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->{searchInformation}{totalResults}//0);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->{searchInformation}{totalResults}//0;
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->{searchInformation}{totalResults}//0);
+	});
 }
 
 sub google_search_image {
@@ -191,17 +192,18 @@ sub google_search_image {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
 		cx => $self->cse_id, q => $query, safe => 'high', searchType => 'image');
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->{items}//[]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->{items}//[]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->{items}//[];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->{items}//[]);
+	});
 }
 
 sub _google_result_web {
@@ -242,7 +244,7 @@ Bot::ZIRC::Plugin::Google - Google search plugin for Bot::ZIRC
  
  # Standalone usage
  my $google = Bot::ZIRC::Plugin::Google->new(api_key => $api_key, cse_id => $cse_id);
- my ($err, $results) = $google->google_search_web($query);
+ my $results = $google->google_search_web($query);
 
 =head1 DESCRIPTION
 
@@ -273,25 +275,25 @@ C<google_cse_id> in section C<apis>.
 
 =head2 google_search_web
 
- my ($err, $results) = $bot->google_search_web($query);
+ my $results = $bot->google_search_web($query);
  $bot->google_search_web($query, sub {
-   my ($err, $results) = @_;
- });
+   my $results = shift;
+ })->catch(sub { $m->reply("Google search error: $_[1]") });
 
-Search Google web search. On error, the first return value contains the error
-message. On success, the second return value contains the results (if any) in
-an arrayref. Pass a callback to perform the query non-blocking.
+Search Google web search. Returns the results (if any) in an arrayref, or
+throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head2 google_search_image
 
- my ($err, $results) = $bot->google_search_image($query);
+ my $results = $bot->google_search_image($query);
  $bot->google_search_image($query, sub {
-   my ($err, $results) = @_;
- });
+   my $results = shift;
+ })->catch(sub { $m->reply("Google search error: $_[1]") });
 
-Search Google image search. On error, the first return value contains the error
-message. On success, the second return value contains the results (if any) in
-an arrayref. Pass a callback to perform the query non-blocking.
+Search Google image search. Returns the results (if any) in an arrayref, or
+throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head1 COMMANDS
 
