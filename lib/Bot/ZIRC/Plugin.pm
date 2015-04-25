@@ -29,8 +29,8 @@ sub stop {}
 sub ua_error {
 	my ($self, $err) = @_;
 	return $err->{code}
-		? "Transport error $err->{code}: $err->{message}"
-		: "Connection error: $err->{message}";
+		? "Transport error $err->{code}: $err->{message}\n"
+		: "Connection error: $err->{message}\n";
 }
 
 sub fork_call {

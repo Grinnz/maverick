@@ -42,43 +42,36 @@ sub register {
 			my $m = shift;
 			my $target = $m->args;
 			$target = $m->sender unless length $target;
-			if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
-				my $hostname = $m->network->user($target)->host;
-				return $m->reply("Unable to find hostname for $target")
-					unless defined $hostname;
-				
-				Mojo::IOLoop->delay(sub {
-					$self->bot->geoip_locate_host($hostname, shift->begin(0))
-						->catch(sub { $m->reply("Error locating $target: $_[1]") });
-				}, sub {
-					my ($delay, $record) = @_;
-					my @location_parts = ($record->city->name);
-					push @location_parts, $record->country->iso_code eq 'US'
-						? $record->most_specific_subdivision->iso_code : $record->country->name;
-					my $location = join ', ', grep { defined } @location_parts;
-					$self->weather_autocomplete_location_code($location, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $code) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
-					$self->weather_location_data($code, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $data) = @_;
-					return $m->reply("Error retrieving weather data for $target: $err") if $err;
-					return $self->_display_weather($m, $data);
-				});
-			} else {
-				Mojo::IOLoop->delay(sub {
-					$self->weather_autocomplete_location_code($target, shift->begin(0));
-				}, sub {
-					my ($delay, $err, $code) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
-					$self->weather_location_data($code, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $data) = @_;
-					return $m->reply("Error retrieving weather data for $target: $err") if $err;
-					return $self->_display_weather($m, $data);
-				});
-			}
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
+					my $hostname = $m->network->user($target)->host;
+					return $m->reply("Unable to find hostname for $target")
+						unless defined $hostname;
+					my $end = $delay->begin(0);
+					$self->bot->geoip_locate_host($hostname, sub {
+						my $record = shift;
+						my @location_parts = ($record->city->name);
+						push @location_parts, $record->country->iso_code eq 'US'
+							? $record->most_specific_subdivision->iso_code : $record->country->name;
+						my $location = join ', ', grep { defined } @location_parts;
+						$end->($location);
+					})->catch(sub { $m->reply("Error locating $target: $_[1]") });
+				} else {
+					$delay->pass($target);
+				}
+			}, sub {
+				my ($delay, $location) = @_;
+				$self->weather_autocomplete_location_code($location, $delay->begin(0))
+					->catch(sub { $m->reply("Error locating $target: $_[1]") });
+			}, sub {
+				my ($delay, $code) = @_;
+				$self->weather_location_data($code, $delay->begin(0))
+					->catch(sub { $m->reply("Error retrieving weather data for $target: $_[1]") });
+			}, sub {
+				my ($delay, $data) = @_;
+				return $self->_display_weather($m, $data);
+			})->catch(sub { $m->reply("Internal error") });
 		},
 	);
 	
@@ -94,45 +87,36 @@ sub register {
 				$max_days = $1;
 			}
 			$target = $m->sender unless length $target;
-			if (exists $m->network->users->{lc $target}) {
-				return $m->reply("GeoIP plugin is required to display weather for a user")
-					unless $self->bot->has_plugin_method('geoip_locate_host');
-				my $hostname = $m->network->user($target)->host;
-				return $m->reply("Unable to find hostname for $target")
-					unless defined $hostname;
-				
-				Mojo::IOLoop->delay(sub {
-					$self->bot->geoip_locate_host($hostname, shift->begin(0))
-						->catch(sub { $m->reply("Error locating $target: $_[1]") });
-				}, sub {
-					my ($delay, $record) = @_;
-					my @location_parts = ($record->city->name);
-					push @location_parts, $record->country->iso_code eq 'US'
-						? $record->most_specific_subdivision->iso_code : $record->country->name;
-					my $location = join ', ', grep { defined } @location_parts;
-					$self->weather_autocomplete_location_code($location, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $code) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
-					$self->weather_location_data($code, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $data) = @_;
-					return $m->reply("Error retrieving forecast data for $target: $err") if $err;
-					return $self->_display_forecast($m, $data, $max_days);
-				});
-			} else {
-				Mojo::IOLoop->delay(sub {
-					$self->weather_autocomplete_location_code($target, shift->begin(0));
-				}, sub {
-					my ($delay, $err, $code) = @_;
-					return $m->reply("Error locating $target: $err") if $err;
-					$self->weather_location_data($code, $delay->begin(0));
-				}, sub {
-					my ($delay, $err, $data) = @_;
-					return $m->reply("Error retrieving forecast data for $target: $err") if $err;
-					return $self->_display_forecast($m, $data, $max_days);
-				});
-			}
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
+					my $hostname = $m->network->user($target)->host;
+					return $m->reply("Unable to find hostname for $target")
+						unless defined $hostname;
+					my $end = $delay->begin(0);
+					$self->bot->geoip_locate_host($hostname, sub {
+						my $record = shift;
+						my @location_parts = ($record->city->name);
+						push @location_parts, $record->country->iso_code eq 'US'
+							? $record->most_specific_subdivision->iso_code : $record->country->name;
+						my $location = join ', ', grep { defined } @location_parts;
+						$end->($location);
+					})->catch(sub { $m->reply("Error locating $target: $_[1]") });
+				} else {
+					$delay->pass($target);
+				}
+			}, sub {
+				my ($delay, $location) = @_;
+				$self->weather_autocomplete_location_code($location, $delay->begin(0))
+					->catch(sub { $m->reply("Error locating $target: $_[1]") });
+			}, sub {
+				my ($delay, $code) = @_;
+				$self->weather_location_data($code, $delay->begin(0))
+					->catch(sub { $m->reply("Error retrieving forecast data for $target: $_[1]") });
+			}, sub {
+				my ($delay, $data) = @_;
+				return $self->_display_forecast($m, $data, $max_days);
+			})->catch(sub { $m->reply("Internal error") });
 		},
 	);
 }
@@ -140,21 +124,19 @@ sub register {
 sub weather_autocomplete_location_code {
 	my ($self, $query, $cb) = @_;
 	my $url = Mojo::URL->new(WEATHER_API_AUTOCOMPLETE_ENDPOINT)->query(h => 0, query => $query);
-	if ($cb) {
-		$self->ua->get($url, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			my $code = $self->_autocomplete_location_code($tx->res->json);
-			return $cb->('No results') unless defined $code;
-			return $cb->(undef, $code);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url);
-		return $self->ua_error($tx->error) if $tx->error;
-		my $code = $self->_autocomplete_location_code($tx->res->json);
-		return 'No results' unless defined $code;
-		return (undef, $code);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $self->_autocomplete_location_code($tx->res->json) // die "Location not found\n";
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		my $code = $self->_autocomplete_location_code($tx->res->json) // die "Location not found\n";
+		$cb->($code);
+	});
 }
 
 sub _autocomplete_location_code {
@@ -176,23 +158,24 @@ sub weather_location_data {
 	
 	my $cached = $self->_weather_cache->{$code};
 	if (defined $cached and $cached->{expiration} > time) {
-		return $cb ? $cb->(undef, $cached) : (undef, $cached);
+		return $cb ? $cb->($cached) : $cached;
 	}
 	
 	die WEATHER_API_KEY_MISSING unless defined $self->api_key;
 	my $url = Mojo::URL->new(WEATHER_API_ENDPOINT)
 		->path($self->api_key."/conditions/forecast/geolookup/q/$code.json");
-	if ($cb) {
-		$self->ua->get($url, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $self->_cache_location_data($code, $tx->res->json));
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $self->_cache_location_data($code, $tx->res->json));
+		die $self->ua_error($tx->error) if $tx->error;
+		return $self->_cache_location_data($code, $tx->res->json);
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($self->_cache_location_data($code, $tx->res->json));
+	});
 }
 
 sub _cache_location_data {
