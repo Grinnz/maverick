@@ -116,7 +116,7 @@ sub register {
 			}, sub {
 				my ($delay, $data) = @_;
 				return $self->_display_forecast($m, $data, $max_days);
-			})->catch(sub { $m->reply("Internal error") });
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 	);
 }

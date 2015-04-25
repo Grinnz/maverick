@@ -111,12 +111,6 @@ sub _build__translate_languages {
 	return \%languages;
 }
 
-sub _language_name {
-	my ($self, $code) = @_;
-	return undef unless defined $code and exists $self->_translate_languages->{$code};
-	return $self->_translate_languages->{$code};
-}
-
 sub _xml_string_array {
 	my $xml = Mojo::DOM->new->xml(1)->content('<ArrayOfstring></ArrayOfstring>');
 	my $array = $xml->at('ArrayOfstring');
@@ -139,6 +133,7 @@ sub register {
 	
 	$bot->add_plugin_method($self, 'detect_language');
 	$bot->add_plugin_method($self, 'translate_language_code');
+	$bot->add_plugin_method($self, 'translate_language_name');
 	$bot->add_plugin_method($self, 'translate_text');
 	
 	$bot->add_command(
@@ -170,28 +165,27 @@ sub register {
 				my $delay = shift;
 				$to = 'en' unless defined $to and length $to;
 				if (defined $from and length $from) {
-					$delay->pass(undef, $from);
+					$delay->pass($from);
 				} else { # Detect language
-					$self->detect_language($text, $delay->begin(0));
+					$self->detect_language($text, $delay->begin(0))
+						->catch(sub { $m->reply("Error detecting language: $_[1]") });
 				}
 			}, sub {
-				my ($delay, $err, $from) = @_;
-				return $m->reply($err) if $err;
-				my $from_code = $self->translate_language_code($from);
+				my ($delay, $from) = @_;
 				return $m->reply("Unknown from language $from")
-					unless defined $from_code;
-				my $to_code = $self->translate_language_code($to);
+					unless defined (my $from_code = $self->translate_language_code($from));;
 				return $m->reply("Unknown to language $to")
-					unless defined $to_code;
-				$delay->data(from => $self->_language_name($from_code),
-					to => $self->_language_name($to_code));
-				$self->translate_text($text, $from_code, $to_code, $delay->begin(0));
+					unless defined (my $to_code = $self->translate_language_code($to));
+				$delay->data(from => $from_code, to => $to_code);
+				$self->translate_text($text, $from_code, $to_code, $delay->begin(0))
+					->catch(sub { $m->reply("Error translating text: $_[1]") });
 			}, sub {
-				my ($delay, $err, $translated) = @_;
-				return $m->reply($err) if $err;
+				my ($delay, $translated) = @_;
 				my ($from, $to) = @{$delay->data}{'from','to'};
+				$from = $self->translate_language_name($from);
+				$to = $self->translate_language_name($to);
 				$m->reply("Translated $from => $to: $translated");
-			})->catch(sub { $m->reply("Internal error") });
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 	);
 }
@@ -203,51 +197,64 @@ sub detect_language {
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
 	my $access_token = $self->_retrieve_access_token;
 	my %headers = (Authorization => "Bearer $access_token");
-	if ($cb) {
-		$self->ua->get($url, \%headers, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->dom->xml(1)->at('string')->text);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->dom->xml(1)->at('string')->text);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->dom->xml(1)->at('string')->text;
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, \%headers, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->dom->xml(1)->at('string')->text);
+	});
 }
 
 sub translate_language_code {
 	my ($self, $lang) = @_;
 	croak 'Undefined language' unless defined $lang;
-	return $lang if exists $self->_translate_languages->{$lang};
-	$lang = $self->_languages_by_name->{lc $lang};
-	return $lang if defined $lang and exists $self->_translate_languages->{$lang};
-	return undef;
+	unless (exists $self->_translate_languages->{$lang}) {
+		$lang = $self->_languages_by_name->{lc $lang};
+		return undef unless defined $lang and exists $self->_translate_languages->{$lang};
+	}
+	return $lang;
+}
+
+sub translate_language_name {
+	my ($self, $lang) = @_;
+	croak 'Undefined language' unless defined $lang;
+	unless (exists $self->_translate_languages->{$lang}) {
+		$lang = $self->_languages_by_name->{lc $lang};
+		return undef unless defined $lang and exists $self->_translate_languages->{$lang};
+	}
+	return $self->_translate_languages->{$lang};
 }
 
 sub translate_text {
 	my ($self, $text, $from, $to, $cb) = @_;
 	croak 'Undefined text to translate' unless defined $text;
-	croak 'Undefined from language' unless defined $from;
-	croak 'Undefined to language' unless defined $to;
-	croak "Unknown from language $from" unless exists $self->_translate_languages->{$from};
-	croak "Unknown to language $to" unless exists $self->_translate_languages->{$to};
+	croak "Unknown from language $from"
+		unless defined (my $from_code = $self->translate_language_code($from));
+	croak "Unknown to language $to"
+		unless defined (my $to_code = $self->translate_language_code($to));
 	
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
-		->query(text => $text, from => $from, to => $to, contentType => 'text/plain');
+		->query(text => $text, from => $from_code, to => $to_code, contentType => 'text/plain');
 	my $access_token = $self->_retrieve_access_token;
 	my %headers = (Authorization => "Bearer $access_token");
-	if ($cb) {
-		$self->ua->get($url, \%headers, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->dom->xml(1)->at('string')->text);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->dom->xml(1)->at('string')->text);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->dom->xml(1)->at('string')->text;
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, \%headers, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->dom->xml(1)->at('string')->text);
+	});
 }
 
 1;
@@ -264,10 +271,8 @@ Bot::ZIRC::Plugin::Translate - Language translation plugin for Bot::ZIRC
  
  # Standalone usage
  my $translate = Bot::ZIRC::Plugin::Translate->new(client_id => $client_id, client_secret => $client_secret);
- my ($err, $from) = $translate->detect_language($text);
- my $from_code = $translate->translate_language_code($from_name);
- my $to_code = $translate->translate_language_code($to_name);
- my ($err, $translated) = $translate->translate_text($text, $from_code, $to_code);
+ my $from = $translate->detect_language($text);
+ my $translated = $translate->translate_text($text, $from, $to);
 
 =head1 DESCRIPTION
 
@@ -296,11 +301,14 @@ C<microsoft_client_secret> in section C<apis>.
 
 =head2 detect_language
 
- my ($err, $language_code) = $bot->detect_language($text);
+ my $language_code = $bot->detect_language($text);
+ $bot->detect_language($text, sub {
+   my $language_code = shift;
+ })->catch(sub { $m->reply("Error detecting language: $_[1]") });
 
-Attempt to detect the language of a text string. On error, the first return
-value contains the error message. On success, the second return value contains
-the language code.
+Attempt to detect the language of a text string. Returns the language code on
+success, or throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head2 translate_language_code
 
@@ -309,13 +317,23 @@ the language code.
 Returns the language code for a given language name or code, or undef if the
 language is unknown.
 
+=head2 translate_language_name
+
+ my $language_name = $bot->translate_language_name($language_code);
+
+Returns the language name for a given language name or code, or undef if the
+language is unknown.
+
 =head2 translate_text
 
- my ($err, $translated) = $bot->translate_text($text, $from_code, $to_code);
+ my $translated = $bot->translate_text($text, $from, $to);
+ $bot->translate_text($text, $from, $to, sub {
+   my $translated = shift;
+ })->catch(sub { $m->reply("Error translating text: $_[1]") });
 
-Attempt to translate a text string from one language to another. On error, the
-first return value contains the error message. On success, the second value
-contains the translated text.
+Attempt to translate a text string from one language to another. Returns the
+translated text on success, or throws an exception on error. Pass a callback to
+perform the query non-blocking.
 
 =head1 COMMANDS
 
