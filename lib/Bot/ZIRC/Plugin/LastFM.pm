@@ -1,6 +1,7 @@
 package Bot::ZIRC::Plugin::LastFM;
 
 use Carp 'croak';
+use Mojo::IOLoop;
 use Mojo::URL;
 use Time::Duration 'ago';
 
@@ -30,28 +31,27 @@ sub register {
 		on_run => sub {
 			my $m = shift;
 			my @args = $m->args_list;
+			my $sender = $m->sender->identity // $m->sender->nick;
 			
 			if (@args and lc $args[0] eq 'set') {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
-				$self->bot->storage->data->{lastfm}{usernames}{lc $m->sender} = $username;
-				my $sender = $m->sender;
+				$self->bot->storage->data->{lastfm}{usernames}{lc $sender} = $username;
 				return $m->reply("Set Last.fm username of $sender to $username");
 			}
 			
 			my $username = shift @args;
 			unless (defined $username) {
-				$username = $self->bot->storage->data->{lastfm}{usernames}{lc $m->sender} // $m->sender->nick;
+				$username = $self->bot->storage->data->{lastfm}{usernames}{lc $sender} // $m->sender->nick;
 			}
 			
 			$m->logger->debug("Retrieving Last.fm recent tracks for $username");
 			$self->lastfm_last_track($username, sub {
-				my ($err, $track) = @_;
-				return $m->reply($err) if $err;
+				my $track = shift;
 				return $m->reply("No recent tracks found for $username")
 					unless defined $track;
 				$self->_lastfm_result($m, $track, $username);
-			});
+			})->catch(sub { $m->reply("Error retrieving recent tracks for $username: $_[1]") });
 		},
 	);
 }
@@ -63,25 +63,25 @@ sub lastfm_last_track {
 	
 	my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
 		user => $username, api_key => $self->api_key, format => 'json', limit => 1);
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			my $res = $tx->res->json;
-			return $cb->("Last.fm error: $res->{message}") if $res->{error};
-			my $track = $res->{recenttracks}{track};
-			$track = shift @$track if ref $track eq 'ARRAY';
-			return $cb->(undef, $track);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		my $res = $tx->res->json;
-		return "Last.fm error: $res->{message}" if $res->{error};
-		my $track = $res->{recenttracks}{track};
-		$track = shift @$track if ref $track eq 'ARRAY';
-		return (undef, $track);
+		die $self->ua_error($tx->error) if $tx->error;
+		return _lastfm_recenttrack($tx->res->json);
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->(_lastfm_recenttrack($tx->res->json));
+	});
+}
+
+sub _lastfm_recenttrack {
+	my $response = shift;
+	die "Last.fm error: $response->{message}\n" if $response->{error};
+	return ref $response->{recenttracks}{track} eq 'ARRAY'
+		? $response->{recenttracks}{track}[0] : $response->{recenttracks}{track};
 }
 
 sub _lastfm_result {
@@ -115,7 +115,7 @@ Bot::ZIRC::Plugin::LastFM - Last.FM plugin for Bot::ZIRC
  
  # Standalone usage
  my $lastfm = Bot::ZIRC::Plugin::LastFM->new(api_key => $api_key);
- my ($err, $track) = $lastfm->lastfm_last_track($username);
+ my $track = $lastfm->lastfm_last_track($username);
 
 =head1 DESCRIPTION
 
@@ -138,15 +138,14 @@ C<lastfm_api_key> in section C<apis>.
 
 =head2 lastfm_last_track
 
- my ($err, $track) = $bot->lastfm_last_track($username);
+ my $track = $bot->lastfm_last_track($username);
  $bot->lastfm_last_track($username, sub {
-   my ($err, $track) = @_;
- });
+   my $track = shift;
+ })->catch(sub { $m->reply("Error retrieving recent tracks for $username: $_[1]") });
 
-Retrieve last-played track information from Last.FM for a username. On error,
-the first return value contains the error message. Otherwise, the second return
-value contains the most recently played track, or undef if none was found. Pass
-a callback to perform the query non-blocking.
+Retrieve last-played track information from Last.FM for a username. Returns the
+track information as a hashref, or undef if no recent tracks are found. Throws
+an exception on error. Pass a callback to perform the query non-blocking.
 
 =head1 COMMANDS
 

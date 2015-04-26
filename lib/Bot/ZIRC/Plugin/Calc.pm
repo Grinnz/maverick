@@ -9,9 +9,7 @@ extends 'Bot::ZIRC::Plugin';
 sub calc_expression {
 	my ($self, $expr) = @_;
 	croak 'Undefined expression to evaluate' unless defined $expr;
-	my $result = Math::Calc::Parser->try_evaluate($expr);
-	return Math::Calc::Parser->error unless defined $result;
-	return (undef, $result);
+	return Math::Calc::Parser->evaluate($expr);
 }
 
 sub register {
@@ -27,8 +25,12 @@ sub register {
 			my $m = shift;
 			my $expr = $m->args;
 			return 'usage' unless length $expr;
-			my ($err, $result) = $self->calc_expression($expr);
-			return $m->reply("Error evaluating expression: $err") if $err;
+			my ($err, $result);
+			{
+				local $@;
+				eval { $result = $self->calc_expression($expr); 1 } or $err = $@;
+			}
+			return $m->reply("Error evaluating expression: $err") if defined $err;
 			$m->reply("Result: $result");
 		},
 	);
@@ -55,12 +57,10 @@ expressions. See L<Math::Calc::Parser> for details on implementation.
 
 =head2 calc_expression
 
- my ($err, $result) = $bot->calc_expression('3*7');
- die $err if $err;
+ my $result = $bot->calc_expression('3*7');
 
 Calculate the result of the expression using L<Math::Calc::Parser/"evaluate">.
-The first return value will be the error message if an error occurs. Otherwise,
-the result is returned as the second value.
+Returns the result of the expression or throws an exception on error.
 
 =head1 COMMANDS
 
