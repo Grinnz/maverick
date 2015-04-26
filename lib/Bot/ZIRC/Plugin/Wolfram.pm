@@ -2,6 +2,7 @@ package Bot::ZIRC::Plugin::Wolfram;
 
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
+use Mojo::DOM;
 use Mojo::IOLoop;
 use Mojo::URL;
 
@@ -81,14 +82,14 @@ sub wolfram_query {
 	unless ($cb) {
 		my $tx = $self->ua->get($url);
 		die $self->ua_error($tx->error) if $tx->error;
-		return $tx->res->dom->xml(1)->children('queryresult')->first;
+		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first;
 	}
 	return Mojo::IOLoop->delay(sub {
 		$self->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
-		$cb->($tx->res->dom->xml(1)->children('queryresult')->first);
+		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first);
 	});
 }
 

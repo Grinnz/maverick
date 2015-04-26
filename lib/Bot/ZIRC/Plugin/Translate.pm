@@ -1,6 +1,7 @@
 package Bot::ZIRC::Plugin::Translate;
 
 use Carp 'croak';
+use Mojo::DOM;
 use Mojo::IOLoop;
 use Mojo::URL;
 
@@ -87,13 +88,13 @@ sub _build__translate_languages {
 	my %headers = (Authorization => "Bearer $access_token");
 	my $tx = $self->ua->get($url, \%headers);
 	die $self->ua_error($tx->error) if $tx->error;
-	my @languages = $tx->res->dom->xml(1)->find('string')->map('text')->each;
+	my @languages = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
 	
 	$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
 	$headers{'Content-Type'} = 'text/xml';
 	$tx = $self->ua->post($url, \%headers, _xml_string_array(@languages));
 	die $self->ua_error($tx->error) if $tx->error;
-	my @names = $tx->res->dom->xml(1)->find('string')->map('text')->each;
+	my @names = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
 	
 	my %languages;
 	for my $i (0..$#languages) {
@@ -200,14 +201,14 @@ sub detect_language {
 	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
-		return $tx->res->dom->xml(1)->at('string')->text;
+		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
 	}
 	return Mojo::IOLoop->delay(sub {
 		$self->ua->get($url, \%headers, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
-		$cb->($tx->res->dom->xml(1)->at('string')->text);
+		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text);
 	});
 }
 
@@ -246,14 +247,14 @@ sub translate_text {
 	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
-		return $tx->res->dom->xml(1)->at('string')->text;
+		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
 	}
 	return Mojo::IOLoop->delay(sub {
 		$self->ua->get($url, \%headers, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
-		$cb->($tx->res->dom->xml(1)->at('string')->text);
+		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text);
 	});
 }
 
