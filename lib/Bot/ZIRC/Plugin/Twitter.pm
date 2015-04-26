@@ -76,33 +76,33 @@ sub register {
 			if ($query =~ /^#(\d+)$/) {
 				my $id = $1;
 				$self->twitter_tweet_by_id($id, sub {
-					my ($err, $tweet) = @_;
-					return $m->reply($err) if $err;
+					my $tweet = shift;
+					return $m->reply("Tweet \#$id not found") unless defined $tweet;
 					return $self->_display_tweet($m, $tweet);
-				});
+				})->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 			}
 			
 			# User timeline
 			elsif ($query =~ /^\@(\S+)$/) {
 				my $user = $1;
 				$self->twitter_tweet_by_user($user, sub {
-					my ($err, $tweet) = @_;
-					return $m->reply($err) if $err;
+					my $tweet = shift;
+					return $m->reply("No tweets found for user \@$user") unless defined $tweet;
 					return $self->_display_tweet($m, $tweet);
-				});
+				})->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 			}
 			
 			# Search
 			else {
 				$self->twitter_search($query, sub {
-					my ($err, $tweets) = @_;
+					my $tweets = shift;
 					return $m->reply("No results for Twitter search") unless @$tweets;
 					my $first_tweet = shift @$tweets;
 					my $channel_name = lc ($m->channel // $m->sender);
 					$self->results_cache->{$m->network}{$channel_name} = $tweets;
 					$m->show_more(scalar @$tweets);
 					$self->_display_tweet($m, $first_tweet);
-				});
+				})->catch(sub { $m->reply("Twitter search error: $_[1]") });
 			}
 		},
 		on_more => sub {
@@ -132,10 +132,9 @@ sub register {
 		
 		$m->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
 		$self->twitter_tweet_by_id($tweet_id, sub {
-			my ($err, $tweet) = @_;
-			return $m->logger->error("Error retrieving Twitter tweet data: $err") if $err;
-			return $self->_display_triggered($m, $tweet);
-		});
+			my $tweet = shift;
+			return $self->_display_triggered($m, $tweet) if defined $tweet;
+		})->catch(sub { $m->logger->error("Error retrieving Twitter tweet data: $_[1]") });
 	});
 }
 
@@ -146,17 +145,18 @@ sub twitter_tweet_by_id {
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('statuses/show.json')->query(id => $id);
 	my $token = $self->_access_token;
 	my %headers = (Authorization => "Bearer $token");
-	if ($cb) {
-		$self->ua->get($url, \%headers, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json;
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, \%headers, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json);
+	});
 }
 
 sub twitter_tweet_by_user {
@@ -167,23 +167,25 @@ sub twitter_tweet_by_user {
 		->query(screen_name => $user, include_entities => 'false');
 	my $token = $self->_access_token;
 	my %headers = (Authorization => "Bearer $token");
-	if ($cb) {
-		$self->ua->get($url, \%headers, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			my $user = $tx->res->json;
-			my $tweet = delete $user->{status};
-			$tweet->{user} = $user;
-			return $cb->(undef, $tweet);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
-		return $self->ua->error($tx->error) if $tx->error;
-		my $user = $tx->res->json;
-		my $tweet = delete $user->{status};
-		$tweet->{user} = $user;
-		return (undef, $tweet);
+		die $self->ua_error($tx->error) if $tx->error;
+		return _swap_user_tweet($tx->res->json);
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, \%headers, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->(_swap_user_tweet($tx->res->json));
+	});
+}
+
+sub _swap_user_tweet {
+	my $user = shift // return undef;
+	my $tweet = delete $user->{status};
+	$tweet->{user} = $user;
+	return $tweet;
 }
 
 sub twitter_search {
@@ -194,17 +196,18 @@ sub twitter_search {
 		->query(q => $query, count => 15, include_entities => 'false');
 	my $token = $self->_access_token;
 	my %headers = (Authorization => "Bearer $token");
-	if ($cb) {
-		$self->ua->get($url, \%headers, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->{statuses}//[]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url, \%headers);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->{statuses}//[]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->{statuses}//[];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, \%headers, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->{statuses}//[]);
+	});
 }
 
 sub _display_tweet {
@@ -290,7 +293,9 @@ Bot::ZIRC::Plugin::Twitter - Twitter plugin for Bot::ZIRC
  
  # Standalone usage
  my $twitter = Bot::ZIRC::Plugin::Twitter->new(api_key => $api_key, api_secret => $api_secret);
- my ($err, $tweets) = $twitter->twitter_search($query);
+ my $tweets = $twitter->twitter_search($query);
+ my $tweet = $twitter->twitter_tweet_by_user($user);
+ my $tweet = $twitter->twitter_tweet_by_id($id);
 
 =head1 DESCRIPTION
 
@@ -318,36 +323,35 @@ C<twitter_api_secret> in section C<apis>.
 
 =head2 twitter_search
 
- my ($err, $tweets) = $bot->twitter_search($query);
+ my $tweets = $bot->twitter_search($query);
  $bot->twitter_search($query, sub {
-   my ($err, $tweets) = @_;
- });
+   my $tweets = shift;
+ })->catch(sub { $m->reply("Twitter search error: $_[1]") });
 
-Search tweets on Twitter. On error, the first return value contains the error
-message. On success, the second return value contains the results (if any) in
-an arrayref. Pass a callback to perform the query non-blocking.
+Search tweets on Twitter. Returns the results (if any) in an arrayref, or
+throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head2 twitter_tweet_by_id
 
- my ($err, $tweet) = $bot->twitter_tweet_by_id($id);
+ my $tweet = $bot->twitter_tweet_by_id($id);
  $bot->twitter_tweet_by_id($id, sub {
-   my ($err, $tweet) = @_;
- });
+   my $tweet = shift;
+ })->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 
-Retrieve a tweet by Tweet ID. On error, the first return value contains the
-error message. On success, the second return value contains the tweet data.
-Pass a callback to perform the query non-blocking.
+Retrieve a tweet by Tweet ID. Returns the tweet data as a hashref, or throws an
+exception on error. Pass a callback to perform the query non-blocking.
 
 =head2 twitter_tweet_by_user
 
- my ($err, $tweet) = $bot->twitter_tweet_by_user($user);
+ my $tweet = $bot->twitter_tweet_by_user($user);
  $bot->twitter_tweet_by_user($user, sub {
-   my ($err, $tweet) = @_;
- });
+   my $tweet = shift;
+ })->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 
-Retrieve the latest tweet in a user's timeline. On error, the first return
-value contains the error message. On success, the second return value contains
-the tweet data. Pass a callback to perform the query non-blocking.
+Retrieve the latest tweet in a user's timeline. Returns the tweet data as a
+hashref, or throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head1 CONFIGURATION
 
