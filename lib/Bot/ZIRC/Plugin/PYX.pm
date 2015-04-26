@@ -73,7 +73,7 @@ sub register {
 			}, sub {
 				my ($delay, $black_card, $white_cards) = @_;
 				$self->_show_pyx_match($m, $black_card, $white_cards);
-			})->catch(sub { $m->reply("Internal error"); die $_[1] });
+			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
 	);
 }

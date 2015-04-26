@@ -186,7 +186,7 @@ sub register {
 				$from = $self->translate_language_name($from);
 				$to = $self->translate_language_name($to);
 				$m->reply("Translated $from => $to: $translated");
-			})->catch(sub { $m->reply("Internal error"); die $_[1] });
+			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
 	);
 }

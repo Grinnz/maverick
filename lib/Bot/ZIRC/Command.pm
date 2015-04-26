@@ -82,8 +82,8 @@ sub run {
 	my $rc;
 	unless (eval { $rc = $self->on_run->($m); 1 }) {
 		chomp (my $err = $@);
-		$m->logger->error("Error running command $self: $err");
 		$m->reply("Internal error");
+		$m->logger->error("Error running command $self: $err");
 	}
 	if (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';

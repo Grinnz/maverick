@@ -64,7 +64,7 @@ sub register {
 				} else {
 					$self->_reply_wolfram_success($m, $result);
 				}
-			})->catch(sub { $m->reply("Internal error"); die $_[1] });
+			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
 	);
 }
