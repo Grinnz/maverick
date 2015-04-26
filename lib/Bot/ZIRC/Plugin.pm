@@ -36,7 +36,7 @@ sub ua_error {
 sub fork_call {
 	my ($self, @args) = @_;
 	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : undef;
-	my $fc = Mojo::IOLoop::ForkCall->new->catch(sub { $self->logger->error($_[1]) });
+	my $fc = Mojo::IOLoop::ForkCall->new;
 	return $fc->run(@args, sub {
 		my $fc = shift;
 		$self->$cb(@_) if $cb;

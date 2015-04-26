@@ -121,7 +121,7 @@ sub register {
 					}
 					$results = $self->quote_cache->{$match_by}{lc $args} = $matches;
 					$self->_display_quote($m, $quotes, $results, $num);
-				});
+				})->catch(sub { $m->reply("Internal error"); die $_[1] });
 			}
 			
 		},
@@ -154,7 +154,7 @@ sub register {
 					unless $num_quotes;
 				$self->clear_quote_cache;
 				$m->reply("Loaded $num_quotes from $filename");
-			});
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -180,7 +180,7 @@ sub register {
 				my ($self, $err, $num_quotes) = @_;
 				die $err if $err;
 				$m->reply("Stored $num_quotes quotes to $filename");
-			});
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -198,7 +198,7 @@ sub register {
 				die $err if $err;
 				$self->clear_quote_cache;
 				$m->reply("Deleted all quotes");
-			});
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
