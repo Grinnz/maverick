@@ -51,10 +51,10 @@ sub register {
 				}
 			}, sub {
 				my ($delay, $ip) = @_;
-				$self->wolfram_query($query, $ip, $delay->begin(0));
+				$self->wolfram_query($query, $ip, $delay->begin(0))
+					->catch(sub { $m->reply("Wolfram|Alpha query error: $_[1]") });
 			}, sub {
-				my ($delay, $err, $result) = @_;
-				return $m->reply($err) if $err;
+				my ($delay, $result) = @_;
 				return $m->reply('No results from Wolfram|Alpha') unless defined $result;
 				
 				my $success = $result->attr('success');
@@ -78,17 +78,18 @@ sub wolfram_query {
 		->query(input => $query, appid => $self->api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 	
-	if ($cb) {
-		$self->ua->get($url, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->dom->xml(1)->children('queryresult')->first);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->dom->xml(1)->children('queryresult')->first);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->dom->xml(1)->children('queryresult')->first;
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->dom->xml(1)->children('queryresult')->first);
+	});
 }
 
 sub _reply_wolfram_error {
@@ -197,7 +198,7 @@ Bot::ZIRC::Plugin::Wolfram - Wolfram|Alpha plugin for Bot::ZIRC
  
  # Standalone usage
  my $wolfram = Bot::ZIRC::Plugin::Wolfram->new(api_key => $api_key);
- my ($err, $results) = $wolfram->wolfram_query($query);
+ my $results = $wolfram->wolfram_query($query);
 
 =head1 DESCRIPTION
 
@@ -220,14 +221,22 @@ C<wolfram_api_key> in section C<apis>.
 
 =head2 wolfram_query
 
- my ($err, $results) = $bot->wolfram_query($query);
+ my $results = $bot->wolfram_query($query);
  $bot->wolfram_query($query, sub {
-   my ($err, $results) = @_;
- });
+   my $results = @_;
+ })->catch(sub { $m->reply("Wolfram|Alpha query error: $_[1]") });
 
-Query Wolfram|Alpha. On error, the first return value contains the error
-message. On success, the second return value contains the results (if any) as a
-L<Mojo::DOM> object. Pass a callback to perform the query non-blocking.
+Query Wolfram|Alpha. Returns the results as a L<Mojo::DOM> object, or throws an
+exception on transport error. Pass a callback to perform the query
+non-blocking.
+
+Wolfram|Alpha will set the C<success> attribute of the root element to C<true>
+if the query was successful, and the C<error> attribute to C<true> if an error
+occurred (it is possible neither will be set). On a successful query, the
+results will be contained in the DOM structure as C<pod> elements, which may
+have a C<title> attribute and any number of C<subpod> elements. On an
+unsuccessful query, either the error message or other reasons will be contained
+in the DOM structure.
 
 =head1 COMMANDS
 
