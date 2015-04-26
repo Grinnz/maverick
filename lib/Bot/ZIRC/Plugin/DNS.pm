@@ -48,28 +48,34 @@ sub dns_resolve {
 	croak "No hostname to resolve" unless defined $host;
 	unless ($cb) {
 		my ($err, @results) = getaddrinfo $host;
-		die $err if defined $err;
+		if (defined $err) {
+			chomp $err;
+			die "$err\n";
+		}
 		return \@results;
 	}
 	croak "Invalid dns_resolve callback" unless ref $cb eq 'CODE';
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		my $next = $delay->begin(0);
 		if ($self->native) {
 			my $dns = $self->resolver;
 			my $sock = $dns->getaddrinfo($host);
 			$self->watchers->{fileno $sock} = $sock;
+			my $next = $delay->begin(0);
 			Mojo::IOLoop->singleton->reactor->io($sock, sub {
 				Mojo::IOLoop->singleton->reactor->remove($sock);
 				delete $self->watchers->{fileno $sock};
 				$next->($dns->get_result($sock));
 			})->watch($sock, 1, 0);
 		} else {
-			$next->(getaddrinfo $host);
+			$delay->pass(getaddrinfo $host);
 		}
 	}, sub {
 		my ($delay, $err, @results) = @_;
-		die "$err\n" if $err;
+		if (defined $err) {
+			chomp $err;
+			die "$err\n";
+		}
 		$cb->(\@results);
 	});
 }

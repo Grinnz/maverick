@@ -94,9 +94,13 @@ sub geoip_locate_host {
 			if is_ipv4 $host or is_ipv6 $host;
 		die "DNS plugin is required to resolve hostnames\n"
 			unless $self->bot->has_plugin_method('dns_resolve_ips');
-		$self->bot->dns_resolve_ips($host, sub {
-			$cb->($self->_on_dns_host($_[0]));
-		})->catch(sub { $delay->emit(error => "DNS error: $_[1]") });
+		my $next = $delay->begin(0);
+		$self->bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
+			->catch(sub { $next->($_[1]) });
+	}, sub {
+		my ($delay, $err, $addrs) = @_;
+		die $err if $err;
+		$cb->($self->_on_dns_host($addrs));
 	});
 }
 
@@ -113,13 +117,13 @@ sub _on_dns_host {
 			eval { $record = $self->bot->geoip_locate($addr); 1 } or $err = $@;
 		}
 		if (defined $err) {
-			$last_err = $err;
+			chomp($last_err = $err);
 		} else {
 			return $record if defined $record->city->name;
 			$best_record //= $record;
 		}
 	}
-	return $best_record // die $last_err;
+	return $best_record // die "$last_err\n";
 }
 
 sub _location_str {
