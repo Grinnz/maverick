@@ -31,8 +31,7 @@ sub register {
 			return 'usage' unless length $query;
 			
 			$self->wikipedia_search($query, sub {
-				my ($err, $titles) = @_;
-				return $m->reply($err) if $err;
+				my $titles = shift;
 				return $m->reply("No results for Wikipedia search") unless @$titles;
 				
 				my $first_title = shift @$titles;
@@ -40,7 +39,7 @@ sub register {
 				$self->_results_cache->{$m->network}{$channel_name} = $titles;
 				$m->show_more(scalar @$titles);
 				$self->_display_wiki_page($m, $first_title);
-			});
+			})->catch(sub { $m->reply("Wikipedia search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
@@ -61,17 +60,18 @@ sub wikipedia_search {
 	
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)
 		->query(format => 'json', action => 'opensearch', search => $query);
-	if ($cb) {
-		$self->ua->get($url, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->[1]//[]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->[1]//[]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->[1]//[];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->[1]//[]);
+	});
 }
 
 sub wikipedia_page {
@@ -81,29 +81,31 @@ sub wikipedia_page {
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)->query(format => 'json', action => 'query',
 		redirects => 1, prop => 'extracts|info', explaintext => 1, exsectionformat => 'plain',
 		exchars => 250, inprop => 'url', titles => $title);
-	if ($cb) {
-		$self->ua->get($url, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			my $pages = $tx->res->json->{query}{pages} // {};
-			my $key = (sort keys %$pages)[0] // '';
-			return $cb->(undef, $pages->{$key});
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($url);
-		return $self->ua_error($tx->error) if $tx->error;
-		my $pages = $tx->res->json->{query}{pages} // {};
-		my $key = (sort keys %$pages)[0] // '';
-		return (undef, $pages->{$key});
+		die $self->ua_error($tx->error) if $tx->error;
+		return _find_page_result($tx->res->json->{query}{pages});
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->(_find_page_result($tx->res->json->{query}{pages}));
+	});
+}
+
+sub _find_page_result {
+	my $pages = shift // return undef;
+	my $key = (sort keys %$pages)[0] // return undef;
+	return $pages->{$key};
 }
 
 sub _display_wiki_page {
 	my ($self, $m, $title) = @_;
 	
 	$self->wikipedia_page($title, sub {
-		my ($err, $page) = @_;
-		return $m->reply($err) if $err;
+		my $page = shift;
 		return $m->reply("Wikipedia page $title not found") unless defined $page;
 		
 		my $title = $page->{title} // '';
@@ -114,7 +116,7 @@ sub _display_wiki_page {
 		my $b_code = chr 2;
 		my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract";
 		return $m->reply($response);
-	});
+	})->catch(sub { $m->reply("Error retrieving Wikipedia result: $_[1]") });
 }
 
 1;
@@ -131,9 +133,9 @@ Bot::ZIRC::Plugin::Wikipedia - Wikipedia search plugin for Bot::ZIRC
  
  # Standalone usage
  my $wiki = Bot::ZIRC::Plugin::Wikipedia->new;
- my ($err, $titles) = $wiki->wikipedia_search($query);
+ my $titles = $wiki->wikipedia_search($query);
  foreach my $title (@$titles) {
-   my ($err, $page) = $wiki->wikipedia_page($title);
+   my $page = $wiki->wikipedia_page($title);
  }
 
 =head1 DESCRIPTION
@@ -145,25 +147,25 @@ bot.
 
 =head2 wikipedia_search
 
- my ($err, $titles) = $bot->wikipedia_search($query);
+ my $titles = $bot->wikipedia_search($query);
  $bot->wikipedia_search($query, sub {
-   my ($err, $titles) = @_;
- });
+   my $titles = shift;
+ })->catch(sub { $m->reply("Wikipedia search error: $_[1]") });
 
-Search Wikipedia pages. On error, the first return value contains the error
-message. On success, the second return value contains the page titles (if any)
-in an arrayref. Pass a callback to perform the query non-blocking.
+Search Wikipedia page titles. Returns matching page titles (if any) in an
+arrayref, or throws an exception on error. Pass a callback to perform the query
+non-blocking.
 
 =head2 wikipedia_page
 
- my ($err, $page) = $bot->wikipedia_page($title);
+ my $page = $bot->wikipedia_page($title);
  $bot->wikipedia_page($title, sub {
-   my ($err, $page) = @_;
- });
+   my $page = shift;
+ })->catch(sub { $m->reply("Error retrieving page from Wikipedia: $_[1]") });
 
-Retrieve a Wikipedia page by title. On error, the first return value contains
-the error message. On success, the second return value contains the page data
-if found. Pass a callback to perform the query non-blocking.
+Retrieve a Wikipedia page by title. Returns the page data as a hashref, or
+undef if it is not found. Throws an exception on error. Pass a calback to
+perform the query non-blocking.
 
 =head1 COMMANDS
 
