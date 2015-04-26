@@ -1,5 +1,6 @@
 package Bot::ZIRC::Plugin::PYX;
 
+use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -24,14 +25,14 @@ sub register {
 			my $args = $m->args;
 			
 			my ($black_card_text, $white_cards, $black_card_pick, $white_card_count);
+			$white_cards = [];
 			if (length $args) {
 				if ($args =~ m/^w\s/i) {
-					my @white_cards = $args =~ m/w\s+(.+?)(?=(?:\s+w\s|$))/ig;
-					undef $_ for grep { m/^[?_]+$/ } @white_cards;
-					splice @white_cards, PYX_MAX_PICK if @white_cards > PYX_MAX_PICK;
-					$white_cards = \@white_cards;
-					$black_card_pick = @white_cards;
-					$white_card_count = grep { !defined } @white_cards;
+					@$white_cards = $args =~ m/w\s+(.+?)(?=(?:\s+w\s|$))/ig;
+					undef $_ for grep { m/^[?_]+$/ } @$white_cards;
+					splice @$white_cards, PYX_MAX_PICK if @$white_cards > PYX_MAX_PICK;
+					$black_card_pick = @$white_cards;
+					$white_card_count = grep { !defined } @$white_cards;
 				} elsif ($args =~ m/^\d+$/) {
 					$black_card_pick = $args;
 				} elsif ($args =~ m/^(.+?)\s+(\d+)$/) {
@@ -43,34 +44,36 @@ sub register {
 				}
 			}
 			
-			if (defined $black_card_text) {
-				$white_card_count = 1 if $white_card_count < 1;
-				$self->_get_white_cards($m, $white_card_count, sub {
-					my ($err, $cards) = @_;
-					return $m->reply($err) if $err;
-					$self->_show_pyx_match($m, $black_card_text, $cards);
-				});
-			} else {
-				$self->_get_black_card($m, $black_card_pick, sub {
-					my ($err, $black_card) = @_;
-					return $m->reply($err) if $err;
-					$white_card_count //= $black_card->{pick} // 1;
-					if ($white_card_count > 0) {
-						$self->_get_white_cards($m, $white_card_count, sub {
-							my ($err, $cards) = @_;
-							return $m->reply($err) if $err;
-							if (defined $white_cards) {
-								$_ //= shift @$cards for @$white_cards;
-							} else {
-								$white_cards = $cards;
-							}
-							$self->_show_pyx_match($m, $black_card->{text}, $white_cards);
-						});
-					} else {
-						$self->_show_pyx_match($m, $black_card->{text}, $white_cards);
-					}
-				});
-			}
+			Mojo::IOLoop->delay(sub {
+				my $delay = shift;
+				if (defined $black_card_text) {
+					$white_card_count = 1 if $white_card_count < 1;
+					$delay->pass({ text => $black_card_text, pick => $white_card_count });
+				} else {
+					$self->_get_black_card($m, $black_card_pick, $delay->begin(0))
+						->catch(sub { $m->reply("Error retrieving black card: $_[1]") });
+				}
+			}, sub {
+				my ($delay, $card) = @_;
+				$white_card_count //= $card->{pick} // 1;
+				if ($white_card_count > 0) {
+					my $end = $delay->begin(0);
+					$self->_get_white_cards($m, $white_card_count, sub {
+						my $cards = shift;
+						if (@$white_cards) {
+							$_ //= shift @$cards for @$white_cards;
+						} else {
+							$white_cards = $cards;
+						}
+						$end->($card->{text}, $white_cards);
+					})->catch(sub { $m->reply("Error retrieving white cards: $_[1]") });
+				} else {
+					$delay->pass($card->{text}, $white_cards);
+				}
+			}, sub {
+				my ($delay, $black_card, $white_cards) = @_;
+				$self->_show_pyx_match($m, $black_card, $white_cards);
+			})->catch(sub { $m->reply("Internal error"); die $_[1] });
 		},
 	);
 }
@@ -91,13 +94,15 @@ sub _get_black_card {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({pick => $pick}) if defined $pick;
 	
-	$self->ua->get($url, sub {
-		my ($ua, $tx) = @_;
-		return $cb->($self->ua_error($tx->error)) if $tx->error;
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
 		my $card = $tx->res->json->{card};
-		return $cb->('No applicable black cards') unless defined $card and defined $card->{text};
+		die "No applicable black cards\n" unless defined $card and defined $card->{text};
 		$card->{text} = _format_pyx_card($card->{text});
-		$cb->(undef, $card);
+		$cb->($card);
 	});
 }
 
@@ -116,12 +121,14 @@ sub _get_white_cards {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({count => $count});
 	
-	$self->ua->get($url, sub {
-		my ($ua, $tx) = @_;
-		return $cb->($self->ua_error($tx->error)) if $tx->error;
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($url, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
 		my $cards = $tx->res->json->{cards} // [];
 		$_ = _format_pyx_card($_->{text}) for @$cards;
-		$cb->(undef, $cards);
+		$cb->($cards);
 	});
 }
 
@@ -181,12 +188,16 @@ C<apis>.
  !pyx
  !pyx __ and __: A perfect match.
  !pyx w A giant snail. w Doritos.
+ !pyx 3
+ !pyx Write a haiku. 3
 
 Generate random Cards Against Humanity combinations, using the supplied black
 card or white card(s) if any. Blanks in black cards are specified as two or
 more consecutive underscores, and white cards are prefixed by the lone letter
 C<w>. White cards that consist only of underscores or question marks will
-additionally be replaced by random cards.
+additionally be replaced by random cards. If only an integer is specified, or
+it is specified after black card text, it will be used as the number of white
+cards to retrieve.
 
 =head1 BUGS
 
