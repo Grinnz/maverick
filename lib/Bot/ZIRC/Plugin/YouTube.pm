@@ -1,6 +1,7 @@
 package Bot::ZIRC::Plugin::YouTube;
 
 use Carp 'croak';
+use Mojo::IOLoop;
 use Mojo::URL;
 use Time::Duration 'ago';
 
@@ -31,6 +32,7 @@ sub register {
 	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
 	
 	$bot->add_plugin_method($self, 'youtube_search');
+	$bot->add_plugin_method($self, 'youtube_video');
 	
 	$bot->add_command(
 		name => 'youtube',
@@ -42,8 +44,7 @@ sub register {
 			return 'usage' unless length $query;
 			
 			$self->youtube_search($query, sub {
-				my ($err, $results) = @_;
-				return $m->reply($err) if $err;
+				my $results = shift;
 				return $m->reply("No results for YouTube search") unless @$results;
 				
 				my $first_result = shift @$results;
@@ -51,7 +52,7 @@ sub register {
 				$self->_results_cache->{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
 				$self->_display_result($m, $first_result);
-			});
+			})->catch(sub { $m->reply("YouTube search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
@@ -79,11 +80,9 @@ sub register {
 		
 		$m->logger->debug("Captured YouTube URL $captured with video ID $video_id");
 		$self->youtube_video($video_id, sub {
-			my ($err, $result) = @_;
-			return $m->logger->error("Error retrieving YouTube video data: $err") if $err;
-			return unless defined $result;
-			$self->_display_triggered($m, $result);
-		});
+			my $result = shift;
+			$self->_display_triggered($m, $result) if defined $result;
+		})->catch(sub { $m->logger->error("Error retrieving YouTube video data: $_[1]") });
 	});
 }
 
@@ -95,17 +94,18 @@ sub youtube_search {
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('search')
 		->query(key => $self->api_key, part => 'snippet', q => $query,
 			safeSearch => 'strict', type => 'video');
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			return $cb->(undef, $tx->res->json->{items}//[]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		return (undef, $tx->res->json->{items}//[]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return $tx->res->json->{items}//[];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->($tx->res->json->{items}//[]);
+	});
 }
 
 sub youtube_video {
@@ -115,19 +115,18 @@ sub youtube_video {
 	
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('videos')
 		->query(key => $self->api_key, part => 'snippet', id => $id);
-	if ($cb) {
-		$self->ua->get($request, sub {
-			my ($ua, $tx) = @_;
-			return $cb->($self->ua_error($tx->error)) if $tx->error;
-			my $results = $tx->res->json->{items} // [];
-			return $cb->(undef, $results->[0]);
-		});
-	} else {
+	unless ($cb) {
 		my $tx = $self->ua->get($request);
-		return $self->ua_error($tx->error) if $tx->error;
-		my $results = $tx->res->json->{items} // [];
-		return (undef, $results->[0]);
+		die $self->ua_error($tx->error) if $tx->error;
+		return ($tx->res->json->{items}//[])->[0];
 	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->(($tx->res->json->{items}//[])->[0]);
+	});
 }
 
 sub _display_result {
@@ -180,7 +179,7 @@ Bot::ZIRC::Plugin::YouTube - YouTube search plugin for Bot::ZIRC
  
  # Standalone usage
  my $youtube = Bot::ZIRC::Plugin::YouTube->new(api_key => $api_key);
- my ($err, $results) = $youtube->youtube_search($query);
+ my $results = $youtube->youtube_search($query);
 
 =head1 DESCRIPTION
 
@@ -204,14 +203,24 @@ C<google_api_key> in section C<apis>.
 
 =head2 youtube_search
 
- my ($err, $results) = $bot->youtube_search($query);
+ my $results = $bot->youtube_search($query);
  $bot->youtube_search($query, sub {
-   my ($err, $results) = @_;
- });
+   my $results = shift;
+ })->catch(sub { $m->reply("YouTube search error: $_[1]") });
 
-Search YouTube videos. On error, the first return value contains the error
-message. On success, the second return value contains the results (if any) in
-an arrayref. Pass a callback to perform the query non-blocking.
+Search YouTube videos. Returns the results (if any) in an arrayref, or throws
+an exception on error. Pass a callback to perform the query non-blocking.
+
+=head2 youtube_video
+
+ my $result = $bot->youtube_video($video_id);
+ $bot->youtube_video($video_id, sub {
+   my $result = shift;
+ })->catch(sub { $m->reply("YouTube search error: $_[1]") });
+
+Retrieve information for a YouTube video by its video ID. Returns the result
+if found or undef otherwise. Throws an exception on error. Pass a callback to
+perform the query non-blocking.
 
 =head1 CONFIGURATION
 
