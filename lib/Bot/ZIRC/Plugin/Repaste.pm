@@ -22,7 +22,7 @@ sub register {
 			$bot->ua->get($url, shift->begin);
 		}, sub {
 			my ($delay, $tx) = @_;
-			return $m->logger->error($self->ua_error($tx->error)) if $tx->error;
+			die $self->ua_error($tx->error) if $tx->error;
 			my $contents = $tx->res->text;
 			return $m->logger->debug("No paste contents") unless length $contents;
 			
@@ -43,11 +43,11 @@ sub register {
 			$bot->ua->post(FPASTE_PASTE_ENDPOINT, form => \%form, $delay->begin);
 		}, sub {
 			my ($delay, $tx) = @_;
-			return $m->logger->error($self->ua_error($tx->error)) if $tx->error;
+			die $self->ua_error($tx->error) if $tx->error;
 			
 			my $id = $tx->res->json->{result}{id};
 			my $hash = $tx->res->json->{result}{hash} // '';
-			return $m->logger->error("No paste ID returned") unless defined $id;
+			die "No paste ID returned" unless defined $id;
 			
 			my $url = Mojo::URL->new(FPASTE_PASTE_ENDPOINT)->path("$id/$hash");
 			$m->logger->debug("Repasted to $url");

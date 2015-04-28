@@ -8,7 +8,7 @@ use Bot::ZIRC;
 
 my $bot = Bot::ZIRC->new(
 	networks => {
-		freenode => {
+		socialgamer => {
 			class => 'SocialGamer',
 			irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
 			users => { master => 'Grinnz' },
