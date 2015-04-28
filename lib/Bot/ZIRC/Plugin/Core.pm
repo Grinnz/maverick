@@ -124,6 +124,7 @@ sub register {
 		name => 'nick',
 		help_text => 'Change bot\'s nick',
 		usage_text => '<nick>',
+		required_access => ACCESS_BOT_ADMIN,
 		on_run => sub {
 			my $m = shift;
 			my ($nick) = $m->args_list;
@@ -131,7 +132,6 @@ sub register {
 			$m->config->set('irc', 'nick', $nick);
 			$m->write(nick => $nick);
 		},
-		required_access => ACCESS_BOT_ADMIN,
 	);
 	
 	$bot->add_command(
@@ -155,33 +155,6 @@ sub register {
 			my $m = shift;
 			$self->bot->reload;
 			$m->reply("Reloaded configuration");
-		},
-	);
-	
-	$bot->add_command(
-		name => 'say',
-		help_text => 'Echo a message',
-		usage_text => '<message>',
-		required_access => ACCESS_CHANNEL_VOICE,
-		strip_formatting => 0,
-		on_run => sub {
-			my $m = shift;
-			my $say_msg = $m->args;
-			if ($say_msg =~ s/^(#\w+)//) {
-				my $in_channel = $1;
-				return 'usage' unless length $say_msg;
-				$m->check_access(ACCESS_BOT_ADMIN, sub {
-					my ($sender, $has_access) = @_;
-					if ($has_access) {
-						$m->write(privmsg => $in_channel, ":$say_msg");
-					} else {
-						$m->reply("You must be a bot administrator to run this command.");
-					}
-				});
-			} else {
-				return 'usage' unless length $say_msg;
-				$m->reply($say_msg);
-			}
 		},
 	);
 	
