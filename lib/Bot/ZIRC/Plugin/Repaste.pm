@@ -26,9 +26,6 @@ sub register {
 			my $contents = $tx->res->text;
 			return $m->logger->debug("No paste contents") unless length $contents;
 			
-			my $summary = $contents;
-			$summary =~ s/\n.+//s;
-			
 			my %form = (
 				paste_data => $contents,
 				paste_lang => 'text',
