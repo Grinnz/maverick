@@ -45,7 +45,6 @@ sub register {
 			my ($delay, $tx) = @_;
 			return $m->logger->error($self->ua_error($tx->error)) if $tx->error;
 			
-			warn Mojo::Util::dumper $tx->res->json;
 			my $id = $tx->res->json->{result}{id};
 			my $hash = $tx->res->json->{result}{hash} // '';
 			return $m->logger->error("No paste ID returned") unless defined $id;
