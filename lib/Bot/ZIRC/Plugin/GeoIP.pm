@@ -96,7 +96,7 @@ sub geoip_locate_host {
 			unless $self->bot->has_plugin_method('dns_resolve_ips');
 		my $next = $delay->begin(0);
 		$self->bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
-			->catch(sub { $next->($_[1]) });
+			->catch(sub { $next->("DNS error: $_[1]") });
 	}, sub {
 		my ($delay, $err, $addrs) = @_;
 		die $err if $err;

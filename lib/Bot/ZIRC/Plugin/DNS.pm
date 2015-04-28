@@ -48,7 +48,7 @@ sub dns_resolve {
 	croak "No hostname to resolve" unless defined $host;
 	unless ($cb) {
 		my ($err, @results) = getaddrinfo $host;
-		if (defined $err) {
+		if ($err) {
 			chomp $err;
 			die "$err\n";
 		}
@@ -72,7 +72,7 @@ sub dns_resolve {
 		}
 	}, sub {
 		my ($delay, $err, @results) = @_;
-		if (defined $err) {
+		if ($err) {
 			chomp $err;
 			die "$err\n";
 		}
