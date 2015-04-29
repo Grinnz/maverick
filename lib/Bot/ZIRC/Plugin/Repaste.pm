@@ -56,3 +56,38 @@ sub register {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Plugin::Repaste - Repasting plugin for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+ my $bot = Bot::ZIRC->new(
+   plugins => { Repaste => 1 },
+ );
+
+=head1 DESCRIPTION
+
+Hooks into public messages of a L<Bot::ZIRC> IRC bot and whenever a
+L<pastebin.com|http://pastebin.com> link is detected, repastes it to another
+pastebin site like L<fpaste|http://fpaste.org>.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

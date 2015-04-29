@@ -430,7 +430,7 @@ sub sig_reload {
 sub _config_defaults {
 	{
 		main => {
-			debug => 1,
+			debug => 0,
 			echo => 1,
 		},
 		irc => {
