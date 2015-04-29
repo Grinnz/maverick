@@ -15,7 +15,7 @@ sub calc_expression {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_plugin_method($self, 'calc_expression');
+	$bot->add_helper($self, 'calc_expression');
 	
 	$bot->add_command(
 		name => 'calc',

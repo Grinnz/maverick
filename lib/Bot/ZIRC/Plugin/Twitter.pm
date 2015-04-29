@@ -59,9 +59,9 @@ sub register {
 		unless defined $self->api_secret;
 	die TWITTER_API_KEY_MISSING unless defined $self->api_key and defined $self->api_secret;
 	
-	$bot->add_plugin_method($self, 'twitter_search');
-	$bot->add_plugin_method($self, 'twitter_tweet_by_id');
-	$bot->add_plugin_method($self, 'twitter_tweet_by_user');
+	$bot->add_helper($self, 'twitter_search');
+	$bot->add_helper($self, 'twitter_tweet_by_id');
+	$bot->add_helper($self, 'twitter_tweet_by_user');
 		
 	$bot->add_command(
 		name => 'twitter',
@@ -299,7 +299,7 @@ Bot::ZIRC::Plugin::Twitter - Twitter plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for interacting with Twitter to a L<Bot::ZIRC>
+Adds helper methods and commands for interacting with Twitter to a L<Bot::ZIRC>
 IRC bot. Also adds a hook to display information about tweets linked in a
 channel.
 

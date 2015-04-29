@@ -23,7 +23,7 @@ sub register {
 	$self->api_key($bot->config->get('apis','wolfram_api_key')) unless defined $self->api_key;
 	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_plugin_method($self, 'wolfram_query');
+	$bot->add_helper($self, 'wolfram_query');
 	
 	$bot->add_command(
 		name => 'wolframalpha',
@@ -41,7 +41,7 @@ sub register {
 				my $delay = shift;
 				if (is_ipv4 $host or is_ipv6 $host) {
 					$delay->pass($host);
-				} elsif ($self->bot->has_plugin_method('dns_resolve_ips')) {
+				} elsif ($self->bot->has_helper('dns_resolve_ips')) {
 					my $cb = $delay->begin(0);
 					$self->bot->dns_resolve_ips($host, sub {
 						my $addrs = shift;
@@ -203,7 +203,7 @@ Bot::ZIRC::Plugin::Wolfram - Wolfram|Alpha plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for querying Wolfram|Alpha to a L<Bot::ZIRC>
+Adds helper methods and commands for querying Wolfram|Alpha to a L<Bot::ZIRC>
 IRC bot.
 
 This plugin requires a Wolfram|Alpha API key, as the configuration option

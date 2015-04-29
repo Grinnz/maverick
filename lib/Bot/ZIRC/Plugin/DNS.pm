@@ -106,8 +106,8 @@ sub _ip_results {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_plugin_method($self, 'dns_resolve');
-	$bot->add_plugin_method($self, 'dns_resolve_ips');
+	$bot->add_helper($self, 'dns_resolve');
+	$bot->add_helper($self, 'dns_resolve_ips');
 	
 	$bot->add_command(
 		name => 'dns',
@@ -159,7 +159,7 @@ Bot::ZIRC::Plugin::DNS - DNS resolver plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods for resolving DNS and a C<dns> command to a L<Bot::ZIRC>
+Adds helper methods for resolving DNS and a C<dns> command to a L<Bot::ZIRC>
 IRC bot.
 
 Please note, for non-blocking DNS resolution L<Net::DNS::Native> must be

@@ -31,8 +31,8 @@ sub register {
 	$self->api_key($bot->config->get('apis','google_api_key')) unless defined $self->api_key;
 	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_plugin_method($self, 'youtube_search');
-	$bot->add_plugin_method($self, 'youtube_video');
+	$bot->add_helper($self, 'youtube_search');
+	$bot->add_helper($self, 'youtube_video');
 	
 	$bot->add_command(
 		name => 'youtube',
@@ -183,7 +183,7 @@ Bot::ZIRC::Plugin::YouTube - YouTube search plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for searching YouTube to a L<Bot::ZIRC> IRC
+Adds helper methods and commands for searching YouTube to a L<Bot::ZIRC> IRC
 bot. Also adds a hook to display information about YouTube videos linked in a
 channel.
 

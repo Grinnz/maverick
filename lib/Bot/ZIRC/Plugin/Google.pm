@@ -36,8 +36,8 @@ sub register {
 	$self->cse_id($bot->config->get('apis','google_cse_id')) unless defined $self->cse_id;
 	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
 	
-	$bot->add_plugin_method($self, 'google_search_web');
-	$bot->add_plugin_method($self, 'google_search_image');
+	$bot->add_helper($self, 'google_search_web');
+	$bot->add_helper($self, 'google_search_image');
 	
 	$bot->add_command(
 		name => 'google',
@@ -248,7 +248,7 @@ Bot::ZIRC::Plugin::Google - Google search plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for searching Google to a L<Bot::ZIRC> IRC
+Adds helper methods and commands for searching Google to a L<Bot::ZIRC> IRC
 bot.
 
 This plugin requires a Google API key and Custom Search Engine ID, as

@@ -20,7 +20,7 @@ has 'bot' => (
 
 sub register { die "Method must be overloaded by subclass" }
 
-sub require_methods { () }
+sub require_helpers { () }
 
 sub reload {}
 sub start {}

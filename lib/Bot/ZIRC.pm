@@ -53,7 +53,7 @@ has 'plugins' => (
 	default => sub { {} },
 );
 
-has 'plugin_methods' => (
+has 'helpers' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -188,7 +188,7 @@ sub BUILD {
 		my $args = delete $plugins->{$plugin_class};
 		$self->register_plugin($plugin_class => $args) if $args;
 	}
-	$self->check_required_methods;
+	$self->check_required_helpers;
 }
 
 # Networks
@@ -266,50 +266,50 @@ sub register_plugin {
 	return $self;
 }
 
-sub has_plugin_method {
-	my ($self, $method) = @_;
-	croak "Unspecified plugin method" unless defined $method;
-	return (exists $self->plugin_methods->{$method}
-		or !!$self->can($method));
+sub has_helper {
+	my ($self, $helper) = @_;
+	croak "Unspecified helper method" unless defined $helper;
+	return (exists $self->helpers->{$helper}
+		or !!$self->can($helper));
 }
 
-sub check_required_methods {
+sub check_required_helpers {
 	my $self = shift;
 	foreach my $class ($self->get_plugin_classes) {
 		my $plugin = $self->get_plugin($class);
-		foreach my $method ($plugin->require_methods) {
-			die "Plugin $class requires method $method but it has not been loaded\n"
-				unless $self->has_plugin_method($method);
+		foreach my $helper ($plugin->require_helpers) {
+			die "Plugin $class requires helper method $helper but it has not been loaded\n"
+				unless $self->has_helper($helper);
 		}
 	}
 	return $self;
 }
 
-sub add_plugin_method {
-	my ($self, $plugin, $method) = @_;
+sub add_helper {
+	my ($self, $plugin, $helper) = @_;
 	my $class = blessed $plugin // croak "Invalid plugin $plugin";
-	croak "Invalid plugin method $method"
-		unless defined $method and length $method and !ref $method;
-	croak "Method $method already exists"
-		if exists $self->plugin_methods->{$method} or $self->can($method);
-	croak "Method $method is not implemented by plugin $class"
-		unless $plugin->can($method);
-	$self->plugin_methods->{$method} = $class;
+	croak "Invalid helper method $helper"
+		unless defined $helper and length $helper and !ref $helper;
+	croak "Method $helper already exists"
+		if exists $self->helpers->{$helper} or $self->can($helper);
+	croak "Method $helper is not implemented by plugin $class"
+		unless $plugin->can($helper);
+	$self->helpers->{$helper} = $class;
 	return $self;
 }
 
-# Autoload plugin methods
+# Autoload helper methods
 sub AUTOLOAD {
 	my $self = shift;
 	my $method = $AUTOLOAD;
 	$method =~ s/.*:://;
-	unless (ref $self and exists $self->plugin_methods->{$method}) {
+	unless (ref $self and exists $self->helpers->{$method}) {
 		# Emulate standard missing method error
 		my ($package, $method) = $AUTOLOAD =~ /^(.*)::([^:]*)/;
 		die sprintf qq(Can't locate object method "%s" via package "%s" at %s line %d.\n),
 			$method, $package, (caller)[1,2];
 	}
-	my $class = $self->plugin_methods->{$method};
+	my $class = $self->helpers->{$method};
 	my $plugin = $self->get_plugin($class) // croak "Plugin $class is not loaded";
 	my $sub = $plugin->can($method)
 		// croak "Plugin $class does not implement method $method";
@@ -528,9 +528,9 @@ the bot's constructor, or added later with the L</"add_network"> method.
 Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
 registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
-method of its own as a "plugin method" which then can be called on the bot
+method of its own as a "helper method" which then can be called on the bot
 instance from elsewhere. Plugin objects are stored in the bot instance and are
-passed as the invocant of plugin methods called on the bot.
+passed as the invocant of helper methods called on the bot.
 
 =head1 COMMANDS
 
@@ -703,18 +703,18 @@ Returns the plugin object if it has been registered, or C<undef> otherwise.
 Registers a plugin with optional hashref of parameters to pass to the plugin's
 C<register> method. See L</"PLUGINS">.
 
-=head2 add_plugin_method
+=head2 add_helper
 
-  $bot = $bot->add_plugin_method(DNS => 'dns_resolve');
+  $bot = $bot->add_helper(DNS => 'dns_resolve');
 
-Adds a plugin method to the bot, so that it may be called on the bot via
+Adds a helper method to the bot, so that it may be called on the bot via
 L</"AUTOLOAD">.
 
-=head2 has_plugin_method
+=head2 has_helper
 
-  my $bool = $bot->has_plugin_method('dns_resolve');
+  my $bool = $bot->has_helper('dns_resolve');
 
-Returns a boolean value that is true if the specified plugin method is
+Returns a boolean value that is true if the specified helper method is
 available.
 
 =head2 get_command_names

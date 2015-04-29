@@ -31,8 +31,8 @@ sub register {
 	$self->api_key($bot->config->get('apis','wunderground_api_key')) unless defined $self->api_key;
 	die WEATHER_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_plugin_method($self, 'weather_autocomplete_location_code');
-	$bot->add_plugin_method($self, 'weather_location_data');
+	$bot->add_helper($self, 'weather_autocomplete_location_code');
+	$bot->add_helper($self, 'weather_location_data');
 	
 	$bot->add_command(
 		name => 'weather',
@@ -44,7 +44,7 @@ sub register {
 			$target = $m->sender unless length $target;
 			Mojo::IOLoop->delay(sub {
 				my $delay = shift;
-				if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
+				if (exists $m->network->users->{lc $target} and $self->bot->has_helper('geoip_locate_host')) {
 					my $hostname = $m->network->user($target)->host;
 					return $m->reply("Unable to find hostname for $target")
 						unless defined $hostname;
@@ -89,7 +89,7 @@ sub register {
 			$target = $m->sender unless length $target;
 			Mojo::IOLoop->delay(sub {
 				my $delay = shift;
-				if (exists $m->network->users->{lc $target} and $self->bot->has_plugin_method('geoip_locate_host')) {
+				if (exists $m->network->users->{lc $target} and $self->bot->has_helper('geoip_locate_host')) {
 					my $hostname = $m->network->user($target)->host;
 					return $m->reply("Unable to find hostname for $target")
 						unless defined $hostname;
@@ -300,7 +300,7 @@ Bot::ZIRC::Plugin::Weather - Weather plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for retrieving weather and forecast data to a
+Adds helper methods and commands for retrieving weather and forecast data to a
 L<Bot::ZIRC> IRC bot.
 
 This plugin requires a Weather Underground API key as the configuration option

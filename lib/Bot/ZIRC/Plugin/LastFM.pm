@@ -22,7 +22,7 @@ sub register {
 	$self->api_key($bot->config->get('apis','lastfm_api_key')) unless defined $self->api_key;
 	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_plugin_method($self, 'lastfm_last_track');
+	$bot->add_helper($self, 'lastfm_last_track');
 	
 	$bot->add_command(
 		name => 'np',
@@ -119,7 +119,7 @@ Bot::ZIRC::Plugin::LastFM - Last.FM plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin method and command for retrieving Last.FM last-track-played
+Adds helper method and command for retrieving Last.FM last-track-played
 information to a L<Bot::ZIRC> IRC bot.
 
 This plugin requires a Last.FM API key, as configuration option

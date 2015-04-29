@@ -36,8 +36,8 @@ sub register {
 	my $file = $bot->config->get('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
-	$bot->add_plugin_method($self, 'geoip_locate');
-	$bot->add_plugin_method($self, 'geoip_locate_host');
+	$bot->add_helper($self, 'geoip_locate');
+	$bot->add_helper($self, 'geoip_locate_host');
 	
 	$bot->add_command(
 		name => 'locate',
@@ -85,7 +85,7 @@ sub geoip_locate_host {
 	unless ($cb) {
 		return $self->bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
 		die "DNS plugin is required to resolve hostnames\n"
-			unless $self->bot->has_plugin_method('dns_resolve_ips');
+			unless $self->bot->has_helper('dns_resolve_ips');
 		return $self->_on_dns_host($self->bot->dns_resolve_ips($host));
 	}
 	return Mojo::IOLoop->delay(sub {
@@ -93,7 +93,7 @@ sub geoip_locate_host {
 		return $cb->($self->bot->geoip_locate($host))
 			if is_ipv4 $host or is_ipv6 $host;
 		die "DNS plugin is required to resolve hostnames\n"
-			unless $self->bot->has_plugin_method('dns_resolve_ips');
+			unless $self->bot->has_helper('dns_resolve_ips');
 		my $next = $delay->begin(0);
 		$self->bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
 			->catch(sub { $next->("DNS error: $_[1]") });
@@ -147,7 +147,7 @@ Bot::ZIRC::Plugin::GeoIP - Geolocation plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods for geolocating IP addresses and a C<locate> command to a
+Adds helper methods for geolocating IP addresses and a C<locate> command to a
 L<Bot::ZIRC> IRC bot.
 
 This plugin requires that a MaxMind GeoLite2 City database file (binary format)

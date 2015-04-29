@@ -18,8 +18,8 @@ has '_results_cache' => (
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_plugin_method($self, 'wikipedia_search');
-	$bot->add_plugin_method($self, 'wikipedia_page');
+	$bot->add_helper($self, 'wikipedia_search');
+	$bot->add_helper($self, 'wikipedia_page');
 	
 	$bot->add_command(
 		name => 'wikipedia',
@@ -140,7 +140,7 @@ Bot::ZIRC::Plugin::Wikipedia - Wikipedia search plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for searching Wikipedia to a L<Bot::ZIRC> IRC
+Adds helper methods and commands for searching Wikipedia to a L<Bot::ZIRC> IRC
 bot.
 
 =head1 METHODS

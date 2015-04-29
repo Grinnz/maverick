@@ -132,10 +132,10 @@ sub register {
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	
-	$bot->add_plugin_method($self, 'detect_language');
-	$bot->add_plugin_method($self, 'translate_language_code');
-	$bot->add_plugin_method($self, 'translate_language_name');
-	$bot->add_plugin_method($self, 'translate_text');
+	$bot->add_helper($self, 'detect_language');
+	$bot->add_helper($self, 'translate_language_code');
+	$bot->add_helper($self, 'translate_language_name');
+	$bot->add_helper($self, 'translate_text');
 	
 	$bot->add_command(
 		name => 'translate',
@@ -277,7 +277,7 @@ Bot::ZIRC::Plugin::Translate - Language translation plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin methods and commands for translating text to a L<Bot::ZIRC> IRC
+Adds helper methods and commands for translating text to a L<Bot::ZIRC> IRC
 bot.
 
 This plugin requires a Microsoft Client ID and Client secret that is registered

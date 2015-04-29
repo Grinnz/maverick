@@ -41,7 +41,7 @@ sub _build_dict {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_plugin_method($self, 'spell_dict');
+	$bot->add_helper($self, 'spell_dict');
 	
 	$bot->add_command(
 		name => 'spell',
@@ -76,7 +76,7 @@ Bot::ZIRC::Plugin::Spell - Spell-check plugin for Bot::ZIRC
 
 =head1 DESCRIPTION
 
-Adds plugin method and command for spell-checking to a L<Bot::ZIRC> IRC bot.
+Adds helper method and command for spell-checking to a L<Bot::ZIRC> IRC bot.
 
 This plugin requires L<hunspell|http://hunspell.sourceforge.net/> to be
 installed, as well as hunspell dictionaries for any language you wish to use
