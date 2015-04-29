@@ -176,7 +176,7 @@ sub BUILD {
 	croak "Networks must be specified as a hash reference"
 		unless ref $networks eq 'HASH';
 	croak "No networks have been specified" unless keys %$networks;
-	$self->add_network($_ => delete $networks->{$_}) for keys %$networks;
+	$self->network($_ => delete $networks->{$_}) for keys %$networks;
 	
 	my $plugins = $self->plugins;
 	$self->_set_plugins({map { ($_ => 1) } @$plugins}) if ref $plugins eq 'ARRAY';
@@ -186,19 +186,14 @@ sub BUILD {
 	$plugins->{Core} //= 1;
 	foreach my $plugin_class (keys %$plugins) {
 		my $args = delete $plugins->{$plugin_class};
-		$self->register_plugin($plugin_class => $args) if $args;
+		$self->plugin($plugin_class => $args) if $args;
 	}
 	$self->check_required_helpers;
 }
 
 # Networks
 
-sub get_network_names {
-	my $self = shift;
-	return map { $_->name } values %{$self->networks};
-}
-
-sub add_network {
+sub network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
 	croak "Network name $name contains invalid characters" if $name =~ /[^-.\w]/;
@@ -218,28 +213,11 @@ sub add_network {
 
 # Plugins
 
-sub get_plugin_classes {
-	my $self = shift;
-	return keys %{$self->plugins};
-}
-
-sub has_plugin {
-	my ($self, $class) = @_;
-	return undef unless defined $class;
-	return exists $self->plugins->{$class};
-}
-
-sub get_plugin {
-	my ($self, $class) = @_;
-	return undef unless defined $class and exists $self->plugins->{$class};
-	return $self->plugins->{$class};
-}
-
-sub register_plugin {
+sub plugin {
 	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
-	return $self if $self->has_plugin($class);
+	croak "Plugin $class is already registered" if exists $self->plugins->{$class};
 	$self->plugins->{$class} = undef; # Avoid circular dependency issues
 	my ($plugin, $err);
 	{
@@ -275,8 +253,8 @@ sub has_helper {
 
 sub check_required_helpers {
 	my $self = shift;
-	foreach my $class ($self->get_plugin_classes) {
-		my $plugin = $self->get_plugin($class);
+	foreach my $class (keys %{$self->plugins}) {
+		my $plugin = $self->plugins->{$class};
 		foreach my $helper ($plugin->require_helpers) {
 			die "Plugin $class requires helper method $helper but it has not been loaded\n"
 				unless $self->has_helper($helper);
@@ -310,7 +288,8 @@ sub AUTOLOAD {
 			$method, $package, (caller)[1,2];
 	}
 	my $class = $self->helpers->{$method};
-	my $plugin = $self->get_plugin($class) // croak "Plugin $class is not loaded";
+	croak "Plugin $class is not loaded" unless exists $self->plugins->{$class};
+	my $plugin = $self->plugins->{$class};
 	my $sub = $plugin->can($method)
 		// croak "Plugin $class does not implement method $method";
 	unshift @_, $plugin;
@@ -319,7 +298,7 @@ sub AUTOLOAD {
 
 # Commands
 
-sub get_command_names {
+sub command_names {
 	my $self = shift;
 	return keys %{$self->commands};
 }
@@ -369,7 +348,7 @@ sub add_command_prefixes {
 sub reload_command_prefixes {
 	my $self = shift;
 	$self->clear_command_prefixes;
-	$self->add_command_prefixes($_) for $self->get_command_names;
+	$self->add_command_prefixes($_) for $self->command_names;
 }
 
 # Bot actions
@@ -521,7 +500,7 @@ the default for any configuration not in a section.
 
 IRC networks are represented by L<Bot::ZIRC::Network> (or subclassed) objects
 that handle all communication with that network. Networks can be specified in
-the bot's constructor, or added later with the L</"add_network"> method.
+the bot's constructor, or added later with the L</"network"> method.
 
 =head1 PLUGINS
 
@@ -666,39 +645,15 @@ Disconnect from all networks and stop the bot.
 
 Reloads configuration and reopens log handles.
 
-=head2 get_network_names
+=head2 network
 
-  my @names = $bot->get_network_names;
-
-Returns a list of all configured network names.
-
-=head2 add_network
-
-  $bot = $bot->add_network(freenode => { class => 'Freenode' });
+  $bot = $bot->network(freenode => { class => 'Freenode' });
 
 Adds a network for the bot to connect to. See L</"NETWORKS">.
 
-=head2 get_plugin_classes
+=head2 plugin
 
-  my @classes = $bot->get_plugin_classes;
-
-Returns a list of all registered plugin classes.
-
-=head2 has_plugin
-
-  my $bool = $bot->has_plugin('DNS');
-
-Returns a boolean value that is true if the plugin has been registered.
-
-=head2 get_plugin
-
-  my $plugin = $bot->get_plugin('DNS');
-
-Returns the plugin object if it has been registered, or C<undef> otherwise.
-
-=head2 register_plugin
-
-  $bot = $bot->register_plugin(DNS => { native => 0 });
+  $bot = $bot->plugin(DNS => { native => 0 });
 
 Registers a plugin with optional hashref of parameters to pass to the plugin's
 C<register> method. See L</"PLUGINS">.
@@ -717,9 +672,9 @@ L</"AUTOLOAD">.
 Returns a boolean value that is true if the specified helper method is
 available.
 
-=head2 get_command_names
+=head2 command_names
 
-  my @names = $bot->get_command_names;
+  my @names = $bot->command_names;
 
 Returns a list of all commands.
 
