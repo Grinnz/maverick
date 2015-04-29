@@ -59,16 +59,16 @@ the default for any configuration not in a section.
 
 IRC networks are represented by L<Bot::ZIRC::Network> (or subclassed) objects
 that handle all communication with that network. Networks can be specified in
-the bot's constructor, or added later with the L</"add_network"> method.
+the bot's constructor, or added later with the L</"network"> method.
 
 =head1 PLUGINS
 
 Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
 registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
-method of its own as a "plugin method" which then can be called on the bot
+method of its own as a "helper method" which then can be called on the bot
 instance from elsewhere. Plugin objects are stored in the bot instance and are
-passed as the invocant of plugin methods called on the bot.
+passed as the invocant of helper methods called on the bot.
 
 =head1 COMMANDS
 
@@ -204,60 +204,36 @@ Disconnect from all networks and stop the bot.
 
 Reloads configuration and reopens log handles.
 
-=head2 get_network_names
+=head2 network
 
-  my @names = $bot->get_network_names;
-
-Returns a list of all configured network names.
-
-=head2 add_network
-
-  $bot = $bot->add_network(freenode => { class => 'Freenode' });
+  $bot = $bot->network(freenode => { class => 'Freenode' });
 
 Adds a network for the bot to connect to. See L</"NETWORKS">.
 
-=head2 get_plugin_classes
+=head2 plugin
 
-  my @classes = $bot->get_plugin_classes;
-
-Returns a list of all registered plugin classes.
-
-=head2 has_plugin
-
-  my $bool = $bot->has_plugin('DNS');
-
-Returns a boolean value that is true if the plugin has been registered.
-
-=head2 get_plugin
-
-  my $plugin = $bot->get_plugin('DNS');
-
-Returns the plugin object if it has been registered, or C<undef> otherwise.
-
-=head2 register_plugin
-
-  $bot = $bot->register_plugin(DNS => { native => 0 });
+  $bot = $bot->plugin(DNS => { native => 0 });
 
 Registers a plugin with optional hashref of parameters to pass to the plugin's
 C<register> method. See L</"PLUGINS">.
 
-=head2 add_plugin_method
+=head2 add_helper
 
-  $bot = $bot->add_plugin_method(DNS => 'dns_resolve');
+  $bot = $bot->add_helper(DNS => 'dns_resolve');
 
-Adds a plugin method to the bot, so that it may be called on the bot via
+Adds a helper method to the bot, so that it may be called on the bot via
 L</"AUTOLOAD">.
 
-=head2 has_plugin_method
+=head2 has_helper
 
-  my $bool = $bot->has_plugin_method('dns_resolve');
+  my $bool = $bot->has_helper('dns_resolve');
 
-Returns a boolean value that is true if the specified plugin method is
+Returns a boolean value that is true if the specified helper method is
 available.
 
-=head2 get_command_names
+=head2 command_names
 
-  my @names = $bot->get_command_names;
+  my @names = $bot->command_names;
 
 Returns a list of all commands.
 
