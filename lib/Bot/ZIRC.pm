@@ -47,10 +47,12 @@ has 'networks' => (
 	default => sub { {} },
 );
 
-has 'plugins' => (
-	is => 'rwp',
+has 'init_plugins' => (
+	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
+	clearer => 1,
+	init_arg => 'plugins',
 );
 
 has 'helpers' => (
@@ -178,17 +180,16 @@ sub BUILD {
 	croak "No networks have been specified" unless keys %$networks;
 	$self->network($_ => delete $networks->{$_}) for keys %$networks;
 	
-	my $plugins = $self->plugins;
-	$self->_set_plugins({map { ($_ => 1) } @$plugins}) if ref $plugins eq 'ARRAY';
-	$plugins = $self->plugins;
+	my $plugins = $self->init_plugins;
+	$plugins = {map { ($_ => 1) } @$plugins} if ref $plugins eq 'ARRAY';
 	croak "Plugins must be specified as a hash or array reference"
 		unless ref $plugins eq 'HASH';
 	$plugins->{Core} //= 1;
 	foreach my $plugin_class (keys %$plugins) {
-		my $args = delete $plugins->{$plugin_class};
+		my $args = $plugins->{$plugin_class};
 		$self->plugin($plugin_class => $args) if $args;
 	}
-	$self->check_required_helpers;
+	$self->clear_init_plugins;
 }
 
 # Networks
@@ -217,8 +218,6 @@ sub plugin {
 	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
-	croak "Plugin $class is already registered" if exists $self->plugins->{$class};
-	$self->plugins->{$class} = undef; # Avoid circular dependency issues
 	my ($plugin, $err);
 	{
 		local $@;
@@ -237,10 +236,8 @@ sub plugin {
 		}
 	}
 	if (defined $err) {
-		delete $self->plugins->{$class};
 		croak "Plugin $class could not be registered: $err";
 	}
-	$self->plugins->{$class} = $plugin;
 	return $self;
 }
 
@@ -249,18 +246,6 @@ sub has_helper {
 	croak "Unspecified helper method" unless defined $helper;
 	return (exists $self->helpers->{$helper}
 		or !!$self->can($helper));
-}
-
-sub check_required_helpers {
-	my $self = shift;
-	foreach my $class (keys %{$self->plugins}) {
-		my $plugin = $self->plugins->{$class};
-		foreach my $helper ($plugin->require_helpers) {
-			die "Plugin $class requires helper method $helper but it has not been loaded\n"
-				unless $self->has_helper($helper);
-		}
-	}
-	return $self;
 }
 
 sub add_helper {
@@ -272,7 +257,7 @@ sub add_helper {
 		if exists $self->helpers->{$helper} or $self->can($helper);
 	croak "Method $helper is not implemented by plugin $class"
 		unless $plugin->can($helper);
-	$self->helpers->{$helper} = $class;
+	$self->helpers->{$helper} = sub { $plugin->$helper(@_) };
 	return $self;
 }
 
@@ -287,12 +272,7 @@ sub AUTOLOAD {
 		die sprintf qq(Can't locate object method "%s" via package "%s" at %s line %d.\n),
 			$method, $package, (caller)[1,2];
 	}
-	my $class = $self->helpers->{$method};
-	croak "Plugin $class is not loaded" unless exists $self->plugins->{$class};
-	my $plugin = $self->plugins->{$class};
-	my $sub = $plugin->can($method)
-		// croak "Plugin $class does not implement method $method";
-	unshift @_, $plugin;
+	my $sub = $self->helpers->{$method};
 	goto &$sub;
 }
 
@@ -361,7 +341,7 @@ sub start {
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
 	
-	$_->start for values %{$self->networks}, values %{$self->plugins};
+	$self->emit('start');
 	
 	# Make sure perl signals are caught in a timely fashion
 	$self->_set_watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
@@ -376,12 +356,7 @@ sub stop {
 	$self->is_stopping(1);
 	Mojo::IOLoop->remove($self->watch_timer) if $self->has_watch_timer;
 	$self->clear_watch_timer;
-	
-	$_->stop for values %{$self->plugins};
-	Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		$_->stop($message, $delay->begin) for values %{$self->networks};
-	}, sub { Mojo::IOLoop->stop });
+	$self->emit(stop => $message);
 	return $self;
 }
 
@@ -389,7 +364,7 @@ sub reload {
 	my $self = shift;
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
-	$_->reload for values %{$self->networks}, values %{$self->plugins};
+	$self->emit('reload');
 	$self->clear_logger;
 	return $self;
 }
@@ -508,8 +483,8 @@ Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
 registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
 method of its own as a "helper method" which then can be called on the bot
-instance from elsewhere. Plugin objects are stored in the bot instance and are
-passed as the invocant of helper methods called on the bot.
+instance from elsewhere. The plugin object is passed as the invocant of the
+registered helper method.
 
 =head1 COMMANDS
 
@@ -521,6 +496,18 @@ command is invoked by a IRC user.
 
 Hooks are subroutines which are run whenever a specific action occurs. They are
 a powerful way to add global functionality.
+
+=head2 start
+
+  $bot->on(start => sub { my ($bot) = @_; ... });
+
+=head2 stop
+
+  $bot->on(stop => sub { my ($bot) = @_; ... });
+
+=head2 reload
+
+  $bot->on(reload => sub { my ($bot) = @_; ... });
 
 =head2 privmsg
 
@@ -692,12 +679,6 @@ if the command does not exist.
 
 Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
 new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
-
-=head2 add_hook
-
-  $bot = $bot->add_hook(privmsg => sub { warn $_[1] });
-
-Adds a hook to be executed when a certain event occurs. See L</"HOOKS">.
 
 =head1 BUGS
 

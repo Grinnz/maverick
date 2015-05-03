@@ -174,6 +174,14 @@ has 'check_recurring_timer' => (
 	clearer => 1,
 );
 
+sub BUILD {
+	my $self = shift;
+	
+	$self->bot->on(start => sub { $self->start });
+	$self->bot->on(stop => sub { $self->stop($_[1]) });
+	$self->bot->on(reload => sub { $self->reload });
+}
+
 sub start {
 	my $self = shift;
 	my $irc = $self->irc;
@@ -194,10 +202,10 @@ sub start {
 }
 
 sub stop {
-	my $self = shift;
+	my ($self, $message) = @_;
 	my $server = $self->server;
 	$self->logger->debug("Disconnecting from $server");
-	$self->disconnect(@_);
+	$self->disconnect($message);
 	return $self;
 }
 

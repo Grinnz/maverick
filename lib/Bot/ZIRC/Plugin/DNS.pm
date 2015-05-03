@@ -43,6 +43,41 @@ sub BUILD {
 	}
 }
 
+sub register {
+	my ($self, $bot) = @_;
+	
+	$bot->add_helper($self, 'dns_resolve');
+	$bot->add_helper($self, 'dns_resolve_ips');
+	
+	$bot->add_command(
+		name => 'dns',
+		help_text => 'Resolve the DNS of a user or hostname',
+		usage_text => '[<nick>|<hostname>]',
+		on_run => sub {
+			my $m = shift;
+			my ($target) = $m->args_list;
+			$target //= $m->sender->nick;
+			my ($hostname, $say_result);
+			if (exists $m->network->users->{lc $target}) {
+				$hostname = $m->network->user($target)->host || 'unknown';
+				$say_result = "$target ($hostname)";
+			} else {
+				$say_result = $hostname = $target;
+			}
+			
+			$m->logger->debug("Resolving $hostname");
+			$self->bot->dns_resolve_ips($hostname, sub {
+				my $addrs = shift;
+				return $m->reply("No DNS info found for $say_result") unless @$addrs;
+				my $addr_list = join ', ', @$addrs;
+				$m->reply("DNS results for $say_result: $addr_list");
+			})->catch(sub { $m->reply("Failed to resolve $hostname: $_[1]") });
+		},
+	);
+	
+	$bot->on(stop => sub { $self->stop });
+}
+
 sub dns_resolve {
 	my ($self, $host, $cb) = @_;
 	croak "No hostname to resolve" unless defined $host;
@@ -101,39 +136,6 @@ sub _ip_results {
 		$found{$addr} = 1;
 	}
 	return \@parsed;
-}
-
-sub register {
-	my ($self, $bot) = @_;
-	
-	$bot->add_helper($self, 'dns_resolve');
-	$bot->add_helper($self, 'dns_resolve_ips');
-	
-	$bot->add_command(
-		name => 'dns',
-		help_text => 'Resolve the DNS of a user or hostname',
-		usage_text => '[<nick>|<hostname>]',
-		on_run => sub {
-			my $m = shift;
-			my ($target) = $m->args_list;
-			$target //= $m->sender->nick;
-			my ($hostname, $say_result);
-			if (exists $m->network->users->{lc $target}) {
-				$hostname = $m->network->user($target)->host || 'unknown';
-				$say_result = "$target ($hostname)";
-			} else {
-				$say_result = $hostname = $target;
-			}
-			
-			$m->logger->debug("Resolving $hostname");
-			$self->bot->dns_resolve_ips($hostname, sub {
-				my $addrs = shift;
-				return $m->reply("No DNS info found for $say_result") unless @$addrs;
-				my $addr_list = join ', ', @$addrs;
-				$m->reply("DNS results for $say_result: $addr_list");
-			})->catch(sub { $m->reply("Failed to resolve $hostname: $_[1]") });
-		},
-	);
 }
 
 sub stop {

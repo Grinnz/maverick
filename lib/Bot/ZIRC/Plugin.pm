@@ -22,10 +22,6 @@ sub register { die "Method must be overloaded by subclass" }
 
 sub require_helpers { () }
 
-sub reload {}
-sub start {}
-sub stop {}
-
 sub ua_error {
 	my ($self, $err) = @_;
 	return $err->{code}
