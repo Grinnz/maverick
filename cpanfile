@@ -15,3 +15,5 @@ requires 'Moo', '2.000';
 requires 'namespace::clean';
 requires 'Parse::IRC', '1.20';
 requires 'Scalar::Util';
+test_requires 'Test::More', '0.88';
+test_requires 'File::Temp';
