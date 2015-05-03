@@ -6,6 +6,8 @@ use Mojo::Util qw/decode encode slurp spurt/;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 has 'quote_cache' => (
 	is => 'ro',
 	lazy => 1,

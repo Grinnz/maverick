@@ -67,8 +67,8 @@ Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
 registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
 method of its own as a "helper method" which then can be called on the bot
-instance from elsewhere. Plugin objects are stored in the bot instance and are
-passed as the invocant of helper methods called on the bot.
+instance from elsewhere. The plugin object is passed as the invocant of the
+registered helper method.
 
 =head1 COMMANDS
 
@@ -80,6 +80,24 @@ command is invoked by a IRC user.
 
 Hooks are subroutines which are run whenever a specific action occurs. They are
 a powerful way to add global functionality.
+
+=head2 start
+
+  $bot->on(start => sub { my ($bot) = @_; ... });
+
+Emitted when the bot is started.
+
+=head2 stop
+
+  $bot->on(stop => sub { my ($bot) = @_; ... });
+
+Emitted when the bot is stopped.
+
+=head2 reload
+
+  $bot->on(reload => sub { my ($bot) = @_; ... });
+
+Emitted when the bot is reloaded.
 
 =head2 privmsg
 
@@ -251,12 +269,6 @@ if the command does not exist.
 
 Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
 new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
-
-=head2 add_hook
-
-  $bot = $bot->add_hook(privmsg => sub { warn $_[1] });
-
-Adds a hook to be executed when a certain event occurs. See L</"HOOKS">.
 
 =head1 BUGS
 

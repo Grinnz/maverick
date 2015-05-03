@@ -6,6 +6,8 @@ use Mojo::URL;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant PYX_ENDPOINT_MISSING =>
 	"PYX plugin requires configuration option 'pyx_endpoint' in section 'apis'\n";
 use constant PYX_MAX_PICK => 3;

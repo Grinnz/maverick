@@ -7,6 +7,8 @@ use Socket qw/AF_INET AF_INET6 getaddrinfo inet_ntop unpack_sockaddr_in unpack_s
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 has 'native' => (
 	is => 'rwp',
 	lazy => 1,

@@ -7,6 +7,8 @@ use Scalar::Util 'blessed';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 has 'brain' => (
 	is => 'rw',
 );

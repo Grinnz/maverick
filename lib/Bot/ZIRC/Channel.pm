@@ -10,6 +10,8 @@ use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Moo);
 
+our $VERSION = '0.20';
+
 has 'name' => (
 	is => 'ro',
 	isa => sub { croak "Unspecified channel name" unless defined $_[0] },

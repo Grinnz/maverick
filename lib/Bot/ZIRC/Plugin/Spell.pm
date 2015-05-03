@@ -6,6 +6,8 @@ use Text::Hunspell;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 has 'dict_path' => (
 	is => 'ro',
 	lazy => 1,

@@ -5,6 +5,8 @@ use Mojo::URL;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant FPASTE_PASTE_ENDPOINT => 'http://fpaste.org/';
 

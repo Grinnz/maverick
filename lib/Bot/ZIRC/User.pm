@@ -12,6 +12,8 @@ use overload '""' => sub { shift->nick }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::Channel Moo);
 
+our $VERSION = '0.20';
+
 has 'nick' => (
 	is => 'rw',
 	isa => sub { croak "Unspecified user nick" unless defined $_[0] },

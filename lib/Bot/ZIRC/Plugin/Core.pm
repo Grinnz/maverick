@@ -5,6 +5,8 @@ use Bot::ZIRC::Access ':access';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 has 'more_commands' => (
 	is => 'ro',
 	lazy => 1,

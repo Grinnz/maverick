@@ -8,6 +8,8 @@ use Time::Duration 'ago';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';
 use constant LASTFM_API_KEY_MISSING =>
 	"Last.fm plugin requires configuration option 'lastfm_api_key' in section 'apis'\n" .

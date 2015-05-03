@@ -9,6 +9,8 @@ use Mojo::URL;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant GOOGLE_API_ENDPOINT => 'https://www.googleapis.com/customsearch/v1';
 use constant GOOGLE_API_KEY_MISSING => 
 	"Google plugin requires configuration options 'google_api_key' and 'google_cse_id' in section 'apis'\n" .

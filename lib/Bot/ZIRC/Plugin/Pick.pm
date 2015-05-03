@@ -3,6 +3,8 @@ package Bot::ZIRC::Plugin::Pick;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 sub register {
 	my ($self, $bot) = @_;
 	

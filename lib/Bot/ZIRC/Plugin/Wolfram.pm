@@ -9,6 +9,8 @@ use Mojo::URL;
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant WOLFRAM_API_ENDPOINT => 'http://api.wolframalpha.com/v2/query';
 use constant WOLFRAM_API_KEY_MISSING => 
 	"Wolfram plugin requires configuration option 'wolfram_api_key' in section 'apis'\n" .

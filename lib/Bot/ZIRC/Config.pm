@@ -9,6 +9,8 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
+our $VERSION = '0.20';
+
 has 'defaults' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hashref $_[0]"

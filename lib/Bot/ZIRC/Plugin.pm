@@ -8,6 +8,8 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
+our $VERSION = '0.20';
+
 has 'bot' => (
 	is => 'ro',
 	isa => sub { croak "Invalid bot object"

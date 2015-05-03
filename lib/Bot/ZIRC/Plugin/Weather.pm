@@ -8,6 +8,8 @@ use Scalar::Util 'looks_like_number';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant WEATHER_API_ENDPOINT => 'http://api.wunderground.com/api/';
 use constant WEATHER_API_AUTOCOMPLETE_ENDPOINT => 'http://autocomplete.wunderground.com/aq';
 use constant WEATHER_API_KEY_MISSING =>

@@ -28,7 +28,7 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.10';
+our $VERSION = '0.20';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Channel Moo);
@@ -514,13 +514,19 @@ a powerful way to add global functionality.
 
   $bot->on(start => sub { my ($bot) = @_; ... });
 
+Emitted when the bot is started.
+
 =head2 stop
 
   $bot->on(stop => sub { my ($bot) = @_; ... });
 
+Emitted when the bot is stopped.
+
 =head2 reload
 
   $bot->on(reload => sub { my ($bot) = @_; ... });
+
+Emitted when the bot is reloaded.
 
 =head2 privmsg
 

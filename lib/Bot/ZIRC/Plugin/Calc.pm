@@ -6,6 +6,8 @@ use Math::Calc::Parser 'calc';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 sub calc_expression {
 	my ($self, $expr) = @_;
 	croak 'Undefined expression to evaluate' unless defined $expr;

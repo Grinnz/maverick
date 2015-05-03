@@ -11,6 +11,8 @@ use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::User Bot::ZIRC::Channel Moo);
 
+our $VERSION = '0.20';
+
 has 'name' => (
 	is => 'ro',
 	isa => sub { croak "Invalid command name $_[0]"

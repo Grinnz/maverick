@@ -8,6 +8,8 @@ use File::Spec;
 use Moo;
 use namespace::clean;
 
+our $VERSION = '0.20';
+
 has 'data' => (
 	is => 'lazy',
 	clearer => 1,

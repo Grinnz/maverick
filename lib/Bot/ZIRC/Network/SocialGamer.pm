@@ -5,6 +5,8 @@ use namespace::clean;
 
 extends 'Bot::ZIRC::Network';
 
+our $VERSION = '0.20';
+
 my @irc_events = qw/irc_320/;
 
 around 'get_irc_events' => sub {

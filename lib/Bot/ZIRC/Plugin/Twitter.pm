@@ -9,6 +9,8 @@ use Time::Duration 'ago';
 use Moo;
 extends 'Bot::ZIRC::Plugin';
 
+our $VERSION = '0.20';
+
 use constant TWITTER_OAUTH_ENDPOINT => 'https://api.twitter.com/oauth2/token';
 use constant TWITTER_API_ENDPOINT => 'https://api.twitter.com/1.1/';
 use constant TWITTER_API_KEY_MISSING => 
