@@ -341,7 +341,7 @@ sub start {
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
 	
-	$self->emit('start');
+	$self->emit_hook('start');
 	
 	# Make sure perl signals are caught in a timely fashion
 	$self->_set_watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
@@ -356,7 +356,7 @@ sub stop {
 	$self->is_stopping(1);
 	Mojo::IOLoop->remove($self->watch_timer) if $self->has_watch_timer;
 	$self->clear_watch_timer;
-	$self->emit(stop => $message);
+	$self->emit_hook(stop => $message);
 	return $self;
 }
 
@@ -364,7 +364,7 @@ sub reload {
 	my $self = shift;
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
-	$self->emit('reload');
+	$self->emit_hook('reload');
 	$self->clear_logger;
 	return $self;
 }
@@ -379,6 +379,19 @@ sub sig_reload {
 	my ($self, $signal) = @_;
 	$self->logger->debug("Received signal SIG$signal, reloading");
 	$self->reload;
+}
+
+sub emit_hook {
+	my ($self, $name) = (shift, shift);
+	my $subscribers = $self->subscribers($name);
+	foreach my $sub (@$subscribers) {
+		local $@;
+		unless (eval { $self->$sub(@_); 1 }) {
+			chomp (my $err = $@);
+			$self->logger->error("Error in $name hook: $err");
+		}
+	}
+	return $self;
 }
 
 sub _config_defaults {

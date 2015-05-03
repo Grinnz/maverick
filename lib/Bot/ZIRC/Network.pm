@@ -352,11 +352,7 @@ sub check_privmsg {
 			}
 		});
 	} else {
-		local $@;
-		unless (eval { $self->bot->emit(privmsg => $message); 1 }) {
-			chomp (my $err = $@);
-			$self->logger->error("Error in privmsg hook: $err");
-		}
+		$self->bot->emit_hook(privmsg => $message);
 	}
 }
 
@@ -494,13 +490,7 @@ sub irc_notice {
 	my $sender = $self->user($from);
 	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
 	my $m = Bot::ZIRC::Message->new(network => $self, sender => $sender, channel => $channel, text => $text);
-	{
-		local $@;
-		unless (eval { $self->bot->emit(notice => $m); 1 }) {
-			chomp (my $err = $@);
-			$self->logger->error("Error in notice hook: $err");
-		}
-	}
+	$self->bot->emit_hook(notice => $m);
 }
 
 sub irc_part {
