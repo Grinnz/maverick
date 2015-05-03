@@ -74,3 +74,79 @@ sub rename_user {
 
 1;
 
+=head1 NAME
+
+Bot::ZIRC::Channel - Channel class for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $channel = Bot::ZIRC::Channel->new(name => '#bots', network => $network);
+
+=head1 DESCRIPTION
+
+Represents the current state of an IRC channel for a L<Bot::ZIRC> IRC bot.
+
+=head1 ATTRIBUTES
+
+=head2 name
+
+Channel name. Must be set in constructor.
+
+=head2 network
+
+Weakened reference to the channel's L<Bot::ZIRC::Network> object.
+
+=head2 topic
+
+Channel topic.
+
+=head2 topic_info
+
+Array reference containing extra topic info.
+
+=head2 users
+
+Hash reference of user nicks currently in channel.
+
+=head2 modes
+
+Hash reference of modes currently set on channel.
+
+=head1 METHODS
+
+=head2 add_user
+
+  $channel->add_user($nick);
+
+Adds a user nick to channel.
+
+=head2 remove_user
+
+  $channel->remove_user($nick);
+
+Removes a user nick from channel if present.
+
+=head2 rename_user
+
+  $channel->rename_user($from => $to);
+
+Renames a user nick if currently in channel.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Bot::ZIRC::Network>

@@ -65,6 +65,14 @@ has 'show_more' => (
 		if defined $_[0] and $_[0] !~ m/^\d+\z/ },
 );
 
+has 'private_reply_max' => (
+	is => 'rw',
+	isa => sub { croak "Invalid private reply max"
+		unless defined $_[0] and $_[0] =~ m/^\d+\z/ },
+	lazy => 1,
+	default => 5,
+);
+
 sub parse_command {
 	my $self = shift;
 	my $trigger = $self->config->get('commands','trigger') // '';
@@ -174,6 +182,8 @@ sub _split_reply {
 	while (my $chunk = substr $msg, 0, $allowed_len, '') {
 		push @returns, $chunk;
 	}
+	my $max = $self->private_reply_max;
+	splice @returns, $max if @returns > $max;
 	return @returns;
 }
 
@@ -185,3 +195,109 @@ sub _allowed_message_length {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Message - IRC message class for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $m = Bot::ZIRC::Message->new(network => $network, sender => $sender,
+    channel => $channel, text => $text);
+  if (defined $m->parse_command) {
+    my ($command, $args) = ($m->command, $m->args);
+    $m->reply("Got command: $command $args");
+  }
+
+=head1 DESCRIPTION
+
+Represents an IRC message received by a L<Bot::ZIRC> IRC bot, and contains
+methods for parsing commands and sending replies.
+
+=head1 ATTRIBUTES
+
+=head2 network
+
+L<Bot::ZIRC::Network> object from which the message was received.
+
+=head2 sender
+
+L<Bot::ZIRC::Sender> object representing the IRC user that sent the message.
+
+=head2 channel
+
+L<Bot::ZIRC::Channel> object representing the IRC channel in which the message
+was sent, or C<undef> for private messages.
+
+=head2 text
+
+Unparsed message text.
+
+=head2 command
+
+L<Bot::ZIRC::Command> object representing the command to be run, after being
+parsed by L</"parse_command">.
+
+=head2 args
+
+Command arguments as a string, after being parsed by L</"parse_command">.
+
+=head2 show_more
+
+Count of additional results that can be retrieved by the C<more> command, to be
+displayed in the reply.
+
+=head2 private_reply_max
+
+Maximum number of replies that will be sent for a private L</"reply">.
+
+=head1 METHODS
+
+=head2 args_list
+
+Command arguments as a list, split on whitespace.
+
+=head2 parse_command
+
+Attempt to parse the message text for a command, returns C<undef> if no command
+was found. Otherwise, the return value is true if a valid command was found, or
+false if the command was ambiguous or disabled, in which case a reply will also
+be generated to the sender.
+
+=head2 reply
+
+Reply to the message sender over the appropriate network. If the message was
+sent in a channel, reply in the same channel addressing the sender. If the
+message was sent privately, reply privately. Channel messages will be truncated
+if exceeding the maximum message length; private messages will be split into
+multiple messages up to L</"private_reply_max">.
+
+=head2 reply_private
+
+Reply to the message sender over the appropriate network as in L</"reply">, but
+always privately.
+
+=head2 reply_bare
+
+Reply to the message sender over the appropriate network as in L</"reply">, but
+without addressing the sender if replying in a channel.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Bot::ZIRC::Network>, L<Bot::ZIRC::Sender>,
+L<Bot::ZIRC::Channel>, L<Bot::ZIRC::Command>

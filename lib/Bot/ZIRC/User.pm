@@ -208,3 +208,100 @@ sub has_bot_access {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::User - User class for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $user = Bot::ZIRC::User->new(nick => $nick, network => $network);
+  if ($user->check_access(ACCESS_CHANNEL_ADMIN, $channel)) {
+    say "User has admin access in $channel";
+  }
+
+=head1 DESCRIPTION
+
+Represents the current state of an IRC user for a L<Bot::ZIRC> IRC bot.
+
+=head1 ATTRIBUTES
+
+=head2 nick
+
+User nick, required.
+
+=head2 network
+
+Weakened reference to the user's L<Bot::ZIRC::Network> object.
+
+=head2 host
+
+=head2 username
+
+=head2 realname
+
+=head2 is_away
+
+=head2 away_message
+
+=head2 is_registered
+
+=head2 identity
+
+=head2 is_bot
+
+=head2 is_ircop
+
+=head2 ircop_message
+
+=head2 idle_time
+
+=head2 signon_time
+
+=head2 channels
+
+=head1 METHODS
+
+=head2 hostmask
+
+Returns the user's full hostmask, as C<nick!username@host>.
+
+=head2 banmask
+
+Returns a banmask for the user, as C<*!*@host>.
+
+=head2 channel_access
+
+Set or get user's access level in a channel.
+
+=head2 bot_access
+
+Returns user's bot access level.
+
+=head2 check_access
+
+Returns a boolean whether the user has the specified access level, with an
+optional channel name to check channel access.
+
+=head2 has_bot_access
+
+Returns a boolean whether the user has the specified bot access level.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Bot::ZIRC::Network>, L<Bot::ZIRC::Access>

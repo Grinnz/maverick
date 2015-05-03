@@ -52,3 +52,101 @@ sub channel_access_level {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Access - Access level management for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  use Bot::ZIRC::Access ':access', 'valid_access_level', 'channel_access_level';
+  my $valid = valid_access_level(ACCESS_BOT_VOICE);
+  my $access = channel_access_level('@');
+
+=head1 DESCRIPTION
+
+L<Bot::ZIRC::Access> is a module to manage the access levels available for a
+L<Bot::ZIRC> IRC bot. Commands and other user behavior is often dependent on
+the user's access level, either internally or in the channel.
+
+=head1 FUNCTIONS
+
+All functions are individually exportable on demand.
+
+=head2 access_levels
+
+Returns a list of all available access levels.
+
+=head2 channel_access_level
+
+  my $access = channel_access_level('+');
+
+Returns the access level associated with the given channel access symbol, if
+any. The empty string will map to the access level of none.
+
+=head2 valid_access_level
+
+  my $valid = valid_access_level(ACCESS_NONE);
+
+Returns a boolean whether the given access level is valid.
+
+=head1 LEVELS
+
+The recognized access levels are listed by the constants exported by the
+C<:access> tag, from lowest access to highest.
+
+=head2 ACCESS_NONE
+
+No specific access, either to the bot or channel.
+
+=head2 ACCESS_CHANNEL_VOICE
+
+User is voiced in the channel, but has no bot access. Maps to channel access
+C<+>.
+
+=head2 ACCESS_BOT_VOICE
+
+User has bot voice access, but no access (or voice access) in the channel.
+
+=head2 ACCESS_CHANNEL_HALFOP
+
+User has half-op access in the channel. Maps to channel access C<%>.
+
+=head2 ACCESS_CHANNEL_OP
+
+User has operator access in the channel. Maps to channel access C<@>.
+
+=head2 ACCESS_CHANNEL_ADMIN
+
+User has admin access in the channel. Maps to channel access C<&>.
+
+=head2 ACCESS_CHANNEL_OWNER
+
+User has owner access in the channel. Maps to channel access C<~> or C<->.
+
+=head2 ACCESS_BOT_ADMIN
+
+User has bot admin access.
+
+=head2 ACCESS_BOT_MASTER
+
+User is the configured bot master.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

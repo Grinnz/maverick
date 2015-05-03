@@ -46,3 +46,57 @@ sub reload {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Storage - persistent storage for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $storage = Bot::ZIRC::Storage->new(file => $filename);
+  $storage->data->{things} = [1,2,3];
+  say $storage->data->{things}[2];
+
+=head1 DESCRIPTION
+
+Database storage engine for L<Bot::ZIRC>, using L<DBM::Deep> to store and
+retrieve data in perl data structures.
+
+=head1 ATTRIBUTES
+
+=head2 data
+
+L<DBM::Deep> object used to store and retrieve data.
+
+=head2 dir
+
+Directory to store database file.
+
+=head2 file
+
+Filename of database file, required.
+
+=head1 METHODS
+
+=head2 reload
+
+Reloads L</"data"> object.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<DBM::Deep>

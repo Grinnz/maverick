@@ -239,3 +239,115 @@ sub fix_fallback {
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Config - Configuration file management for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $config = Bot::ZIRC::Config->new(file => 'bot.conf', defaults => {});
+  $config->get('main', 'debug');
+  $config->set('main', debug => 1);
+
+=head1 DESCRIPTION
+
+Manages the configuration files for a L<Bot::ZIRC> IRC bot.
+
+=head1 ATTRIBUTES
+
+=head2 dir
+
+Directory to store configuration files. Defaults to current directory.
+
+=head2 file
+
+Filename for configuration file. Required.
+
+=head2 defaults
+
+Default configuration specified as a hash reference. Configuration not within a
+section will be assumed to be in the L</"fallback"> section. When retrieving
+configuration, the value from the defaults hashref is used if it is not set in
+the configuration file.
+
+=head2 defaults_config
+
+Default configuration specified as a L<Bot::ZIRC::Config> object. When
+retrieving configuration, this config object is used if it is not set in the
+configuration file.
+
+=head2 fallback
+
+Fallback section name for configuration specified without a section name,
+defaults to C<main>.
+
+=head1 METHODS
+
+=head2 reload
+
+Reloads configuration from file.
+
+=head2 store
+
+Stores configuration to file.
+
+=head2 apply
+
+Applies configuration parameters specified as a hash reference, and stores
+configuration to file.
+
+=head2 set
+
+Sets configuration parameter and stores configuration to file.
+
+=head2 get
+
+Retrieves configuration parameter.
+
+=head2 set_channel
+
+Sets configuration parameter for a channel.
+
+=head2 set_channel_default
+
+Sets configuration parameter for section C<network>.
+
+=head2 get_channel
+
+Retrieves configuration parameter for a channel section. If the parameter has
+not been set for the channel, retrieves the value for section C<network>.
+
+=head2 hash
+
+Returns a hash reference representing all currently set or default
+configuration parameters.
+
+=head2 defaults_hash
+
+Returns either the L</"defaults"> hash reference, or a configuration hash
+reference generated from the L</"defaults_config"> object.
+
+=head2 fix_fallback
+
+Moves all configuration parameters in the given hashref that are not in a
+section to the L</"fallback"> section.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>

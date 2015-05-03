@@ -720,3 +720,99 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 }
 
 1;
+
+=head1 NAME
+
+Bot::ZIRC::Network - IRC network class for Bot::ZIRC
+
+=head1 SYNOPSIS
+
+  my $network = Bot::ZIRC::Network->new(name => 'SomeNetwork', bot => $bot,
+    config => { irc => { server => 'irc.somenetwork.org', port => 6667 } });
+
+=head1 DESCRIPTION
+
+Represents an IRC network for a L<Bot::ZIRC> IRC bot. When constructed,
+the network object registers hooks for the L<Bot::ZIRC> C<start>, C<stop>, and
+C<reload> hooks, to call its own methods of the same name.
+
+=head1 ATTRIBUTES
+
+=head2 name
+
+Identifying name for network, required and must be unique among the networks
+added to a L<Bot::ZIRC> object. Used for the default L</"config_file"> name.
+
+=head2 bot
+
+Weakened reference to main L<Bot::ZIRC> object.
+
+=head2 config_file
+
+Configuration filename for network, defaults to lowercased L<Bot::ZIRC/"name">
+appended with C<-> and lowercased network L</"name">, then appended with
+C<.conf>.
+
+=head2 config
+
+L<Bot::ZIRC::Config> configuration object for network.
+
+=head2 logger
+
+Logging object, defaults to L<Mojo::Log> object logging to configuration option
+C<logfile> or STDERR.
+
+=head2 users
+
+Hash reference of L<Bot::ZIRC::User> objects representing known network users.
+
+=head2 channels
+
+Hash reference of L<Bot::ZIRC::Channel> objects representing known network
+channels.
+
+=head2 irc
+
+L<Mojo::IRC> object used to connect to IRC network. Handles methods C<nick>,
+C<server>, and C<write>.
+
+=head1 METHODS
+
+=head2 start
+
+Connects to IRC network and sets up event subscriptions to L</"irc"> object.
+
+=head2 stop
+
+Disconnects from IRC network.
+
+=head2 reload
+
+Reloads L</"config"> and reopens L</"logger">.
+
+=head2 after_who
+
+Sends a C<WHO> query and runs the callback when a response is received.
+
+=head2 after_whois
+
+Sends a C<WHOIS> query and runs the callback when a response is received.
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book, C<dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015, Dan Book.
+
+This library is free software; you may redistribute it and/or modify it under
+the terms of the Artistic License version 2.0.
+
+=head1 SEE ALSO
+
+L<Bot::ZIRC>, L<Bot::ZIRC::User>, L<Bot::ZIRC::Channel>, L<Bot::ZIRC::Config>
