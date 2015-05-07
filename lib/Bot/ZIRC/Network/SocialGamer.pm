@@ -1,5 +1,7 @@
 package Bot::ZIRC::Network::SocialGamer;
 
+use Scalar::Util 'weaken';
+
 use Moo;
 use namespace::clean;
 
@@ -7,12 +9,9 @@ extends 'Bot::ZIRC::Network';
 
 our $VERSION = '0.20';
 
-my @irc_events = qw/irc_320/;
-
-around 'get_irc_events' => sub {
-	my $orig = shift;
+after 'register_event_handlers' => sub {
 	my $self = shift;
-	return ($self->$orig, @irc_events);
+	$self->register_event_handler('irc_320');
 };
 
 sub irc_320 { # RPL_WHOISIDENTIFIED

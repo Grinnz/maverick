@@ -23,15 +23,6 @@ our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Command Bot::ZIRC::User Bot::ZIRC::Chann
 
 our $VERSION = '0.20';
 
-my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
-	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_welcome
-	irc_rpl_motdstart irc_rpl_endofmotd err_nomotd irc_rpl_notopic
-	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
-	irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away
-	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
-	irc_rpl_endofwhois/;
-sub get_irc_events { @irc_events }
-
 has 'name' => (
 	is => 'rwp',
 	isa => sub { croak "Unspecified network name" unless defined $_[0] },
@@ -188,12 +179,10 @@ sub start {
 	my $self = shift;
 	my $irc = $self->irc;
 	
+	$self->register_event_handlers;
 	$irc->register_default_event_handlers;
+	
 	weaken $self;
-	foreach my $event ($self->get_irc_events) {
-		my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
-		$irc->on($event => sub { shift; $self->$handler(@_) });
-	}
 	$irc->on(close => sub { $self->on_disconnect });
 	$irc->on(error => sub { $self->logger->error($_[1]); $self->disconnect; });
 	
@@ -219,7 +208,35 @@ sub reload {
 	return $self;
 }
 
+my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
+	irc_notice irc_part irc_privmsg irc_public irc_quit irc_rpl_welcome
+	irc_rpl_motdstart irc_rpl_endofmotd err_nomotd irc_rpl_notopic
+	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
+	irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away
+	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
+	irc_rpl_endofwhois/;
+
+sub register_event_handlers {
+	my $self = shift;
+	$self->register_event_handler($_) for @irc_events;
+}
+
+sub register_event_handler {
+	my ($self, $event) = @_;
+	my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
+	weaken $self;
+	$self->irc->on($event => sub { shift; $self->$handler(@_) });
+}
+
 # IRC methods
+
+sub connect {
+	my $self = shift;
+	my $server = $self->server;
+	$self->logger->debug("Connected to $server");
+	weaken $self;
+	$self->irc->connect(sub { shift; $self->on_connect(@_) });
+}
 
 sub on_connect {
 	my ($self, $err) = @_;
@@ -239,23 +256,7 @@ sub on_welcome {
 	my $self = shift;
 	$self->set_bot_mode;
 	$self->autojoin;
-}
-
-sub on_disconnect {
-	my $self = shift;
-	my $server = $self->server;
-	$self->logger->debug("Disconnected from $server");
-	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
-	$self->clear_check_recurring_timer;
-	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect');
-}
-
-sub connect {
-	my $self = shift;
-	my $server = $self->server;
-	$self->logger->debug("Connected to $server");
-	weaken $self;
-	$self->irc->connect(sub { shift; $self->on_connect(@_) });
+	$self->write(whois => $self->nick);
 }
 
 sub disconnect {
@@ -267,6 +268,15 @@ sub disconnect {
 	} else {
 		$self->irc->disconnect($cb);
 	}
+}
+
+sub on_disconnect {
+	my $self = shift;
+	my $server = $self->server;
+	$self->logger->debug("Disconnected from $server");
+	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
+	$self->clear_check_recurring_timer;
+	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect');
 }
 
 sub reconnect {
@@ -494,7 +504,7 @@ sub irc_nick {
 	$self->logger->debug("User $from changed nick to $to");
 	$_->rename_user($from => $to) foreach values %{$self->channels};
 	$self->rename_user($from => $to);
-	$self->nick($to) if $self->nick eq lc $from;
+	$self->nick($to) if lc $self->nick eq lc $from;
 }
 
 sub irc_notice {
@@ -550,11 +560,8 @@ sub irc_quit {
 
 sub irc_rpl_welcome {
 	my ($self, $message) = @_;
-	my ($to) = @{$message->{params}};
-	$self->logger->debug("Set nick to $to");
-	$self->nick($to);
+	$self->irc->irc_rpl_welcome($message);
 	$self->on_welcome;
-	$self->write(whois => $to);
 }
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART
