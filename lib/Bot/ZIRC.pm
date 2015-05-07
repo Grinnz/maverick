@@ -17,8 +17,6 @@ use Bot::ZIRC::Storage;
 use Moo;
 use namespace::clean;
 
-extends 'Mojo::EventEmitter';
-
 use Exporter 'import';
 
 our $AUTOLOAD;
@@ -170,6 +168,8 @@ has 'watch_timer' => (
 	clearer => 1,
 	init_arg => undef,
 );
+
+with 'Bot::ZIRC::EventEmitter';
 
 sub BUILD {
 	my $self = shift;
@@ -379,19 +379,6 @@ sub sig_reload {
 	my ($self, $signal) = @_;
 	$self->logger->debug("Received signal SIG$signal, reloading");
 	$self->reload;
-}
-
-sub emit_hook {
-	my ($self, $name) = (shift, shift);
-	my $subscribers = $self->subscribers($name);
-	foreach my $sub (@$subscribers) {
-		local $@;
-		unless (eval { $self->$sub(@_); 1 }) {
-			chomp (my $err = $@);
-			$self->logger->error("Error in $name hook: $err");
-		}
-	}
-	return $self;
 }
 
 sub _config_defaults {

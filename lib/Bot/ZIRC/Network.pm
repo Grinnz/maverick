@@ -69,13 +69,6 @@ sub _build_config {
 	return $config;
 }
 
-has 'futures' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-);
-
 has 'logger' => (
 	is => 'lazy',
 	init_arg => undef,
@@ -166,6 +159,8 @@ has 'check_recurring_timer' => (
 	predicate => 1,
 	clearer => 1,
 );
+
+with 'Bot::ZIRC::EventEmitter';
 
 sub BUILD {
 	my $self = shift;
@@ -385,7 +380,7 @@ sub check_privmsg {
 
 sub after_who {
 	my ($self, $nick, $cb) = @_;
-	$self->queue_event_future(who => lc $nick, $cb);
+	$self->once('who_'.lc($nick) => $cb);
 	$self->write(who => $nick);
 	return $self;
 }
@@ -393,14 +388,13 @@ sub after_who {
 sub run_after_who {
 	my ($self, $nick) = @_;
 	my $user = $self->user($nick);
-	my $futures = $self->get_event_futures(who => lc $nick);
-	$self->$_($user) for @$futures;
+	$self->emit_hook('who_'.lc($nick) => $user);
 	return $self;
 }
 
 sub after_whois {
 	my ($self, $nick, $cb) = @_;
-	$self->queue_event_future(whois => lc $nick, $cb);
+	$self->once('whois_'.lc($nick) => $cb);
 	$self->write(whois => $nick);
 	return $self;
 }
@@ -408,36 +402,8 @@ sub after_whois {
 sub run_after_whois {
 	my ($self, $nick) = @_;
 	my $user = $self->user($nick);
-	my $futures = $self->get_event_futures(whois => lc $nick);
-	$self->$_($user) for @$futures;
+	$self->emit_hook('whois_'.lc($nick) => $user);
 	return $self;
-}
-
-sub queue_event_future {
-	my $self = shift;
-	my $future = pop;
-	croak "Invalid coderef $future" unless defined $future and ref $future eq 'CODE';
-	my ($event, $key) = @_;
-	croak 'No event given' unless defined $event;
-	my $futures = $self->futures->{$event} //= {};
-	my $future_list = defined $key
-		? ($futures->{by_key}{$key} //= [])
-		: ($futures->{list} //= []);
-	push @$future_list, ref $future eq 'ARRAY' ? @$future : $future;
-	return $self;
-}
-
-sub get_event_futures {
-	my ($self, $event, $key) = @_;
-	croak 'No event given' unless defined $event;
-	return undef unless exists $self->futures->{$event};
-	my $futures = $self->futures->{$event};
-	my $future_list = defined $key
-		? delete $futures->{by_key}{$key}
-		: delete $futures->{list};
-	delete $self->futures->{$event} unless exists $futures->{list}
-		or keys %{$futures->{by_key}};
-	return $future_list // [];
 }
 
 # IRC event callbacks
