@@ -295,7 +295,7 @@ sub check_recurring {
 	my $self = shift;
 	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
 	weaken $self;
-	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->check_nick });
+	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->check_nick; $self->check_channels });
 	$self->check_recurring_timer($timer_id);
 }
 
@@ -313,6 +313,14 @@ sub check_nick {
 	});
 }
 
+sub check_channels {
+	my $self = shift;
+	my @autojoin = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
+	my $current = $self->user($self->nick)->channels;
+	my @to_join = grep { !exists $current->{lc $_} } @autojoin;
+	$self->join_channels(@to_join);
+}
+
 sub set_bot_mode {
 	my $self = shift;
 	$self->write(mode => $self->nick => '+B');
@@ -321,6 +329,11 @@ sub set_bot_mode {
 sub autojoin {
 	my $self = shift;
 	my @channels = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
+	$self->join_channels(@channels);
+}
+
+sub join_channels {
+	my ($self, @channels) = @_;
 	return unless @channels;
 	my $channels_str = join ', ', @channels;
 	$self->logger->debug("Joining channels: $channels_str");
