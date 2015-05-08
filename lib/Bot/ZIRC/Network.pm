@@ -372,7 +372,7 @@ sub check_privmsg {
 			}
 		});
 	} else {
-		$self->bot->emit_hook(privmsg => $message);
+		$self->bot->emit(privmsg => $message);
 	}
 }
 
@@ -385,24 +385,10 @@ sub after_who {
 	return $self;
 }
 
-sub run_after_who {
-	my ($self, $nick) = @_;
-	my $user = $self->user($nick);
-	$self->emit_hook('who_'.lc($nick) => $user);
-	return $self;
-}
-
 sub after_whois {
 	my ($self, $nick, $cb) = @_;
 	$self->once('whois_'.lc($nick) => $cb);
 	$self->write(whois => $nick);
-	return $self;
-}
-
-sub run_after_whois {
-	my ($self, $nick) = @_;
-	my $user = $self->user($nick);
-	$self->emit_hook('whois_'.lc($nick) => $user);
 	return $self;
 }
 
@@ -481,7 +467,7 @@ sub irc_notice {
 	my $sender = $self->user($from);
 	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
 	my $m = Bot::ZIRC::Message->new(network => $self, sender => $sender, channel => $channel, text => $text);
-	$self->bot->emit_hook(notice => $m);
+	$self->bot->emit(notice => $m);
 }
 
 sub irc_part {
@@ -607,7 +593,7 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
 	
-	$self->run_after_who($nick);
+	$self->emit('who_'.lc($nick) => $user);
 }
 
 sub irc_rpl_endofwho { # RPL_ENDOFWHO
@@ -701,7 +687,7 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	foreach my $nick (@nicks) {
 		my $user = $self->user($nick);
 		$user->identity(undef) unless $user->is_registered;
-		$self->run_after_whois($nick);
+		$self->emit('whois_'.lc($nick) => $user);
 	}
 }
 

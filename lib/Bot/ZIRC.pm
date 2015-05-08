@@ -341,7 +341,7 @@ sub start {
 	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
 	
-	$self->emit_hook('start');
+	$self->emit('start');
 	
 	# Make sure perl signals are caught in a timely fashion
 	$self->_set_watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
@@ -356,7 +356,7 @@ sub stop {
 	$self->is_stopping(1);
 	Mojo::IOLoop->remove($self->watch_timer) if $self->has_watch_timer;
 	$self->clear_watch_timer;
-	$self->emit_hook(stop => $message);
+	$self->emit(stop => $message);
 	return $self;
 }
 
@@ -364,7 +364,7 @@ sub reload {
 	my $self = shift;
 	$self->logger->debug("Reloading bot");
 	$self->config->reload;
-	$self->emit_hook('reload');
+	$self->emit('reload');
 	$self->clear_logger;
 	return $self;
 }

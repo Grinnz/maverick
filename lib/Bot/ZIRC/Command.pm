@@ -76,7 +76,7 @@ has 'usage_text' => (
 sub run {
 	my ($self, $m) = @_;
 	local $SIG{__WARN__} = sub { chomp(my $msg = shift); $m->logger->warn($msg) };
-	$m->bot->emit_hook(before_command => $m);
+	$m->bot->emit(before_command => $m);
 	local $@;
 	my $rc;
 	unless (eval { $rc = $self->on_run->($m); 1 }) {
@@ -89,7 +89,7 @@ sub run {
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));
 	}
-	$m->bot->emit_hook(after_command => $m);
+	$m->bot->emit(after_command => $m);
 	return $self;
 }
 
