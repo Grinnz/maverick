@@ -12,7 +12,7 @@ after 'register_event_handlers' => sub {
 	$self->register_event_handler('irc_320');
 };
 
-sub irc_320 { # RPL_WHOISIDENTIFIED
+sub _irc_320 { # RPL_WHOISIDENTIFIED
 	my ($self, $message) = @_;
 	my ($to, $nick, $lia) = @{$message->{params}};
 	if ($lia =~ /is logged in as ([[:graph:]]+)/) {
