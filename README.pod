@@ -222,15 +222,15 @@ Disconnect from all networks and stop the bot.
 
 Reloads configuration and reopens log handles.
 
-=head2 network
+=head2 add_network
 
-  $bot = $bot->network(freenode => { class => 'Freenode' });
+  $bot = $bot->add_network(freenode => { class => 'Freenode' });
 
 Adds a network for the bot to connect to. See L</"NETWORKS">.
 
-=head2 plugin
+=head2 add_plugin
 
-  $bot = $bot->plugin(DNS => { native => 0 });
+  $bot = $bot->add_plugin(DNS => { native => 0 });
 
 Registers a plugin with optional hashref of parameters to pass to the plugin's
 C<register> method. See L</"PLUGINS">.
@@ -249,11 +249,13 @@ L</"AUTOLOAD">.
 Returns a boolean value that is true if the specified helper method is
 available.
 
-=head2 command_names
+=head2 add_command
 
-  my @names = $bot->command_names;
+  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
+  $bot = $bot->add_command(...);
 
-Returns a list of all commands.
+Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
+new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
 
 =head2 get_command
 
@@ -262,13 +264,17 @@ Returns a list of all commands.
 Returns the L<Bot::ZIRC::Command> object representing the command, or C<undef>
 if the command does not exist.
 
-=head2 add_command
+=head2 get_commands_by_prefix
 
-  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
-  $bot = $bot->add_command(...);
+  my $commands = $bot->get_commands_by_prefix('wo');
 
-Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
-new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
+Returns an array reference of command objects matching a prefix, if any.
+
+=head2 remove_command
+
+  $bot = $bot->remove_command('locate');
+
+Removes a command from the bot by name if it exists.
 
 =head1 BUGS
 
