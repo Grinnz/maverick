@@ -374,6 +374,11 @@ sub voice_users {
 	return split /[\s,]+/, ($self->config->get('users','voice') // '');
 }
 
+sub ignore_users {
+	my $self = shift;
+	return split /[\s,]+/, ($self->config->get('users','ignore') // '');
+}
+
 # Queue future events
 
 sub after_who {
@@ -485,8 +490,8 @@ sub _irc_privmsg {
 	my $from = parse_user($message->{prefix});
 	$self->logger->info("[private] <$from> $msg") if $self->config->get('echo');
 	my $user = $self->user($from);
-	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $user, text => $msg);
-	$self->_check_privmsg($obj) unless $user->is_bot and $self->config->get('users','ignore_bots');
+	my $m = Bot::ZIRC::Message->new(network => $self, sender => $user, text => $msg);
+	$self->_check_privmsg($m);
 }
 
 sub _irc_public {
@@ -496,14 +501,17 @@ sub _irc_public {
 	$self->logger->info("[$channel] <$from> $msg") if $self->config->get('echo');
 	my $user = $self->user($from);
 	$channel = $self->channel($channel);
-	my $obj = Bot::ZIRC::Message->new(network => $self, sender => $user, channel => $channel, text => $msg);
-	$self->_check_privmsg($obj) unless $user->is_bot and $self->config->get('users','ignore_bots');
+	my $m = Bot::ZIRC::Message->new(network => $self, sender => $user, channel => $channel, text => $msg);
+	$self->_check_privmsg($m);
 }
 
 sub _check_privmsg {
 	my ($self, $message) = @_;
 	my $sender = $message->sender;
 	my $channel = $message->channel;
+	
+	return if $sender->is_bot and $self->config->get('users','ignore_bots');
+	return if any { lc $_ eq lc $sender } $self->ignore_users;
 	
 	if (defined $message->parse_command) {
 		return unless my $command = $message->command;
