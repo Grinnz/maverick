@@ -209,7 +209,7 @@ my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
 	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
 	irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away
 	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
-	irc_rpl_endofwhois/;
+	irc_rpl_endofwhois err_nosuchnick/;
 
 sub register_event_handlers {
 	my $self = shift;
@@ -598,6 +598,8 @@ sub irc_rpl_whoreply { # RPL_WHOREPLY
 
 sub irc_rpl_endofwho { # RPL_ENDOFWHO
 	my ($self, $message) = @_;
+	my ($to, $nick) = @{$message->{params}};
+	$self->unsubscribe('who_'.lc($nick));
 }
 
 sub irc_rpl_whoisuser { # RPL_WHOISUSER
@@ -689,6 +691,13 @@ sub irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 		$user->identity(undef) unless $user->is_registered;
 		$self->emit('whois_'.lc($nick) => $user);
 	}
+}
+
+sub err_nosuchnick { # ERR_NOSUCHNICK
+	my ($self, $message) = @_;
+	my ($to, $nick) = @{$message->{params}};
+	$self->logger->debug("No such nick: $nick");
+	$self->unsubscribe('whois_'.lc($nick));
 }
 
 1;
