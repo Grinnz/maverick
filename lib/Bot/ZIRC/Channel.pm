@@ -6,7 +6,8 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
-use overload '""' => sub { shift->name }, 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] };
+use overload 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] },
+	'""' => sub { shift->name }, bool => sub {1}, fallback => 1;
 
 our @CARP_NOT = qw(Bot::ZIRC Bot::ZIRC::Network Bot::ZIRC::Command Bot::ZIRC::User Moo);
 
