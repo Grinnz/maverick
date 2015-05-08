@@ -1,7 +1,5 @@
 package Bot::ZIRC::Network::SocialGamer;
 
-use Scalar::Util 'weaken';
-
 use Moo;
 use namespace::clean;
 

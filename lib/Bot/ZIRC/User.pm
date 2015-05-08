@@ -157,15 +157,11 @@ sub bot_access {
 	my $self = shift;
 	my $network = $self->network;
 	my $identity = $self->identity // return ACCESS_NONE;
-	return ACCESS_BOT_MASTER if lc $identity eq lc ($network->config->get('users','master')//'');
+	return ACCESS_BOT_MASTER if lc $identity eq lc $network->master_user;
 	return ACCESS_BOT_ADMIN if $self->is_ircop
 		and $network->config->get('users','ircop_admin_override');
-	if (my @admins = split /[\s,]+/, $network->config->get('users','admin')//'') {
-		return ACCESS_BOT_ADMIN if any { lc $identity eq lc $_ } @admins;
-	}
-	if (my @voices = split /[\s,]+/, $network->config->get('users','voice')//'') {
-		return ACCESS_BOT_VOICE if any { lc $identity eq lc $_ } @voices;
-	}
+	return ACCESS_BOT_ADMIN if any { lc $identity eq lc $_ } $network->admin_users;
+	return ACCESS_BOT_VOICE if any { lc $identity eq lc $_ } $network->voice_users;
 	return ACCESS_NONE;
 }
 

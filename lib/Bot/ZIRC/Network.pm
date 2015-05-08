@@ -38,7 +38,7 @@ has 'bot' => (
 	handles => [qw/bot_version config_dir is_stopping storage ua/],
 );
 
-has 'init_config' => (
+has '_init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
 		unless defined $_[0] and ref $_[0] eq 'HASH' },
@@ -65,7 +65,7 @@ sub _build_config {
 		file => $self->config_file,
 		defaults_config => $self->bot->config,
 	);
-	$config->apply($self->init_config) if %{$self->init_config};
+	$config->apply($self->_init_config) if %{$self->_init_config};
 	return $config;
 }
 
@@ -153,7 +153,7 @@ sub _connect_options {
 	return %options;
 }
 
-has 'check_recurring_timer' => (
+has '_check_recurring_timer' => (
 	is => 'rw',
 	lazy => 1,
 	predicate => 1,
@@ -168,6 +168,25 @@ sub BUILD {
 	$self->bot->on(start => sub { $self->start });
 	$self->bot->on(stop => sub { $self->stop($_[1]) });
 	$self->bot->on(reload => sub { $self->reload });
+	
+	$self->on(connect => sub {
+		my $self = shift;
+		$self->_identify;
+		$self->_start_recurring_check;
+	});
+	$self->on(welcome => sub {
+		my $self = shift;
+		$self->set_bot_mode;
+		$self->join_channels($self->autojoin_channels);
+		$self->write(whois => $self->nick);
+	});
+	$self->on(disconnect => sub {
+		my $self = shift;
+		my $server = $self->server;
+		$self->logger->debug("Disconnected from $server");
+		$self->_stop_recurring_check;
+		$self->connect if !$self->is_stopping and $self->config->get('irc','reconnect');
+	});
 }
 
 sub start {
@@ -178,7 +197,7 @@ sub start {
 	$irc->register_default_event_handlers;
 	
 	weaken $self;
-	$irc->on(close => sub { $self->on_disconnect });
+	$irc->on(close => sub { $self->emit('disconnect') });
 	$irc->on(error => sub { $self->logger->error($_[1]); $self->disconnect; });
 	
 	my $server = $self->server;
@@ -214,6 +233,7 @@ my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
 sub register_event_handlers {
 	my $self = shift;
 	$self->register_event_handler($_) for @irc_events;
+	return $self;
 }
 
 sub register_event_handler {
@@ -221,6 +241,7 @@ sub register_event_handler {
 	my $handler = $self->can($event) // die "No handler found for IRC event $event\n";
 	weaken $self;
 	$self->irc->on($event => sub { shift; $self->$handler(@_) });
+	return $self;
 }
 
 # IRC methods
@@ -228,30 +249,21 @@ sub register_event_handler {
 sub connect {
 	my $self = shift;
 	my $server = $self->server;
-	$self->logger->debug("Connected to $server");
+	$self->logger->debug("Connecting to $server");
 	weaken $self;
-	$self->irc->connect(sub { shift; $self->on_connect(@_) });
-}
-
-sub on_connect {
-	my ($self, $err) = @_;
-	if ($err) {
-		$self->logger->error($err);
-		return if $self->is_stopping or !$self->config->get('irc','reconnect');
-		my $delay = $self->config->get('irc','reconnect_delay');
-		$delay = 10 unless defined $delay and looks_like_number $delay;
-		Mojo::IOLoop->timer($delay => sub { $self->reconnect });
-	} else {
-		$self->identify;
-		$self->check_recurring;
-	}
-}
-
-sub on_welcome {
-	my $self = shift;
-	$self->set_bot_mode;
-	$self->autojoin;
-	$self->write(whois => $self->nick);
+	$self->irc->connect(sub {
+		my ($irc, $err) = @_;
+		if ($err) {
+			$self->logger->error($err);
+			return if $self->is_stopping or !$self->config->get('irc','reconnect');
+			my $delay = $self->config->get('irc','reconnect_delay');
+			$delay = 10 unless defined $delay and looks_like_number $delay;
+			Mojo::IOLoop->timer($delay => sub { $self->connect });
+		} else {
+			$self->emit('connect');
+		}
+	});
+	return $self;
 }
 
 sub disconnect {
@@ -263,45 +275,40 @@ sub disconnect {
 	} else {
 		$self->irc->disconnect($cb);
 	}
+	return $self;
 }
 
-sub on_disconnect {
-	my $self = shift;
-	my $server = $self->server;
-	$self->logger->debug("Disconnected from $server");
-	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
-	$self->clear_check_recurring_timer;
-	$self->reconnect if !$self->is_stopping and $self->config->get('irc','reconnect');
-}
-
-sub reconnect {
-	my $self = shift;
-	my $server = $self->server;
-	$self->logger->debug("Reconnecting to $server");
-	$self->connect;
-}
-
-sub identify {
+sub _identify {
 	my $self = shift;
 	my $nick = $self->config->get('irc','nick') // $self->bot->name;
 	my $pass = $self->config->get('irc','password');
 	if (defined $pass and length $pass) {
-		$self->do_identify($nick, $pass);
+		$self->identify($nick, $pass);
 	}
+	return $self;
 }
 
-sub do_identify {
+sub identify {
 	my ($self, $nick, $pass) = @_;
 	$self->logger->debug("Identifying with NickServ as $nick");
 	$self->write("NICKSERV identify $nick $pass");
+	return $self;
 }
 
-sub check_recurring {
+sub _start_recurring_check {
 	my $self = shift;
-	Mojo::IOLoop->remove($self->check_recurring_timer) if $self->has_check_recurring_timer;
+	Mojo::IOLoop->remove($self->_check_recurring_timer) if $self->_has_check_recurring_timer;
 	weaken $self;
 	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->check_nick; $self->check_channels });
-	$self->check_recurring_timer($timer_id);
+	$self->_check_recurring_timer($timer_id);
+	return $self;
+}
+
+sub _stop_recurring_check {
+	my $self = shift;
+	Mojo::IOLoop->remove($self->_check_recurring_timer) if $self->_has_check_recurring_timer;
+	$self->_clear_check_recurring_timer;
+	return $self;
 }
 
 sub check_nick {
@@ -314,27 +321,23 @@ sub check_nick {
 	}
 	$self->after_whois($current, sub {
 		my ($self, $user) = @_;
-		$self->identify unless $user->is_registered;
+		$self->_identify unless $user->is_registered;
 	});
+	return $self;
 }
 
 sub check_channels {
 	my $self = shift;
-	my @autojoin = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
 	my $current = $self->user($self->nick)->channels;
-	my @to_join = grep { !exists $current->{lc $_} } @autojoin;
+	my @to_join = grep { !exists $current->{lc $_} } $self->autojoin_channels;
 	$self->join_channels(@to_join);
+	return $self;
 }
 
 sub set_bot_mode {
 	my $self = shift;
 	$self->write(mode => $self->nick => '+B');
-}
-
-sub autojoin {
-	my $self = shift;
-	my @channels = split /[\s,]+/, $self->config->get('channels','autojoin') // '';
-	$self->join_channels(@channels);
+	return $self;
 }
 
 sub join_channels {
@@ -345,6 +348,28 @@ sub join_channels {
 	while (my @chunk = splice @channels, 0, 10) {
 		$self->write(join => join(',', @chunk));
 	}
+}
+
+# Config parsing
+
+sub autojoin_channels {
+	my $self = shift;
+	return split /[\s,]+/, ($self->config->get('channels','autojoin') // '');
+}
+
+sub master_user {
+	my $self = shift;
+	return $self->config->get('users','master') // '';
+}
+
+sub admin_users {
+	my $self = shift;
+	return split /[\s,]+/, ($self->config->get('users','admin') // '');
+}
+
+sub voice_users {
+	my $self = shift;
+	return split /[\s,]+/, ($self->config->get('users','voice') // '');
 }
 
 # Command parsing
@@ -422,8 +447,8 @@ sub irc_kick {
 	$self->logger->debug("User $from has kicked $to from $channel");
 	$self->channel($channel)->remove_user($to);
 	$self->user($to)->remove_channel($channel);
-	if (lc $to eq lc $self->nick and any { lc $_ eq lc $channel }
-			split /[\s,]+/, $self->config->get('channels','autojoin')) {
+	if (lc $to eq lc $self->nick
+		and any { lc $_ eq lc $channel } $self->autojoin_channels) {
 		$self->write(join => $channel);
 	}
 }
@@ -513,7 +538,7 @@ sub irc_quit {
 sub irc_rpl_welcome {
 	my ($self, $message) = @_;
 	$self->irc->irc_rpl_welcome($message);
-	$self->on_welcome;
+	$self->emit('welcome');
 }
 
 sub irc_rpl_motdstart { # RPL_MOTDSTART

@@ -45,7 +45,7 @@ has 'networks' => (
 	default => sub { {} },
 );
 
-has 'init_plugins' => (
+has '_init_plugins' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -67,15 +67,14 @@ has 'commands' => (
 	init_arg => undef,
 );
 
-has 'command_prefixes' => (
+has '_command_prefixes' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
 	init_arg => undef,
-	clearer => 1,
 );
 
-has 'init_config' => (
+has '_init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
 		unless defined $_[0] and ref $_[0] eq 'HASH' },
@@ -109,7 +108,7 @@ sub _build_config {
 		file => $self->config_file,
 		defaults => $self->_config_defaults,
 	);
-	$config->apply($self->init_config)->store if %{$self->init_config};
+	$config->apply($self->_init_config)->store if %{$self->_init_config};
 	return $config;
 }
 
@@ -162,7 +161,7 @@ has 'is_stopping' => (
 	init_arg => undef,
 );
 
-has 'watch_timer' => (
+has '_watch_timer' => (
 	is => 'rwp',
 	predicate => 1,
 	clearer => 1,
@@ -178,23 +177,23 @@ sub BUILD {
 	croak "Networks must be specified as a hash reference"
 		unless ref $networks eq 'HASH';
 	croak "No networks have been specified" unless keys %$networks;
-	$self->network($_ => delete $networks->{$_}) for keys %$networks;
+	$self->add_network($_ => delete $networks->{$_}) for keys %$networks;
 	
-	my $plugins = $self->init_plugins;
+	my $plugins = $self->_init_plugins;
 	$plugins = {map { ($_ => 1) } @$plugins} if ref $plugins eq 'ARRAY';
 	croak "Plugins must be specified as a hash or array reference"
 		unless ref $plugins eq 'HASH';
 	$plugins->{Core} //= 1;
 	foreach my $plugin_class (keys %$plugins) {
 		my $args = $plugins->{$plugin_class};
-		$self->plugin($plugin_class => $args) if $args;
+		$self->add_plugin($plugin_class => $args) if $args;
 	}
-	$self->clear_init_plugins;
+	$self->_clear_init_plugins;
 }
 
 # Networks
 
-sub network {
+sub add_network {
 	my ($self, $name, $config) = @_;
 	croak "Network name is unspecified" unless defined $name;
 	croak "Network name $name contains invalid characters" if $name =~ /[^-.\w]/;
@@ -214,7 +213,7 @@ sub network {
 
 # Plugins
 
-sub plugin {
+sub add_plugin {
 	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::ZIRC::Plugin::$class" unless $class =~ /::/;
@@ -278,11 +277,6 @@ sub AUTOLOAD {
 
 # Commands
 
-sub command_names {
-	my $self = shift;
-	return keys %{$self->commands};
-}
-
 sub get_command {
 	my ($self, $name) = @_;
 	return undef unless defined $name and exists $self->commands->{lc $name};
@@ -291,8 +285,8 @@ sub get_command {
 
 sub get_commands_by_prefix {
 	my ($self, $prefix) = @_;
-	return [] unless defined $prefix and exists $self->command_prefixes->{lc $prefix};
-	return $self->command_prefixes->{lc $prefix};
+	return [] unless defined $prefix and exists $self->_command_prefixes->{lc $prefix};
+	return $self->_command_prefixes->{lc $prefix} // [];
 }
 
 sub add_command {
@@ -309,26 +303,41 @@ sub add_command {
 	my $name = $command->name;
 	croak "Command $name already exists" if exists $self->commands->{lc $name};
 	$self->commands->{lc $name} = $command;
-	$self->add_command_prefixes($name);
+	$self->_add_command_prefixes($name);
 	return $self;
 }
 
-sub add_command_prefixes {
+sub remove_command {
+	my ($self, $name) = @_;
+	croak "Command name not defined" unless defined $name;
+	$self->_remove_command_prefixes($name);
+	delete $self->commands->{lc $name};
+	return $self;
+}
+
+sub _add_command_prefixes {
 	my ($self, $name) = @_;
 	croak "Command name not defined" unless defined $name;
 	$name = lc $name;
 	foreach my $len (1..length $name) {
 		my $prefix = substr $name, 0, $len;
-		my $prefixes = $self->command_prefixes->{$prefix} //= [];
+		my $prefixes = $self->_command_prefixes->{$prefix} //= [];
 		push @$prefixes, $name;
 	}
 	return $self;
 }
 
-sub reload_command_prefixes {
-	my $self = shift;
-	$self->clear_command_prefixes;
-	$self->add_command_prefixes($_) for $self->command_names;
+sub _remove_command_prefixes {
+	my ($self, $name) = @_;
+	croak "Command name not defined" unless defined $name;
+	$name = lc $name;
+	foreach my $len (1..length $name) {
+		my $prefix = substr $name, 0, $len;
+		my $prefixes = $self->_command_prefixes->{$prefix} //= [];
+		@$prefixes = grep { $_ ne $name } @$prefixes;
+		delete $self->_command_prefixes->{$prefix} unless @$prefixes;
+	}
+	return $self;
 }
 
 # Bot actions
@@ -337,15 +346,15 @@ sub start {
 	my $self = shift;
 	$self->logger->debug("Starting bot");
 	$self->is_stopping(0);
-	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->sig_stop(@_) };
-	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->sig_reload(@_) };
+	$SIG{INT} = $SIG{TERM} = $SIG{QUIT} = sub { $self->_sig_stop(@_) };
+	$SIG{HUP} = $SIG{USR1} = $SIG{USR2} = sub { $self->_sig_reload(@_) };
 	$SIG{__WARN__} = sub { my $msg = shift; chomp $msg; $self->logger->warn($msg) };
 	
 	$self->emit('start');
 	
 	# Make sure perl signals are caught in a timely fashion
-	$self->_set_watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
-		unless $self->has_watch_timer;
+	$self->_set__watch_timer(Mojo::IOLoop->recurring(1 => sub {}))
+		unless $self->_has_watch_timer;
 	Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 	return $self;
 }
@@ -354,8 +363,8 @@ sub stop {
 	my ($self, $message) = @_;
 	$self->logger->debug("Stopping bot");
 	$self->is_stopping(1);
-	Mojo::IOLoop->remove($self->watch_timer) if $self->has_watch_timer;
-	$self->clear_watch_timer;
+	Mojo::IOLoop->remove($self->_watch_timer) if $self->_has_watch_timer;
+	$self->_clear_watch_timer;
 	$self->emit(stop => $message);
 	return $self;
 }
@@ -369,13 +378,13 @@ sub reload {
 	return $self;
 }
 
-sub sig_stop {
+sub _sig_stop {
 	my ($self, $signal) = @_;
 	$self->logger->debug("Received signal SIG$signal, stopping");
 	$self->stop;
 }
 
-sub sig_reload {
+sub _sig_reload {
 	my ($self, $signal) = @_;
 	$self->logger->debug("Received signal SIG$signal, reloading");
 	$self->reload;
@@ -638,15 +647,15 @@ Disconnect from all networks and stop the bot.
 
 Reloads configuration and reopens log handles.
 
-=head2 network
+=head2 add_network
 
-  $bot = $bot->network(freenode => { class => 'Freenode' });
+  $bot = $bot->add_network(freenode => { class => 'Freenode' });
 
 Adds a network for the bot to connect to. See L</"NETWORKS">.
 
-=head2 plugin
+=head2 add_plugin
 
-  $bot = $bot->plugin(DNS => { native => 0 });
+  $bot = $bot->add_plugin(DNS => { native => 0 });
 
 Registers a plugin with optional hashref of parameters to pass to the plugin's
 C<register> method. See L</"PLUGINS">.
@@ -665,11 +674,13 @@ L</"AUTOLOAD">.
 Returns a boolean value that is true if the specified helper method is
 available.
 
-=head2 command_names
+=head2 add_command
 
-  my @names = $bot->command_names;
+  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
+  $bot = $bot->add_command(...);
 
-Returns a list of all commands.
+Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
+new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
 
 =head2 get_command
 
@@ -678,13 +689,17 @@ Returns a list of all commands.
 Returns the L<Bot::ZIRC::Command> object representing the command, or C<undef>
 if the command does not exist.
 
-=head2 add_command
+=head2 get_commands_by_prefix
 
-  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
-  $bot = $bot->add_command(...);
+  my $commands = $bot->get_commands_by_prefix('wo');
 
-Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
-new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
+Returns an array reference of command objects matching a prefix, if any.
+
+=head2 remove_command
+
+  $bot = $bot->remove_command('locate');
+
+Removes a command from the bot by name if it exists.
 
 =head1 BUGS
 

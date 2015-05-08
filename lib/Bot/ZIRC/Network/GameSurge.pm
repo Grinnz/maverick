@@ -7,7 +7,7 @@ extends 'Bot::ZIRC::Network';
 
 our $VERSION = '0.20';
 
-sub do_identify {
+sub identify {
 	my ($self, $nick, $pass) = @_;
 	$self->logger->debug("Identifying with AuthServ as $nick");
 	$self->write("authserv auth $nick $pass");
