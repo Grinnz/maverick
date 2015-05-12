@@ -107,7 +107,7 @@ sub parse_usage_text {
 
 =head1 NAME
 
-Bot::Maverick::Command - User commands for Maverick IRC bot
+Bot::Maverick::Command - User commands for Maverick
 
 =head1 SYNOPSIS
 
