@@ -2,13 +2,13 @@
 
 =head1 NAME
 
-Bot::ZIRC - Mojo::IRC Bot framework
+Bot::Maverick - Mojo::IRC Bot framework
 
 =head1 SYNOPSIS
 
-  use Bot::ZIRC;
+  use Bot::Maverick;
   
-  my $bot = Bot::ZIRC->new(
+  my $bot = Bot::Maverick->new(
     name => 'MyIRCBot',
     networks => {
       freenode => {
@@ -22,18 +22,18 @@ Bot::ZIRC - Mojo::IRC Bot framework
 
 =head1 DESCRIPTION
 
-L<Bot::ZIRC> is an IRC bot framework built on L<Mojo::IRC> that supports
+L<Bot::Maverick> is an IRC bot framework built on L<Mojo::IRC> that supports
 connecting to multiple networks and is designed to be configurable and
 customizable via plugins. A core set of plugins is included from
-L<Bot::ZIRC::Plugin::Core> which includes basic administrative and
+L<Bot::Maverick::Plugin::Core> which includes basic administrative and
 configuration commands, and additional plugins can be registered that may
 implement any functionality from adding more commands to hooking into message
 events and more.
 
 =head1 CONFIGURATION
 
-L<Bot::ZIRC> is configured by INI files: one global configuration file and a
-network configuration file for each network it connects to. The global
+L<Bot::Maverick> is configured by INI files: one global configuration file and
+a network configuration file for each network it connects to. The global
 configuration file is used as a default configuration for each network. Any
 configuration specified in the constructor or when adding a network will be
 written to the configuration files, overriding existing configuration.
@@ -57,13 +57,14 @@ the default for any configuration not in a section.
 
 =head1 NETWORKS
 
-IRC networks are represented by L<Bot::ZIRC::Network> (or subclassed) objects
-that handle all communication with that network. Networks can be specified in
-the bot's constructor, or added later with the L</"network"> method.
+IRC networks are represented by L<Bot::Maverick::Network> (or subclassed)
+objects that handle all communication with that network. Networks can be
+specified in the bot's constructor, or added later with the L</"network">
+method.
 
 =head1 PLUGINS
 
-Plugins are L<Moo> objects that subclass L<Bot::ZIRC::Plugin>. They are
+Plugins are L<Moo> objects that subclass L<Bot::Maverick::Plugin>. They are
 registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
 method of its own as a "helper method" which then can be called on the bot
@@ -72,7 +73,7 @@ registered helper method.
 
 =head1 COMMANDS
 
-Commands are represented by L<Bot::ZIRC::Command> objects which define the
+Commands are represented by L<Bot::Maverick::Command> objects which define the
 properties of the command and a callback "on_run" that is called when the
 command is invoked by a IRC user.
 
@@ -105,30 +106,30 @@ Emitted when the bot is reloaded.
 
 The C<privmsg> hook is called whenever the bot receives a channel or private
 message ("privmsg") from an IRC user. The callback will receive the
-L<Bot::ZIRC> object and the L<Bot::ZIRC::Message> object containing the message
-details.
+L<Bot::Maverick> object and the L<Bot::Maverick::Message> object containing the
+message details.
 
 =head2 before_command
 
   $bot->on(before_command => sub { my ($bot, $m) = @_; ... });
 
 The C<before_command> hook is called before a recognized command is executed.
-The callback will receive the L<Bot::ZIRC> object and the L<Bot::ZIRC::Message>
-object containing the message details.
+The callback will receive the L<Bot::Maverick> object and the
+L<Bot::Maverick::Message> object containing the message details.
 
 =head2 after_command
 
   $bot->on(after_command => sub { my ($bot, $m) = @_; ... });
 
 The C<after_command> hook is called after a command has been executed. The
-callback will receive the L<Bot::ZIRC> object and the L<Bot::ZIRC::Message>
-object containing the message details.
+callback will receive the L<Bot::Maverick> object and the
+L<Bot::Maverick::Message> object containing the message details.
 
 =head1 METHODS
 
 =head2 new
 
-Constructs a new L<Bot::ZIRC> object instance. Accepts values for the following
+Constructs a new L<Bot::Maverick> object instance. Accepts values for the following
 attributes:
 
 =over
@@ -137,10 +138,10 @@ attributes:
 
   name => 'Botzilla',
 
-Name for the bot, defaults to C<ZIRC>. The bot's name is used as a default nick
-for networks where it is not configured, as well as lowercased for the default
-filenames for configuration and other files. For example, a bot named C<Fred>
-will (by default) use the configuration file C<fred.conf>, network
+Name for the bot, defaults to C<Maverick>. The bot's name is used as a default
+nick for networks where it is not configured, as well as lowercased for the
+default filenames for configuration and other files. For example, a bot named
+C<Fred> will (by default) use the configuration file C<fred.conf>, network
 configuration files C<fred-E<lt>networkE<gt>.conf>, and database file
 C<fred.db>.
 
@@ -151,9 +152,9 @@ C<fred.db>.
 Hash reference that must contain at least one network to connect to. Keys are
 names which will be used to identify the network as well as lowercased to
 define the default network configuration filename. Values are hash references
-containing an optional object C<class> (defaults to L<Bot::ZIRC::Network>) and
-configuration for the network. The C<class> will be appended to
-C<Bot::ZIRC::Network::> if it does not contain C<::>.
+containing an optional object C<class> (defaults to L<Bot::Maverick::Network>)
+and configuration for the network. The C<class> will be appended to
+C<Bot::Maverick::Network::> if it does not contain C<::>.
 
 =item plugins
 
@@ -161,12 +162,12 @@ C<Bot::ZIRC::Network::> if it does not contain C<::>.
   plugins => { Core => 0, DNS => { native => 0 }, GeoIP => 1 },
 
 Plugins to register with the bot, specified as plugin class names, which are
-appended to C<Bot::ZIRC::Plugin::> if they do not contain C<::>. May be
+appended to C<Bot::Maverick::Plugin::> if they do not contain C<::>. May be
 specified as an array reference to simply include the list of plugins, or as a
 hash reference to configure the plugins. If the hash value is false, the plugin
 will be not be registered. If the value is a hash reference, it will be passed
-to the plugin's constructor. See L<Bot::ZIRC::Plugin> for documentation on ZIRC
-plugins.
+to the plugin's constructor. See L<Bot::Maverick::Plugin> for documentation on
+Maverick plugins.
 
 =item config
 
@@ -251,18 +252,19 @@ available.
 
 =head2 add_command
 
-  $bot = $bot->add_command(Bot::ZIRC::Command->new(...));
+  $bot = $bot->add_command(Bot::Maverick::Command->new(...));
   $bot = $bot->add_command(...);
 
-Adds a L<Bot::ZIRC::Command> to the bot, or passes the arguments to construct a
-new L<Bot::ZIRC::Command> and add it to the bot. See L</"COMMANDS">.
+Adds a L<Bot::Maverick::Command> to the bot, or passes the arguments to
+construct a new L<Bot::Maverick::Command> and add it to the bot. See
+L</"COMMANDS">.
 
 =head2 get_command
 
   my $command = $bot->get_command('say');
 
-Returns the L<Bot::ZIRC::Command> object representing the command, or C<undef>
-if the command does not exist.
+Returns the L<Bot::Maverick::Command> object representing the command, or
+C<undef> if the command does not exist.
 
 =head2 get_commands_by_prefix
 
@@ -293,6 +295,6 @@ the terms of the Artistic License version 2.0.
 
 =head1 SEE ALSO
 
-L<Bot::ZIRC::Network>, L<Bot::ZIRC::Plugin>, L<Mojo::IRC>
+L<Bot::Maverick::Network>, L<Bot::Maverick::Plugin>, L<Mojo::IRC>
 
 =cut

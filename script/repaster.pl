@@ -5,9 +5,9 @@ use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Mojo::JSON::MaybeXS;
-use Bot::ZIRC;
+use Bot::Maverick;
 
-my $bot = Bot::ZIRC->new(
+my $bot = Bot::Maverick->new(
 	name => 'Repaster',
 	networks => {
 		freenode => {

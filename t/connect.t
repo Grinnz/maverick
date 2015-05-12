@@ -1,4 +1,4 @@
-use Bot::ZIRC;
+use Bot::Maverick;
 use Test::More;
 use Mojo::IOLoop;
 use File::Temp 'tempdir';
@@ -18,7 +18,7 @@ my $port = Mojo::IOLoop->acceptor($server)->port;
 
 my $nick = 'Tester';
 my $name = 'Testing bot 123';
-my $bot = Bot::ZIRC->new(name => $nick, config_dir => $dir, networks => {
+my $bot = Bot::Maverick->new(name => $nick, config_dir => $dir, networks => {
 	test => { irc => { server => '127.0.0.1', port => $port, realname => $name } }
 });
 
