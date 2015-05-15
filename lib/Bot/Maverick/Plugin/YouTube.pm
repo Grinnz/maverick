@@ -76,9 +76,9 @@ sub register {
 		return unless defined $m->channel;
 		return unless $m->config->get_channel($m->channel, 'youtube_trigger');
 		
-		return unless $message =~ m!\b(\S+youtube.com/watch\S+)!;
-		my $captured = Mojo::URL->new($1);
-		my $video_id = $captured->query->param('v') // return;
+		return unless $message =~ m!\b((https?://)?(?:(?:www.)?youtube.com/watch\?[-a-z0-9_=&;:%]+|youtu.be/[-a-z0-9_]+))!i;
+		my $captured = Mojo::URL->new(length $2 ? $1 : "https://$1");
+		my $video_id = $captured->query->param('v') // $captured->path->parts->[0] // return;
 		
 		$m->logger->debug("Captured YouTube URL $captured with video ID $video_id");
 		$self->youtube_video($video_id, sub {
