@@ -30,8 +30,7 @@ has 'client_secret' => (
 
 has '_access_token' => (
 	is => 'rw',
-	lazy => 1,
-	builder => 1,
+	predicate => 1,
 	clearer => 1,
 	init_arg => undef,
 );
@@ -44,7 +43,7 @@ has '_access_token_expire' => (
 );
 
 sub _build__access_token {
-	my $self = shift;
+	my ($self, $cb) = @_;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	
 	my $url = Mojo::URL->new(MICROSOFT_OAUTH_ENDPOINT);
@@ -54,20 +53,39 @@ sub _build__access_token {
 		scope => TRANSLATE_OAUTH_SCOPE,
 		grant_type => 'client_credentials'
 	);
-	my $tx = $self->ua->post($url, form => \%form);
+	unless ($cb) {
+		my $tx = $self->ua->post($url, form => \%form);
+		return $self->_access_token_response($tx);
+	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->post($url, form => \%form, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		$cb->($self->_access_token_response($tx));
+	});
+}
+
+sub _access_token_response {
+	my ($self, $tx) = @_;
 	die $self->ua_error($tx->error) if $tx->error;
 	my $data = $tx->res->json;
 	$self->_access_token_expire(time+$data->{expires_in});
-	return $data->{access_token};
+	$self->_access_token($data->{access_token});
+	return $self->_access_token;
 }
 
 sub _retrieve_access_token {
-	my $self = shift;
+	my ($self, $cb) = @_;
 	if ($self->_has_access_token_expire and $self->_access_token_expire <= time) {
 		$self->_clear_access_token;
 		$self->_clear_access_token_expire;
 	}
-	return $self->_access_token;
+	return $self->_has_access_token ? $self->_access_token : $self->_build__access_token unless $cb;
+	return Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		return $cb->($self->_access_token) if $self->_has_access_token;
+		$self->_build__access_token($cb)->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	});
 }
 
 has '_translate_languages' => (
@@ -198,15 +216,21 @@ sub detect_language {
 	croak 'Undefined text to detect' unless defined $text;
 	
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
-	my $access_token = $self->_retrieve_access_token;
-	my %headers = (Authorization => "Bearer $access_token");
 	unless ($cb) {
+		my $token = $self->_retrieve_access_token;
+		my %headers = (Authorization => "Bearer $token");
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
 		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, \%headers, shift->begin);
+		my $delay = shift;
+		$self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
@@ -244,15 +268,21 @@ sub translate_text {
 	
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
 		->query(text => $text, from => $from_code, to => $to_code, contentType => 'text/plain');
-	my $access_token = $self->_retrieve_access_token;
-	my %headers = (Authorization => "Bearer $access_token");
 	unless ($cb) {
+		my $token = $self->_retrieve_access_token;
+		my %headers = (Authorization => "Bearer $token");
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
 		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, \%headers, shift->begin);
+		my $delay = shift;
+		$self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
