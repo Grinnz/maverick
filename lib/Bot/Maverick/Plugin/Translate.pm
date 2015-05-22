@@ -89,7 +89,9 @@ sub _retrieve_access_token {
 }
 
 has '_translate_languages' => (
-	is => 'lazy',
+	is => 'rw',
+	lazy => 1,
+	default => sub { {} },
 	init_arg => undef,
 );
 
@@ -101,35 +103,50 @@ has '_languages_by_name' => (
 );
 
 sub _build__translate_languages {
-	my $self = shift;
+	my ($self, $cb) = @_;
 	
 	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguagesForTranslate');
-	my $access_token = $self->_retrieve_access_token;
-	my %headers = (Authorization => "Bearer $access_token");
-	my $tx = $self->ua->get($url, \%headers);
-	die $self->ua_error($tx->error) if $tx->error;
-	my @languages = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
-	
-	$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
-	$headers{'Content-Type'} = 'text/xml';
-	$tx = $self->ua->post($url, \%headers, _xml_string_array(@languages));
-	die $self->ua_error($tx->error) if $tx->error;
-	my @names = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
-	
-	my %languages;
-	for my $i (0..$#languages) {
-		my $lang = $languages[$i] // next;
-		my $name = $names[$i] // next;
-		$languages{$lang} = $name;
-		$self->_languages_by_name->{lc $name} = $lang;
-		my @words = split ' ', $name;
-		if (@words > 1) {
-			$self->_languages_by_name->{lc $_} //= $lang for @words;
+	return Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		my $access_token = $self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		$delay->data(token => $token);
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		my @languages = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
+		$delay->data(languages => \@languages);
+		
+		$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
+		my $token = $delay->data('token');
+		my %headers = (Authorization => "Bearer $token", 'Content-Type' => 'text/xml');
+		$self->ua->post($url, \%headers, _xml_string_array(@languages), $delay->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		my @names = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
+		
+		my %languages_by_code;
+		my $languages = $delay->data('languages');
+		for my $i (0..$#$languages) {
+			my $lang = $languages->[$i] // next;
+			my $name = $names[$i] // next;
+			$languages_by_code{$lang} = $name;
+			$self->_languages_by_name->{lc $name} = $lang;
+			my @words = split ' ', $name;
+			if (@words > 1) {
+				$self->_languages_by_name->{lc $_} //= $lang for @words;
+			}
+			$self->_languages_by_name->{lc $lang} //= $lang;
 		}
-		$self->_languages_by_name->{lc $lang} //= $lang;
-	}
-	
-	return \%languages;
+		
+		$self->_translate_languages(\%languages_by_code);
+		$cb->(\%languages_by_code) if $cb;
+	});
 }
 
 sub _xml_string_array {
@@ -151,6 +168,9 @@ sub register {
 	$self->client_secret($bot->config->get('apis','microsoft_client_secret'))
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
+	
+	$self->_build__translate_languages(sub { $self->logger->debug("Retrieved translation languages") })
+		->catch(sub { $self->logger->error("Error retrieving translation languages: $_[1]") });
 	
 	$bot->add_helper($self, 'detect_language');
 	$bot->add_helper($self, 'translate_language_code');
@@ -189,7 +209,7 @@ sub register {
 					$delay->pass($from);
 				} else { # Detect language
 					$self->detect_language($text, $delay->begin(0))
-						->catch(sub { $m->reply("Error detecting language: $_[1]") });
+						->catch(sub { $delay->remaining([]); $m->reply("Error detecting language: $_[1]") });
 				}
 			}, sub {
 				my ($delay, $from) = @_;
@@ -199,7 +219,7 @@ sub register {
 					unless defined (my $to_code = $self->translate_language_code($to));
 				$delay->data(from => $from_code, to => $to_code);
 				$self->translate_text($text, $from_code, $to_code, $delay->begin(0))
-					->catch(sub { $m->reply("Error translating text: $_[1]") });
+					->catch(sub { $delay->remaining([]); $m->reply("Error translating text: $_[1]") });
 			}, sub {
 				my ($delay, $translated) = @_;
 				my ($from, $to) = @{$delay->data}{'from','to'};
