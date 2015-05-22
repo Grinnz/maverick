@@ -23,14 +23,6 @@ has 'resolver' => (
 	init_arg => undef,
 );
 
-has 'watchers' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { {} },
-	init_arg => undef,
-	clearer => 1,
-);
-
 sub BUILD {
 	my $self = shift;
 	return unless $self->native;
@@ -76,8 +68,6 @@ sub register {
 			})->catch(sub { $m->reply("Failed to resolve $hostname: $_[1]") });
 		},
 	);
-	
-	$bot->on(stop => sub { $self->stop });
 }
 
 sub dns_resolve {
@@ -97,11 +87,10 @@ sub dns_resolve {
 		if ($self->native) {
 			my $dns = $self->resolver;
 			my $sock = $dns->getaddrinfo($host);
-			$self->watchers->{fileno $sock} = $sock;
+			my $remove = $self->bot->once(stop => sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
 			my $next = $delay->begin(0);
 			Mojo::IOLoop->singleton->reactor->io($sock, sub {
-				Mojo::IOLoop->singleton->reactor->remove($sock);
-				delete $self->watchers->{fileno $sock};
+				$remove->();
 				$next->($dns->get_result($sock));
 			})->watch($sock, 1, 0);
 		} else {
@@ -138,15 +127,6 @@ sub _ip_results {
 		$found{$addr} = 1;
 	}
 	return \@parsed;
-}
-
-sub stop {
-	my $self = shift;
-	return unless $self->native;
-	foreach my $sock (values %{$self->watchers}) {
-		Mojo::IOLoop->singleton->reactor->remove($sock);
-	}
-	$self->clear_watchers;
 }
 
 1;
