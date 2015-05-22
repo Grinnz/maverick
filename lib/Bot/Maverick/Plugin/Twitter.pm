@@ -27,8 +27,7 @@ has 'api_secret' => (
 
 has '_access_token' => (
 	is => 'rw',
-	lazy => 1,
-	builder => 1,
+	predicate => 1,
 	init_arg => undef,
 );
 
@@ -40,17 +39,39 @@ has 'results_cache' => (
 );
 
 sub _build__access_token {
-	my $self = shift;
+	my ($self, $cb) = @_;
 	die TWITTER_API_KEY_MISSING unless defined $self->api_key and defined $self->api_secret;
 	
 	my $bearer_token = b64_encode(url_escape($self->api_key) . ':' . url_escape($self->api_secret), '');
 	my $url = Mojo::URL->new(TWITTER_OAUTH_ENDPOINT);
 	my $headers = { Authorization => "Basic $bearer_token",
 		'Content-Type' => 'application/x-www-form-urlencoded;charset=UTF-8' };
-	my $tx = $self->ua->post($url, $headers,
-		form => { grant_type => 'client_credentials' });
-	die $self->ua_error($tx->error) if $tx->error;
-	return $tx->res->json->{access_token};
+	unless ($cb) {
+		my $tx = $self->ua->post($url, $headers,
+			form => { grant_type => 'client_credentials' });
+		die $self->ua_error($tx->error) if $tx->error;
+		$self->_access_token($tx->res->json->{access_token});
+		return $self->_access_token;
+	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->post($url, $headers,
+			form => { grant_type => 'client_credentials' }, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$self->_access_token($tx->res->json->{access_token});
+		$cb->($self->_access_token);
+	});
+}
+
+sub _retrieve_access_token {
+	my ($self, $cb) = @_;
+	return $self->_has_access_token ? $self->_access_token : $self->_build__access_token unless $cb;
+	return Mojo::IOLoop->delay(sub {
+		my $delay = shift;
+		return $cb->($self->_access_token) if $self->_has_access_token;
+		$self->_build__access_token($cb)->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	});
 }
 
 sub register {
@@ -126,13 +147,11 @@ sub register {
 		return unless defined $m->channel;
 		return unless $m->config->get_channel($m->channel, 'twitter_trigger');
 		return unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
-		my $token = $self->_access_token;
-		
 		my $captured = Mojo::URL->new($1);
 		my $parts = $captured->path->parts;
 		my $tweet_id = $parts->[0] eq 'statuses' ? $parts->[1] : $parts->[2];
-		
 		$m->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
+		
 		$self->twitter_tweet_by_id($tweet_id, sub {
 			my $tweet = shift;
 			return $self->_display_triggered($m, $tweet) if defined $tweet;
@@ -145,15 +164,21 @@ sub twitter_tweet_by_id {
 	croak 'Undefined tweet ID' unless defined $id;
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('statuses/show.json')->query(id => $id);
-	my $token = $self->_access_token;
-	my %headers = (Authorization => "Bearer $token");
 	unless ($cb) {
+		my $token = $self->_retrieve_access_token;
+		my %headers = (Authorization => "Bearer $token");
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
 		return $tx->res->json;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, \%headers, shift->begin);
+		my $delay = shift;
+		$self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
@@ -167,15 +192,21 @@ sub twitter_tweet_by_user {
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('users/show.json')
 		->query(screen_name => $user, include_entities => 'false');
-	my $token = $self->_access_token;
-	my %headers = (Authorization => "Bearer $token");
 	unless ($cb) {
+		my $token = $self->_retrieve_access_token;
+		my %headers = (Authorization => "Bearer $token");
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
 		return _swap_user_tweet($tx->res->json);
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, \%headers, shift->begin);
+		my $delay = shift;
+		$self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
@@ -196,15 +227,21 @@ sub twitter_search {
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('search/tweets.json')
 		->query(q => $query, count => 15, include_entities => 'false');
-	my $token = $self->_access_token;
-	my %headers = (Authorization => "Bearer $token");
 	unless ($cb) {
+		my $token = $self->_retrieve_access_token;
+		my %headers = (Authorization => "Bearer $token");
 		my $tx = $self->ua->get($url, \%headers);
 		die $self->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{statuses}//[];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, \%headers, shift->begin);
+		my $delay = shift;
+		$self->_retrieve_access_token($delay->begin(0))
+			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
+	}, sub {
+		my ($delay, $token) = @_;
+		my %headers = (Authorization => "Bearer $token");
+		$self->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
