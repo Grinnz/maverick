@@ -16,7 +16,7 @@ has 'native' => (
 	default => 1,
 );
 
-has 'resolver' => (
+has '_resolver' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { Net::DNS::Native->new },
@@ -85,7 +85,7 @@ sub dns_resolve {
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
 		if ($self->native) {
-			my $dns = $self->resolver;
+			my $dns = $self->_resolver;
 			my $sock = $dns->getaddrinfo($host);
 			my $remove = $self->bot->once(stop => sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
 			my $next = $delay->begin(0);
