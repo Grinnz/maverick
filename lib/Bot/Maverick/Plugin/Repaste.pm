@@ -16,7 +16,7 @@ sub register {
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		return unless defined $m->channel;
-		return unless $m->text =~ m!\bpastebin.com/(raw.php\?i=)?([a-zA-Z0-9]+)!;
+		return unless $m->text =~ m!\bpastebin.com/(raw\.php\?i=)?([a-z0-9]+)!i;
 		my $is_raw = (defined $1 and length $1) ? 1 : 0;
 		my $paste_key = $2;
 		my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste_key);
