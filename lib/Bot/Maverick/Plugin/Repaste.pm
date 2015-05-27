@@ -16,7 +16,7 @@ sub register {
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		return unless defined $m->channel;
-		my @paste_keys = ($m->text =~ m!\bpastebin.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
+		my @paste_keys = ($m->text =~ m!\bpastebin\.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
 		return unless @paste_keys;
 		
 		Mojo::IOLoop->delay(sub {
@@ -62,7 +62,7 @@ sub register {
 			}
 			
 			my $sender = $m->sender;
-			$m->reply_bare("Repasted text from $sender: ".join(' ', @urls));
+			$m->reply_bare("Repasted text from $sender: ".join(' ', @urls)) if @urls;
 		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin @paste_keys: $err") });
 	});
 }
