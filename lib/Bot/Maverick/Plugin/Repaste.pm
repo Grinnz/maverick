@@ -16,46 +16,54 @@ sub register {
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		return unless defined $m->channel;
-		return unless $m->text =~ m!\bpastebin.com/(raw\.php\?i=)?([a-z0-9]+)!i;
-		my $is_raw = (defined $1 and length $1) ? 1 : 0;
-		my $paste_key = $2;
-		my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste_key);
-		$m->logger->debug("Found pastebin link to $paste_key: $url");
+		my @paste_keys = ($m->text =~ m!\bpastebin.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
+		return unless @paste_keys;
+		
 		Mojo::IOLoop->delay(sub {
-			$bot->ua->get($url, shift->begin);
+			my $delay = shift;
+			foreach my $paste_key (@paste_keys) {
+				my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste_key);
+				$m->logger->debug("Found pastebin link to $paste_key: $url");
+				$bot->ua->get($url, $delay->begin);
+			}
 		}, sub {
-			my ($delay, $tx) = @_;
-			die $self->ua_error($tx->error) if $tx->error;
-			my $contents = $tx->res->text;
-			return $m->logger->debug("No paste contents") unless length $contents;
-			
-			my %form = (
-				paste_data => $contents,
-				paste_lang => 'text',
-				paste_user => $m->sender->nick,
-				paste_private => 'yes',
-				paste_expire => 86400,
-				api_submit => 'true',
-				mode => 'json',
-			);
-			
-			$m->logger->debug("Repasting contents to fpaste");
-			$bot->ua->post(FPASTE_PASTE_ENDPOINT, form => \%form, $delay->begin);
+			my $delay = shift;
+			foreach my $tx (@_) {
+				$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
+				my $contents = $tx->res->text;
+				$m->logger->debug("No paste contents"), next unless length $contents;
+				
+				my %form = (
+					paste_data => $contents,
+					paste_lang => 'text',
+					paste_user => $m->sender->nick,
+					paste_private => 'yes',
+					paste_expire => 86400,
+					api_submit => 'true',
+					mode => 'json',
+				);
+				
+				$m->logger->debug("Repasting contents to fpaste");
+				$bot->ua->post(FPASTE_PASTE_ENDPOINT, form => \%form, $delay->begin);
+			}
 		}, sub {
-			my ($delay, $tx) = @_;
-			die $self->ua_error($tx->error) if $tx->error;
-			
-			my $id = $tx->res->json->{result}{id};
-			my $hash = $tx->res->json->{result}{hash} // '';
-			die "No paste ID returned" unless defined $id;
-			
-			my $raw_path = $is_raw ? "raw/" : "";
-			my $url = Mojo::URL->new(FPASTE_PASTE_ENDPOINT)->path("$id/$hash/$raw_path");
-			$m->logger->debug("Repasted to $url");
+			my $delay = shift;
+			my @urls;
+			foreach my $tx (@_) {
+				$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
+				
+				my $id = $tx->res->json->{result}{id};
+				my $hash = $tx->res->json->{result}{hash} // '';
+				$m->logger->error("No paste ID returned"), next unless defined $id;
+				
+				my $url = Mojo::URL->new(FPASTE_PASTE_ENDPOINT)->path("$id/$hash/");
+				$m->logger->debug("Repasted to $url");
+				push @urls, $url;
+			}
 			
 			my $sender = $m->sender;
-			$m->reply_bare("Repasted text from $sender: $url");
-		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin $paste_key: $err") });
+			$m->reply_bare("Repasted text from $sender: ".join(' ', @urls));
+		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin @paste_keys: $err") });
 	});
 }
 
