@@ -4,6 +4,7 @@ use Carp;
 use Config::IniFiles;
 use File::Path 'make_path';
 use File::Spec;
+use File::Temp;
 use Scalar::Util 'blessed';
 
 use Moo;
@@ -46,13 +47,23 @@ has '_defaults_hash' => (
 	clearer => 1,
 );
 
+has '_defaults_tempfile' => (
+	is => 'rwp',
+	init_arg => undef,
+);
+
 sub BUILD {
 	my $self = shift;
 	croak "Filename or INI object must be specified" unless $self->has_file or $self->has_ini;
 	if ($self->_has_defaults_hash and !$self->has_defaults) {
-		my $defaults_ini = Config::IniFiles->new(%{$self->_ini_params});
+		my $tmp = File::Temp->new;
+		my $params = $self->_ini_params;
+		$params->{-file} = $tmp->filename;
+		my $defaults_ini = Config::IniFiles->new(%$params);
 		my $defaults_config = Bot::Maverick::Config->new(ini => $defaults_ini);
 		$defaults_config->apply($self->_defaults_hash);
+		$defaults_config->_set__defaults_tempfile($tmp); # Keep temp file around with object
+		$self->_clear_defaults_hash;
 		$self->_set_defaults($defaults_config);
 	}
 }
@@ -91,7 +102,7 @@ sub _build_ini {
 
 sub _read_ini {
 	my ($self, $ini) = @_;
-	my $filename = $ini->GetFileName // return $self;
+	my $filename = $ini->GetFileName;
 	my $rc = $ini->ReadConfig;
 	unless (defined $rc) {
 		my $err_str = @Config::IniFiles::errors ? "@Config::IniFiles::errors" : "$!";
@@ -102,25 +113,15 @@ sub _read_ini {
 
 sub _write_ini {
 	my ($self, $ini) = @_;
-	my $filename = $ini->GetFileName // return $self;
+	my $filename = $ini->GetFileName;
 	$ini->WriteConfig($filename, -delta => 1) // warn
 		"Failed to write configuration file $filename: $!\n";
 	return $self;
 }
 
-sub _set {
-	my $self = shift;
-	my ($section, $key, @values) = @_;
-	croak "Section and parameter name must be specified"
-		unless defined $section and defined $key;
-	$self->ini->newval($section, $key, @values);
-	return $self;
-}
-
 sub reload {
 	my $self = shift;
-	# Re-reading INI causes defaults from hash to be lost
-	$self->clear_ini;
+	$self->_read_ini($self->ini);
 }
 
 sub store {
@@ -137,7 +138,7 @@ sub apply {
 			unless ref $section eq 'HASH';
 		foreach my $key (keys %$section) {
 			my @values = ref $section->{$key} eq 'ARRAY' ? @{$section->{$key}} : $section->{$key};
-			$self->_set($section_name, $key, @values);
+			$self->ini->newval($section_name, $key, @values);
 		}
 	}
 	$self->store;
@@ -150,7 +151,7 @@ sub param {
 		unless defined $section and defined $key;
 	if (@_) {
 		my $value = shift;
-		$self->_set($section, $key, "$value");
+		$self->ini->newval($section, $key, "$value");
 		$self->store;
 		return $self;
 	} else {
@@ -166,7 +167,7 @@ sub multi_param {
 	if (@_) {
 		my @values = @_;
 		@values = @{$values[0]} if ref $values[0] eq 'ARRAY';
-		$self->_set($section, $key, @values);
+		$self->ini->newval($section, $key, @values);
 		$self->store;
 		return $self;
 	} else {
