@@ -76,9 +76,9 @@ sub _retrieve_access_token {
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','twitter_api_key'))
+	$self->api_key($bot->config->param('apis','twitter_api_key'))
 		unless defined $self->api_key;
-	$self->api_secret($bot->config->get('apis','twitter_api_secret'))
+	$self->api_secret($bot->config->param('apis','twitter_api_secret'))
 		unless defined $self->api_secret;
 	die TWITTER_API_KEY_MISSING unless defined $self->api_key and defined $self->api_secret;
 	
@@ -139,13 +139,13 @@ sub register {
 		},
 	);
 	
-	$bot->config->set_channel_default('twitter_trigger', 1);
+	$bot->config->channel_default('twitter_trigger', 1);
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		my $message = $m->text;
 		return unless defined $m->channel;
-		return unless $m->config->get_channel($m->channel, 'twitter_trigger');
+		return unless $m->config->channel_param($m->channel, 'twitter_trigger');
 		return unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
 		my $captured = Mojo::URL->new($1);
 		my $parts = $captured->path->parts;

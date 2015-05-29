@@ -15,7 +15,7 @@ use constant PYX_MAX_COUNT => 10;
 
 sub register {
 	my ($self, $bot) = @_;
-	my $endpoint = $bot->config->get('apis','pyx_endpoint');
+	my $endpoint = $bot->config->param('apis','pyx_endpoint');
 	die PYX_ENDPOINT_MISSING unless defined $endpoint;
 	
 	$bot->add_command(
@@ -87,9 +87,9 @@ sub _get_black_card {
 		$pick = PYX_MAX_PICK if $pick > PYX_MAX_PICK;
 	}
 	
-	my $endpoint = $m->config->get('apis','pyx_endpoint');
+	my $endpoint = $m->config->param('apis','pyx_endpoint');
 	die PYX_ENDPOINT_MISSING unless defined $endpoint;
-	my $card_sets = $m->config->get('apis','pyx_card_sets');
+	my $card_sets = $m->config->param('apis','pyx_card_sets');
 	my @card_sets = defined $card_sets ? split ' ', $card_sets : ();
 	
 	my $url = Mojo::URL->new($endpoint)->path('black/rand');
@@ -114,9 +114,9 @@ sub _get_white_cards {
 	$count = 1 if $count < 1;
 	$count = PYX_MAX_COUNT if $count > PYX_MAX_COUNT;
 	
-	my $endpoint = $m->config->get('apis','pyx_endpoint');
+	my $endpoint = $m->config->param('apis','pyx_endpoint');
 	die PYX_ENDPOINT_MISSING unless defined $endpoint;
-	my $card_sets = $m->config->get('apis','pyx_card_sets');
+	my $card_sets = $m->config->param('apis','pyx_card_sets');
 	my @card_sets = defined $card_sets ? split ' ', $card_sets : ();
 	
 	my $url = Mojo::URL->new($endpoint)->path('white/rand');

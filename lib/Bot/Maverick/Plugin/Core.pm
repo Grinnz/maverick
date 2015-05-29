@@ -108,7 +108,7 @@ sub register {
 			$command_name //= $self->more_commands->{$m->network}{$channel_name};
 			return $m->reply("No more to display") unless defined $command_name;
 			my $command = $self->bot->get_command($command_name);
-			if (!defined $command and $m->config->get('commands','prefixes')) {
+			if (!defined $command and $m->config->param('commands','prefixes')) {
 				my $cmds = $self->bot->get_commands_by_prefix($command_name);
 				foreach my $name (@$cmds) {
 					$command = $self->bot->get_command($cmds->[0]);
@@ -131,7 +131,7 @@ sub register {
 			my $m = shift;
 			my ($nick) = $m->args_list;
 			return 'usage' unless defined $nick and length $nick;
-			$m->config->set('irc', 'nick', $nick);
+			$m->config->param('irc', 'nick', $nick);
 			$m->write(nick => $nick);
 		},
 	);
@@ -180,10 +180,10 @@ sub register {
 				my ($sender, $has_access) = @_;
 				if ($has_access) {
 					if (defined $value) {
-						$m->config->set_channel($scope, $name, $value);
+						$m->config->channel_param($scope, $name, $value);
 						$m->reply("Set $scope configuration option $name to $value");
 					} else {
-						my $value = $m->config->get_channel($scope, $name);
+						my $value = $m->config->channel_param($scope, $name);
 						my $set_str = defined $value ? "is set to $value" : "is not set";
 						$m->reply("$scope configuration option $name $set_str");
 					}

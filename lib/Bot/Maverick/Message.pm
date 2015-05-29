@@ -75,9 +75,9 @@ has 'private_reply_max' => (
 
 sub parse_command {
 	my $self = shift;
-	my $trigger = $self->config->get('commands','trigger') // '';
-	my $by_nick = $self->config->get('commands','by_nick');
-	my $bare = $self->config->get('commands','bare');
+	my $trigger = $self->config->param('commands','trigger') // '';
+	my $by_nick = $self->config->param('commands','by_nick');
+	my $bare = $self->config->param('commands','bare');
 	my $bot_nick = $self->nick;
 	
 	my ($cmd_name, $args_str);
@@ -93,7 +93,7 @@ sub parse_command {
 	}
 	
 	my $command = $self->bot->get_command($cmd_name);
-	if (!defined $command and $self->config->get('commands','prefixes')) {
+	if (!defined $command and $self->config->param('commands','prefixes')) {
 		my $cmds = $self->bot->get_commands_by_prefix($cmd_name);
 		return undef unless $cmds and @$cmds;
 		if (@$cmds > 1) {
@@ -157,7 +157,7 @@ sub _reply {
 		croak "No sender or channel specified for reply";
 	}
 	
-	if ($self->config->get('echo')) {
+	if ($self->config->param('main', 'echo')) {
 		my $nick = $self->nick;
 		my $target = $channel // $sender;
 		$self->logger->info("[to $target] <$nick> $message");

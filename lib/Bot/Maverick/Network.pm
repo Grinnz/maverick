@@ -43,8 +43,8 @@ has '_init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
 		unless defined $_[0] and ref $_[0] eq 'HASH' },
-	lazy => 1,
-	default => sub { {} },
+	predicate => 1,
+	clearer => 1,
 	init_arg => 'config',
 );
 
@@ -64,9 +64,12 @@ sub _build_config {
 	my $config = Bot::Maverick::Config->new(
 		dir => $self->config_dir,
 		file => $self->config_file,
-		defaults_config => $self->bot->config,
+		defaults => $self->bot->config,
 	);
-	$config->apply($self->_init_config) if %{$self->_init_config};
+	if ($self->_has_init_config) {
+		$config->apply($self->_init_config);
+		$self->_clear_init_config;
+	}
 	return $config;
 }
 
@@ -78,9 +81,9 @@ has 'logger' => (
 
 sub _build_logger {
 	my $self = shift;
-	my $path = $self->config->get('logfile') || undef;
+	my $path = $self->config->param('main', 'logfile') || undef;
 	my $logger = Mojo::Log->new(path => $path);
-	$logger->level('info') unless $self->config->get('debug');
+	$logger->level('info') unless $self->config->param('main', 'debug');
 	return $logger;
 }
 
@@ -135,7 +138,7 @@ sub _build_irc {
 sub _connect_options {
 	my $self = shift;
 	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
-		@{$self->config->hash->{irc}}{qw/server port server_pass ssl nick realname/};
+		@{$self->config->to_hash->{irc}//{}}{qw/server port server_pass ssl nick realname/};
 	croak "IRC server for network $self is not configured\n"
 		unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
@@ -186,7 +189,7 @@ sub BUILD {
 		my $server = $self->server;
 		$self->logger->debug("Disconnected from $server");
 		$self->_stop_recurring_check;
-		$self->connect if !$self->is_stopping and $self->config->get('irc','reconnect');
+		$self->connect if !$self->is_stopping and $self->config->param('irc','reconnect');
 	});
 }
 
@@ -256,8 +259,8 @@ sub connect {
 		my ($irc, $err) = @_;
 		if ($err) {
 			$self->logger->error($err);
-			return if $self->is_stopping or !$self->config->get('irc','reconnect');
-			my $delay = $self->config->get('irc','reconnect_delay');
+			return if $self->is_stopping or !$self->config->param('irc','reconnect');
+			my $delay = $self->config->param('irc','reconnect_delay');
 			$delay = 10 unless defined $delay and looks_like_number $delay;
 			Mojo::IOLoop->timer($delay => sub { $self->connect });
 		} else {
@@ -281,8 +284,8 @@ sub disconnect {
 
 sub _identify {
 	my $self = shift;
-	my $nick = $self->config->get('irc','nick') // $self->bot->name;
-	my $pass = $self->config->get('irc','password');
+	my $nick = $self->config->param('irc','nick') // $self->bot->name;
+	my $pass = $self->config->param('irc','password');
 	if (defined $pass and length $pass) {
 		$self->identify($nick, $pass);
 	}
@@ -332,7 +335,7 @@ sub _stop_recurring_check {
 
 sub check_nick {
 	my $self = shift;
-	my $desired = $self->config->get('irc','nick') // $self->bot->name;
+	my $desired = $self->config->param('irc','nick') // $self->bot->name;
 	my $current = $self->nick;
 	unless (lc $desired eq lc substr $current, 0, length $desired) {
 		$self->write(nick => $desired);
@@ -357,27 +360,27 @@ sub check_channels {
 
 sub autojoin_channels {
 	my $self = shift;
-	return split /[\s,]+/, ($self->config->get('channels','autojoin') // '');
+	return @{$self->config->multi_param('channels','autojoin')};
 }
 
 sub master_user {
 	my $self = shift;
-	return $self->config->get('users','master') // '';
+	return $self->config->param('users','master') // '';
 }
 
 sub admin_users {
 	my $self = shift;
-	return split /[\s,]+/, ($self->config->get('users','admin') // '');
+	return @{$self->config->multi_param('users','admin')};
 }
 
 sub voice_users {
 	my $self = shift;
-	return split /[\s,]+/, ($self->config->get('users','voice') // '');
+	return @{$self->config->multi_param('users','voice')};
 }
 
 sub ignore_users {
 	my $self = shift;
-	return split /[\s,]+/, ($self->config->get('users','ignore') // '');
+	return @{$self->config->multi_param('users','ignore')};
 }
 
 # Queue future events
@@ -467,7 +470,7 @@ sub _irc_notice {
 	my ($self, $message) = @_;
 	my ($to, $text) = @{$message->{params}};
 	my $from = parse_user($message->{prefix}) // '';
-	$self->logger->info("[notice $to] <$from> $text") if $self->config->get('echo');
+	$self->logger->info("[notice $to] <$from> $text") if $self->config->param('main', 'echo');
 	my $sender = $self->user($from);
 	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $sender, channel => $channel, text => $text);
@@ -489,7 +492,7 @@ sub _irc_privmsg {
 	my ($self, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
-	$self->logger->info("[private] <$from> $msg") if $self->config->get('echo');
+	$self->logger->info("[private] <$from> $msg") if $self->config->param('main', 'echo');
 	my $user = $self->user($from);
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $user, text => $msg);
 	$self->_check_privmsg($m);
@@ -499,7 +502,7 @@ sub _irc_public {
 	my ($self, $message) = @_;
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
-	$self->logger->info("[$channel] <$from> $msg") if $self->config->get('echo');
+	$self->logger->info("[$channel] <$from> $msg") if $self->config->param('main', 'echo');
 	my $user = $self->user($from);
 	$channel = $self->channel($channel);
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $user, channel => $channel, text => $msg);
@@ -511,7 +514,7 @@ sub _check_privmsg {
 	my $sender = $message->sender;
 	my $channel = $message->channel;
 	
-	return if $sender->is_bot and $self->config->get('users','ignore_bots');
+	return if $sender->is_bot and $self->config->param('users','ignore_bots');
 	return if any { lc $_ eq lc $sender } $self->ignore_users;
 	
 	if (defined $message->parse_command) {

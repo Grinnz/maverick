@@ -160,7 +160,7 @@ sub bot_access {
 	my $identity = $self->identity // return ACCESS_NONE;
 	return ACCESS_BOT_MASTER if lc $identity eq lc $network->master_user;
 	return ACCESS_BOT_ADMIN if $self->is_ircop
-		and $network->config->get('users','ircop_admin_override');
+		and $network->config->param('users','ircop_admin_override');
 	return ACCESS_BOT_ADMIN if any { lc $identity eq lc $_ } $network->admin_users;
 	return ACCESS_BOT_VOICE if any { lc $identity eq lc $_ } $network->voice_users;
 	return ACCESS_NONE;

@@ -163,9 +163,9 @@ sub _xml_string_array {
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->client_id($bot->config->get('apis','microsoft_client_id'))
+	$self->client_id($bot->config->param('apis','microsoft_client_id'))
 		unless defined $self->client_id;
-	$self->client_secret($bot->config->get('apis','microsoft_client_secret'))
+	$self->client_secret($bot->config->param('apis','microsoft_client_secret'))
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	

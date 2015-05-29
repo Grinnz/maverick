@@ -96,7 +96,7 @@ sub run {
 
 sub parse_usage_text {
 	my ($self, $network, $text) = @_;
-	my $trigger = $network->config->get('commands','trigger');
+	my $trigger = $network->config->param('commands','trigger');
 	$trigger = $trigger ? substr $trigger, 0, 1 : $network->nick . ': ';
 	$text =~ s/\$(?:{trigger}|trigger\b)/$trigger/g;
 	$text =~ s/\$(?:{name}|name\b)/$self/g;

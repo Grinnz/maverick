@@ -26,7 +26,7 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.30';
+our $VERSION = '0.40';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::Maverick::Network Bot::Maverick::Command Bot::Maverick::User Bot::Maverick::Channel Moo);
@@ -78,8 +78,8 @@ has '_init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
 		unless defined $_[0] and ref $_[0] eq 'HASH' },
-	lazy => 1,
-	default => sub { {} },
+	predicate => 1,
+	clearer => 1,
 	init_arg => 'config',
 );
 
@@ -106,9 +106,12 @@ sub _build_config {
 	my $config = Bot::Maverick::Config->new(
 		dir => $self->config_dir,
 		file => $self->config_file,
-		defaults => $self->_config_defaults,
+		defaults_hash => $self->_config_defaults,
 	);
-	$config->apply($self->_init_config)->store if %{$self->_init_config};
+	if ($self->_has_init_config) {
+		$config->apply($self->_init_config);
+		$self->_clear_init_config;
+	}
 	return $config;
 }
 
@@ -140,9 +143,9 @@ has 'logger' => (
 
 sub _build_logger {
 	my $self = shift;
-	my $path = $self->config->get('logfile') || undef;
+	my $path = $self->config->param('main', 'logfile') || undef;
 	my $logger = Mojo::Log->new(path => $path);
-	$logger->level('info') unless $self->config->get('debug');
+	$logger->level('info') unless $self->config->param('main', 'debug');
 	return $logger;
 }
 
@@ -463,8 +466,8 @@ configuration file is used as a default configuration for each network. Any
 configuration specified in the constructor or when adding a network will be
 written to the configuration files, overriding existing configuration.
 
-Configuration INI files are organized into sections; the C<[main]> section is
-the default for any configuration not in a section.
+Configuration INI files are organized into sections, and all parameters must be
+within a section.
 
 =head2 main
 

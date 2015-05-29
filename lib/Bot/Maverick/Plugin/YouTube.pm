@@ -30,7 +30,7 @@ has '_results_cache' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','google_api_key')) unless defined $self->api_key;
+	$self->api_key($bot->config->param('apis','google_api_key')) unless defined $self->api_key;
 	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
 	
 	$bot->add_helper($self, 'youtube_search');
@@ -68,13 +68,13 @@ sub register {
 		},
 	);
 	
-	$bot->config->set_channel_default('youtube_trigger', 1);
+	$bot->config->channel_default('youtube_trigger', 1);
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		my $message = $m->text;
 		return unless defined $m->channel;
-		return unless $m->config->get_channel($m->channel, 'youtube_trigger');
+		return unless $m->config->channel_param($m->channel, 'youtube_trigger');
 		
 		return unless $message =~ m!\b((https?://)?(?:(?:www.)?youtube.com/watch\?[-a-z0-9_=&;:%]+|youtu.be/[-a-z0-9_]+))!i;
 		my $captured = Mojo::URL->new(length $2 ? $1 : "https://$1");

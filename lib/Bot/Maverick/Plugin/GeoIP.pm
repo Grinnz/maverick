@@ -22,7 +22,7 @@ has 'geoip' => (
 
 sub _build_geoip {
 	my $self = shift;
-	my $file = $self->bot->config->get('apis', 'geoip_file');
+	my $file = $self->bot->config->param('apis', 'geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	my ($geoip, $err);
 	{
@@ -35,7 +35,7 @@ sub _build_geoip {
 
 sub register {
 	my ($self, $bot) = @_;
-	my $file = $bot->config->get('apis','geoip_file');
+	my $file = $bot->config->param('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
 	$bot->add_helper($self, 'geoip_locate');

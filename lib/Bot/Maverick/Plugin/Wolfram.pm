@@ -22,7 +22,7 @@ has 'api_key' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','wolfram_api_key')) unless defined $self->api_key;
+	$self->api_key($bot->config->param('apis','wolfram_api_key')) unless defined $self->api_key;
 	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
 	
 	$bot->add_helper($self, 'wolfram_query');
@@ -35,7 +35,7 @@ sub register {
 			my $m = shift;
 			my $query = $m->args;
 			return 'usage' unless length $query;
-			my $api_key = $m->config->get('apis','wolfram_api_key');
+			my $api_key = $m->config->param('apis','wolfram_api_key');
 			die WOLFRAM_API_KEY_MISSING unless defined $api_key;
 			
 			my $host = $m->sender->host;

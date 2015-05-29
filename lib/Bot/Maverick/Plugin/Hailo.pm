@@ -28,10 +28,10 @@ sub _build_hailo {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$self->brain($bot->config->get('hailo', 'brain') // 'brain.sqlite');
+	$self->brain($bot->config->param('hailo', 'brain') // 'brain.sqlite');
 	
-	$bot->config->set_channel_default('hailo_speak', 0);
-	$bot->config->set_channel_default('hailo_reply_when_addressed', 1);
+	$bot->config->channel_default('hailo_speak', 0);
+	$bot->config->channel_default('hailo_reply_when_addressed', 1);
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
@@ -49,9 +49,9 @@ sub register {
 		$self->hailo->save;
 		
 		my $speak = 1;
-		$speak = $m->config->get_channel($m->channel, 'hailo_speak') if defined $m->channel;
+		$speak = $m->config->channel_param($m->channel, 'hailo_speak') if defined $m->channel;
 		my $do_reply = $speak > rand() ? 1 : 0;
-		my $when_addressed = $m->config->get_channel($m->channel, 'hailo_reply_when_addressed');
+		my $when_addressed = $m->config->channel_param($m->channel, 'hailo_reply_when_addressed');
 		$do_reply = 1 if $when_addressed and $addressed;
 		return unless $do_reply;
 		

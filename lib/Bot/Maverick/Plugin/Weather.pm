@@ -30,7 +30,7 @@ has '_weather_cache' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','wunderground_api_key')) unless defined $self->api_key;
+	$self->api_key($bot->config->param('apis','wunderground_api_key')) unless defined $self->api_key;
 	die WEATHER_API_KEY_MISSING unless defined $self->api_key;
 	
 	$bot->add_helper($self, 'weather_autocomplete_location_code');

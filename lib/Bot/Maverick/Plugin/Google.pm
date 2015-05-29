@@ -34,8 +34,8 @@ has '_results_cache' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','google_api_key')) unless defined $self->api_key;
-	$self->cse_id($bot->config->get('apis','google_cse_id')) unless defined $self->cse_id;
+	$self->api_key($bot->config->param('apis','google_api_key')) unless defined $self->api_key;
+	$self->cse_id($bot->config->param('apis','google_cse_id')) unless defined $self->cse_id;
 	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
 	
 	$bot->add_helper($self, 'google_search_web');

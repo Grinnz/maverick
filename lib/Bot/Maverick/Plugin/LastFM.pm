@@ -21,7 +21,7 @@ has 'api_key' => (
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->api_key($bot->config->get('apis','lastfm_api_key')) unless defined $self->api_key;
+	$self->api_key($bot->config->param('apis','lastfm_api_key')) unless defined $self->api_key;
 	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
 	
 	$bot->add_helper($self, 'lastfm_last_track');

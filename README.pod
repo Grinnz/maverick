@@ -38,8 +38,8 @@ configuration file is used as a default configuration for each network. Any
 configuration specified in the constructor or when adding a network will be
 written to the configuration files, overriding existing configuration.
 
-Configuration INI files are organized into sections; the C<[main]> section is
-the default for any configuration not in a section.
+Configuration INI files are organized into sections, and all parameters must be
+within a section.
 
 =head2 main
 
