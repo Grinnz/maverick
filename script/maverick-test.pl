@@ -5,7 +5,7 @@ use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Bot::Maverick;
-
+warn $INC{'Mojo/JSON/MaybeXS.pm'};
 my $bot = Bot::Maverick->new(
 	networks => {
 		socialgamer => {

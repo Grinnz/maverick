@@ -1,7 +1,9 @@
 package Bot::Maverick;
 
+# Use JSON::MaybeXS for JSON API processing if available
+BEGIN { eval { require Mojo::JSON::MaybeXS; 1 } }
+
 use Carp;
-use Exporter;
 use File::Spec;
 use IRC::Utils;
 use List::Util 'any';
