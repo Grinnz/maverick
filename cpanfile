@@ -17,3 +17,4 @@ requires 'namespace::clean';
 requires 'Parse::IRC', '1.20';
 requires 'Scalar::Util';
 test_requires 'Test::More', '0.88';
+suggests 'Mojo::JSON::MaybeXS';

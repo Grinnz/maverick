@@ -193,6 +193,18 @@ sub register {
 			});
 		},
 	);
+	
+	$bot->add_command(
+		name => 'version',
+		help_text => 'Return version information',
+		on_run => sub {
+			my $m = shift;
+			my $name = $m->bot->name;
+			my $bot_version = $m->bot->bot_version;
+			my $perl_version = $^V;
+			$m->reply("I am $name, running Bot::Maverick $bot_version on perl $perl_version");
+		},
+	);
 }
 
 1;
@@ -268,6 +280,12 @@ Reload configuration from files and reopen logs.
 
 Set a network configuration option for either the whole network or a channel,
 defaulting to the current channel.
+
+=head2 version
+
+ !version
+
+Respond with the bot name, module version, and perl version.
 
 =head1 BUGS
 
