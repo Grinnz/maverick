@@ -52,8 +52,11 @@ sub register {
 			foreach my $tx (@_) {
 				$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
 				
-				my $id = $tx->res->json->{result}{id};
-				my $hash = $tx->res->json->{result}{hash} // '';
+				my $result = $tx->res->json->{result} // {};
+				$m->logger->error("Paste error: ".$result->{error}), next if $result->{error};
+				
+				my $id = $result->{id};
+				my $hash = $result->{hash} // '';
 				$m->logger->error("No paste ID returned"), next unless defined $id;
 				
 				my $url = Mojo::URL->new(FPASTE_PASTE_ENDPOINT)->path("$id/$hash/");
