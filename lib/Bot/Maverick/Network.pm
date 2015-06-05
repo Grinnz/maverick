@@ -470,7 +470,7 @@ sub _irc_notice {
 	my ($self, $message) = @_;
 	my ($to, $text) = @{$message->{params}};
 	my $from = parse_user($message->{prefix}) // '';
-	$self->logger->info("[notice $to] <$from> $text") if $self->config->param('main', 'echo');
+	$self->logger->info("[$self] [notice $to] <$from> $text") if $self->config->param('main', 'echo');
 	my $sender = $self->user($from);
 	my $channel = $to =~ /^#/ ? $self->channel($to) : undef;
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $sender, channel => $channel, text => $text);
@@ -492,7 +492,7 @@ sub _irc_privmsg {
 	my ($self, $message) = @_;
 	my ($to, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
-	$self->logger->info("[private] <$from> $msg") if $self->config->param('main', 'echo');
+	$self->logger->info("[$self] [private] <$from> $msg") if $self->config->param('main', 'echo');
 	my $user = $self->user($from);
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $user, text => $msg);
 	$self->_check_privmsg($m);
@@ -502,7 +502,7 @@ sub _irc_public {
 	my ($self, $message) = @_;
 	my ($channel, $msg) = @{$message->{params}};
 	my $from = parse_user($message->{prefix});
-	$self->logger->info("[$channel] <$from> $msg") if $self->config->param('main', 'echo');
+	$self->logger->info("[$self] [$channel] <$from> $msg") if $self->config->param('main', 'echo');
 	my $user = $self->user($from);
 	$channel = $self->channel($channel);
 	my $m = Bot::Maverick::Message->new(network => $self, sender => $user, channel => $channel, text => $msg);
