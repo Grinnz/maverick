@@ -154,7 +154,7 @@ sub _build_logger {
 has 'ua' => (
 	is => 'ro',
 	lazy => 1,
-	default => sub { Mojo::UserAgent->new },
+	default => sub { Mojo::UserAgent->new->max_redirects(3) },
 	init_arg => undef,
 );
 

@@ -8,7 +8,7 @@ extends 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 
-use constant WIKIPEDIA_API_ENDPOINT => 'http://en.wikipedia.org/w/api.php';
+use constant WIKIPEDIA_API_ENDPOINT => 'https://en.wikipedia.org/w/api.php';
 
 has '_results_cache' => (
 	is => 'ro',
