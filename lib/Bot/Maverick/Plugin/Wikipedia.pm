@@ -65,14 +65,14 @@ sub wikipedia_search {
 	unless ($cb) {
 		my $tx = $self->ua->get($url);
 		die $self->ua_error($tx->error) if $tx->error;
-		return $tx->res->json->[1]//[];
+		return ($tx->res->json//[])->[1]//[];
 	}
 	return Mojo::IOLoop->delay(sub {
 		$self->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		die $self->ua_error($tx->error) if $tx->error;
-		$cb->($tx->res->json->[1]//[]);
+		$cb->(($tx->res->json//[])->[1]//[]);
 	});
 }
 
