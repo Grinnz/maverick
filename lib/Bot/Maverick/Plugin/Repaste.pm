@@ -8,6 +8,7 @@ extends 'Bot::Maverick::Plugin';
 our $VERSION = '0.20';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
+use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
 use constant FPASTE_PASTE_ENDPOINT => 'http://fpaste.org/';
 
 sub register {
@@ -16,14 +17,20 @@ sub register {
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		return unless defined $m->channel;
-		my @paste_keys = ($m->text =~ m!\bpastebin\.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
-		return unless @paste_keys;
+		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
+		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
+		return unless @pastebin_keys or @hastebin_keys;
 		
 		Mojo::IOLoop->delay(sub {
 			my $delay = shift;
-			foreach my $paste_key (@paste_keys) {
+			foreach my $paste_key (@pastebin_keys) {
 				my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste_key);
 				$m->logger->debug("Found pastebin link to $paste_key: $url");
+				$bot->ua->get($url, $delay->begin);
+			}
+			foreach my $paste_key (@hastebin_keys) {
+				my $url = Mojo::URL->new(HASTEBIN_RAW_ENDPOINT)->path($paste_key);
+				$m->logger->debug("Found hastebin link to $paste_key: $url");
 				$bot->ua->get($url, $delay->begin);
 			}
 		}, sub {
@@ -66,7 +73,7 @@ sub register {
 			
 			my $sender = $m->sender;
 			$m->reply_bare("Repasted text from $sender: ".join(' ', @urls)) if @urls;
-		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin @paste_keys: $err") });
+		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin @pastebin_keys @hastebin_keys: $err") });
 	});
 }
 
@@ -85,8 +92,9 @@ Bot::Maverick::Plugin::Repaste - Repasting plugin for Maverick
 =head1 DESCRIPTION
 
 Hooks into public messages of a L<Bot::Maverick> IRC bot and whenever a
-L<pastebin.com|http://pastebin.com> link is detected, repastes it to another
-pastebin site like L<fpaste|http://fpaste.org>.
+L<pastebin.com|http://pastebin.com> or L<hastebin.com|http://hastebin.com> link
+is detected, repastes it to another pastebin site like
+L<fpaste|http://fpaste.org>.
 
 =head1 BUGS
 
