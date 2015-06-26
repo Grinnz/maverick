@@ -14,6 +14,8 @@ use constant FPASTE_PASTE_ENDPOINT => 'http://fpaste.org/';
 sub register {
 	my ($self, $bot) = @_;
 	
+	$bot->config->channel_default(repaste_lang => 'text');
+	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		return unless defined $m->channel;
@@ -40,9 +42,11 @@ sub register {
 				my $contents = $tx->res->text;
 				$m->logger->debug("No paste contents"), next unless length $contents;
 				
+				my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // 'text';
+				
 				my %form = (
 					paste_data => $contents,
-					paste_lang => 'text',
+					paste_lang => $lang,
 					paste_user => $m->sender->nick,
 					paste_private => 'yes',
 					paste_expire => 86400,
