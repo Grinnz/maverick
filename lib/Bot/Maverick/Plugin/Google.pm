@@ -12,6 +12,7 @@ extends 'Bot::Maverick::Plugin';
 our $VERSION = '0.20';
 
 use constant GOOGLE_API_ENDPOINT => 'https://www.googleapis.com/customsearch/v1';
+use constant GOOGLE_COMPLETE_ENDPOINT => 'http://google.com/complete/search';
 use constant GOOGLE_API_KEY_MISSING => 
 	"Google plugin requires configuration options 'google_api_key' and 'google_cse_id' in section 'apis'\n" .
 	"See https://developers.google.com/custom-search/json-api/v1/overview " .
@@ -142,6 +143,42 @@ sub register {
 				$m->reply("Google Fight! $reply_str. $winner_str!");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
+		
+	);
+	
+	$bot->add_command(
+		name => 'complete',
+		help_text => 'Get Google auto-complete suggestions',
+		usage_text => '<snippet>',
+		on_run => sub {
+			my $m = shift;
+			my $query = $m->args;
+			return 'usage' unless length $query;
+			
+			$self->google_complete($query, sub {
+				my $suggestions = shift;
+				return $m->reply("No Google auto-complete suggestions") unless @$suggestions;
+				
+				my $channel_name = lc ($m->channel // $m->sender);
+				$self->_results_cache->{complete}{$m->network}{$channel_name} = $suggestions;
+				
+				my @show_suggestions = splice @$suggestions, 0, 5;
+				$m->show_more(scalar @$suggestions);
+				my $suggest_str = join ' | ', @show_suggestions;
+				$m->reply("Suggested completions: $suggest_str");
+			})->catch(sub { $m->reply("Google search error: $_[1]") });
+		},
+		on_more => sub {
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $suggestions = $self->_results_cache->{complete}{$m->network}{$channel_name} // [];
+			return $m->reply("No more Google auto-complete suggestions") unless @$suggestions;
+			
+			my @show_suggestions = splice @$suggestions, 0, 5;
+			$m->show_more(scalar @$suggestions);
+			my $suggest_str = join ' | ', @show_suggestions;
+			$m->reply("Suggested completions: $suggest_str");
+		},
 	);
 }
 
@@ -206,6 +243,31 @@ sub google_search_image {
 		die $self->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{items}//[]);
 	});
+}
+
+sub google_complete {
+	my ($self, $query, $cb) = @_;
+	croak 'Undefined search query' unless defined $query;
+	
+	my $request = Mojo::URL->new(GOOGLE_COMPLETE_ENDPOINT)->query(output => 'toolbar',
+		client => 'chrome', hl => 'en', q => $query);
+	unless ($cb) {
+		my $tx = $self->ua->get($request);
+		die $self->ua_error($tx->error) if $tx->error;
+		return _google_complete_results($tx->res->json);
+	}
+	return Mojo::IOLoop->delay(sub {
+		$self->ua->get($request, shift->begin);
+	}, sub {
+		my ($delay, $tx) = @_;
+		die $self->ua_error($tx->error) if $tx->error;
+		$cb->(_google_complete_results($tx->res->json));
+	});
+}
+
+sub _google_complete_results {
+	my $results = shift // [];
+	return $results->[1] // [];
 }
 
 sub _google_result_web {
