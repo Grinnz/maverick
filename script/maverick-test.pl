@@ -10,8 +10,10 @@ my $bot = Bot::Maverick->new(
 	networks => {
 		socialgamer => {
 			class => 'SocialGamer',
-			irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
-			users => { master => 'Grinnz' },
+			config => {
+				irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
+				users => { master => 'Grinnz' },
+			},
 		}
 	},
 	plugins => { DNS => { native => 1 }, LastFM => 1, Google => 1, YouTube => 1,

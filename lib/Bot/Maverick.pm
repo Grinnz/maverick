@@ -8,6 +8,7 @@ use File::Spec;
 use IRC::Utils;
 use List::Util 'any';
 use Mojo::IOLoop;
+use Mojo::IOLoop::ForkCall;
 use Mojo::Log;
 use Mojo::UserAgent;
 use Scalar::Util 'blessed';
@@ -32,6 +33,39 @@ our $VERSION = '0.40';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::Maverick::Network Bot::Maverick::Command Bot::Maverick::User Bot::Maverick::Channel Moo);
+
+sub _config_defaults {
+	{
+		main => {
+			debug => 0,
+			echo => 1,
+		},
+		irc => {
+			server => '',
+			server_pass => '',
+			port => 6667,
+			ssl => 0,
+			realname => '',
+			password => '',
+			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
+			reconnect => 1,
+		},
+		users => {
+			master => '',
+			ircop_admin_override => 1,
+			ignore_bots => 1,
+		},
+		channels => {
+			autojoin => '',
+		},
+		commands => {
+			prefixes => 1,
+			trigger => '!',
+			by_nick => 1,
+		},
+		apis => {},
+	};
+}
 
 has 'name' => (
 	is => 'ro',
@@ -199,12 +233,11 @@ sub BUILD {
 # Networks
 
 sub add_network {
-	my ($self, $name, $config) = @_;
+	my ($self, $name, $attrs) = @_;
 	croak "Network name is unspecified" unless defined $name;
 	croak "Network name $name contains invalid characters" if $name =~ /[^-.\w]/;
 	croak "Network $name already exists" if exists $self->networks->{lc $name};
-	croak "Invalid configuration for network $name" unless ref $config eq 'HASH';
-	my $class = delete $config->{class} // 'Bot::Maverick::Network';
+	my $class = $attrs->{class} // 'Bot::Maverick::Network';
 	$class = "Bot::Maverick::Network::$class" unless $class =~ /::/;
 	my $err;
 	{
@@ -212,7 +245,9 @@ sub add_network {
 		eval "require $class; 1" or $err = $@;
 	}
 	croak $err if defined $err;
-	$self->networks->{lc $name} = $class->new(name => $name, bot => $self, config => $config);
+	my %params = (name => $name, bot => $self);
+	$params{config} = $attrs->{config} if defined $attrs->{config};
+	$self->networks->{lc $name} = $class->new(%params);
 	return $self;
 }
 
@@ -395,37 +430,23 @@ sub _sig_reload {
 	$self->reload;
 }
 
-sub _config_defaults {
-	{
-		main => {
-			debug => 0,
-			echo => 1,
-		},
-		irc => {
-			server => '',
-			server_pass => '',
-			port => 6667,
-			ssl => 0,
-			realname => '',
-			password => '',
-			away_msg => 'I am a bot. Say !help in a channel or in PM for help.',
-			reconnect => 1,
-		},
-		users => {
-			master => '',
-			ircop_admin_override => 1,
-			ignore_bots => 1,
-		},
-		channels => {
-			autojoin => '',
-		},
-		commands => {
-			prefixes => 1,
-			trigger => '!',
-			by_nick => 1,
-		},
-		apis => {},
-	};
+# Utility methods
+
+sub fork_call {
+	my ($self, @args) = @_;
+	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : undef;
+	my $fc = Mojo::IOLoop::ForkCall->new;
+	return $fc->run(@args, sub {
+		my $fc = shift;
+		$self->$cb(@_) if $cb;
+	});
+}
+
+sub ua_error {
+	my ($self, $err) = @_;
+	return $err->{code}
+		? "Transport error $err->{code}: $err->{message}\n"
+		: "Connection error: $err->{message}\n";
 }
 
 1;
@@ -577,7 +598,7 @@ C<fred.db>.
 
 =item networks
 
-  networks => { freenode => { class => 'Freenode', debug => 1 } },
+  networks => { freenode => { class => 'Freenode', config => { debug => 1 } } },
 
 Hash reference that must contain at least one network to connect to. Keys are
 names which will be used to identify the network as well as lowercased to
@@ -707,6 +728,16 @@ Returns an array reference of command objects matching a prefix, if any.
   $bot = $bot->remove_command('locate');
 
 Removes a command from the bot by name if it exists.
+
+=head2 ua_error
+
+Forms a simple error message from a L<Mojo::UserAgent> transaction error hash.
+
+=head2 fork_call
+
+Runs the first callback in a forked process using L<Mojo::IOLoop::ForkCall> and
+calls the second callback when it completes. The returned
+L<Mojo::IOLoop::ForkCall> object can be used to catch errors.
 
 =head1 BUGS
 

@@ -19,7 +19,7 @@ my $port = Mojo::IOLoop->acceptor($server)->port;
 my $nick = 'Tester';
 my $name = 'Testing bot 123';
 my $bot = Bot::Maverick->new(name => $nick, config_dir => $dir, networks => {
-	test => { irc => { server => '127.0.0.1', port => $port, realname => $name } }
+	test => { config => { irc => { server => '127.0.0.1', port => $port, realname => $name } } }
 });
 
 Mojo::IOLoop->timer(0.25 => sub { $bot->stop; Mojo::IOLoop->acceptor($server)->stop });

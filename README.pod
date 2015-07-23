@@ -147,7 +147,7 @@ C<fred.db>.
 
 =item networks
 
-  networks => { freenode => { class => 'Freenode', debug => 1 } },
+  networks => { freenode => { class => 'Freenode', config => { debug => 1 } } },
 
 Hash reference that must contain at least one network to connect to. Keys are
 names which will be used to identify the network as well as lowercased to
@@ -277,6 +277,16 @@ Returns an array reference of command objects matching a prefix, if any.
   $bot = $bot->remove_command('locate');
 
 Removes a command from the bot by name if it exists.
+
+=head2 ua_error
+
+Forms a simple error message from a L<Mojo::UserAgent> transaction error hash.
+
+=head2 fork_call
+
+Runs the first callback in a forked process using L<Mojo::IOLoop::ForkCall> and
+calls the second callback when it completes. The returned
+L<Mojo::IOLoop::ForkCall> object can be used to catch errors.
 
 =head1 BUGS
 

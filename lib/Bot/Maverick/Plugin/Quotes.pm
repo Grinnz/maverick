@@ -115,7 +115,7 @@ sub register {
 					$quotes->unlock;
 					return \@matches;
 				}, sub {
-					my ($self, $err, $matches) = @_;
+					my ($bot, $err, $matches) = @_;
 					if ($err) {
 						chomp $err;
 						$err =~ s/ at .+? line .+?\.$//;
@@ -150,7 +150,7 @@ sub register {
 				push @$quotes, @add_quotes;
 				return $num_quotes;
 			}, sub {
-				my ($self, $err, $num_quotes) = @_;
+				my ($bot, $err, $num_quotes) = @_;
 				die $err if $err;
 				return $m->reply("No quotes to add")
 					unless $num_quotes;
@@ -179,7 +179,7 @@ sub register {
 				spurt encode('UTF-8', join("\n", @$quotes)."\n"), $filename;
 				return scalar @$quotes;
 			}, sub {
-				my ($self, $err, $num_quotes) = @_;
+				my ($bot, $err, $num_quotes) = @_;
 				die $err if $err;
 				$m->reply("Stored $num_quotes quotes to $filename");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
@@ -196,7 +196,7 @@ sub register {
 				$self->bot->storage->data->{quotes} = [];
 				return 1;
 			}, sub {
-				my ($self, $err) = @_;
+				my ($bot, $err) = @_;
 				die $err if $err;
 				$self->clear_quote_cache;
 				$m->reply("Deleted all quotes");

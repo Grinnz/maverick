@@ -11,12 +11,16 @@ my $bot = Bot::Maverick->new(
 	networks => {
 		freenode => {
 			class => 'Freenode',
-			irc => { server => 'chat.freenode.net', port => 6697, ssl => 1 },
-			users => { master => 'Grinnz' },
+			config => {
+				irc => { server => 'chat.freenode.net', port => 6697, ssl => 1 },
+				users => { master => 'Grinnz' },
+			},
 		},
 		magnet => {
-			irc => { server => 'irc.perl.org', port => 7062, ssl => 1 },
-			users => { master => 'Grinnz' },
+			config => {
+				irc => { server => 'irc.perl.org', port => 7062, ssl => 1 },
+				users => { master => 'Grinnz' },
+			},
 		},
 	},
 	plugins => { Repaste => 1 },

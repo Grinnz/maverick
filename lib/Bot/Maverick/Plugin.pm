@@ -2,7 +2,6 @@ package Bot::Maverick::Plugin;
 
 use Bot::Maverick;
 use Carp;
-use Mojo::IOLoop::ForkCall;
 use Scalar::Util 'blessed';
 
 use Moo;
@@ -17,27 +16,10 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::Maverick->new },
 	weak_ref => 1,
-	handles => [qw/logger ua/],
+	handles => [qw/fork_call logger ua ua_error/],
 );
 
 sub register { die "Method must be overloaded by subclass" }
-
-sub ua_error {
-	my ($self, $err) = @_;
-	return $err->{code}
-		? "Transport error $err->{code}: $err->{message}\n"
-		: "Connection error: $err->{message}\n";
-}
-
-sub fork_call {
-	my ($self, @args) = @_;
-	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : undef;
-	my $fc = Mojo::IOLoop::ForkCall->new;
-	return $fc->run(@args, sub {
-		my $fc = shift;
-		$self->$cb(@_) if $cb;
-	});
-}
 
 1;
 
@@ -71,16 +53,6 @@ Weakened reference to L<Bot::Maverick> object.
 =head2 register
 
 Register plugin with bot, intended to be overloaded in a subclass.
-
-=head2 ua_error
-
-Forms a simple error message from a L<Mojo::UserAgent> transaction error hash.
-
-=head2 fork_call
-
-Runs the first callback in a forked process using L<Mojo::IOLoop::ForkCall> and
-calls the second callback when it completes. The returned
-L<Mojo::IOLoop::ForkCall> object can be used to catch errors.
 
 =head1 BUGS
 
