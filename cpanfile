@@ -16,5 +16,6 @@ requires 'Moo', '2.000';
 requires 'namespace::clean';
 requires 'Parse::IRC', '1.20';
 requires 'Scalar::Util';
+requires 'Sereal';
 test_requires 'Test::More', '0.88';
 recommends 'Mojo::JSON::MaybeXS';

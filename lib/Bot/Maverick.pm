@@ -12,6 +12,8 @@ use Mojo::IOLoop::ForkCall;
 use Mojo::Log;
 use Mojo::UserAgent;
 use Scalar::Util 'blessed';
+use Sereal::Encoder 'sereal_encode_with_object';
+use Sereal::Decoder 'sereal_decode_with_object';
 use Bot::Maverick::Access qw/:access ACCESS_LEVELS/;
 use Bot::Maverick::Command;
 use Bot::Maverick::Config;
@@ -189,6 +191,20 @@ has 'ua' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { Mojo::UserAgent->new->max_redirects(3) },
+	init_arg => undef,
+);
+
+has 'serializer' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { Sereal::Encoder->new },
+	init_arg => undef,
+);
+
+has 'deserializer' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { Sereal::Decoder->new },
 	init_arg => undef,
 );
 
@@ -435,14 +451,19 @@ sub _sig_reload {
 sub fork_call {
 	my ($self, @args) = @_;
 	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : sub {};
-	my $fc = Mojo::IOLoop::ForkCall->new;
+	my $serializer = $self->serializer;
+	my $deserializer = $self->deserializer;
+	my $fc = Mojo::IOLoop::ForkCall->new(
+		serializer => sub { sereal_encode_with_object($serializer, shift) },
+		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
+	);
 	return $fc->run(@args, $cb);
 }
 
 sub ua_error {
 	my ($self, $err) = @_;
 	return $err->{code}
-		? "Transport error $err->{code}: $err->{message}\n"
+		? "HTTP error $err->{code}: $err->{message}\n"
 		: "Connection error: $err->{message}\n";
 }
 
