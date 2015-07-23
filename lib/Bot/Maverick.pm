@@ -434,12 +434,9 @@ sub _sig_reload {
 
 sub fork_call {
 	my ($self, @args) = @_;
-	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : undef;
+	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : sub {};
 	my $fc = Mojo::IOLoop::ForkCall->new;
-	return $fc->run(@args, sub {
-		my $fc = shift;
-		$self->$cb(@_) if $cb;
-	});
+	return $fc->run(@args, $cb);
 }
 
 sub ua_error {
