@@ -11,7 +11,7 @@ requires 'IRC::Utils', '0.12';
 requires 'List::Util';
 requires 'Mojolicious', '6.0';
 requires 'Mojo::IOLoop::ForkCall', '0.16';
-requires 'Mojo::IRC', '0.17';
+requires 'Mojo::IRC', '0.26';
 requires 'Moo', '2.000';
 requires 'namespace::clean';
 requires 'Parse::IRC', '1.20';
