@@ -20,6 +20,13 @@ has 'api_key' => (
 	is => 'rw',
 );
 
+has '_results_cache' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 sub register {
 	my ($self, $bot) = @_;
 	$self->api_key($bot->config->param('apis','wolfram_api_key')) unless defined $self->api_key;
@@ -67,6 +74,16 @@ sub register {
 					$self->_reply_wolfram_success($m, $result);
 				}
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+		},
+		on_more => sub {
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $pods = $self->_results_cache->{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Wolfram|Alpha query") unless @$pods;
+			
+			my $next_pod = shift @$pods;
+			$m->show_more(scalar @$pods);
+			$m->reply($next_pod);
 		},
 	);
 }
@@ -165,11 +182,26 @@ sub _reply_wolfram_success {
 			push @contents, $content;
 		}
 		
-		push @pod_contents, "$title: ".join '; ', @contents if @contents;
+		if (@contents) {
+			my $pod_content = join '; ', @contents;
+			my @sections;
+			if (length $pod_content > 200) {
+				push @sections, substr($pod_content, 0, 200, '') . ' ...';
+				push @sections, '... ' . substr($pod_content, 0, 200, '') . ' ...' while length $pod_content > 200;
+				push @sections, '... ' . $pod_content;
+			} else {
+				@sections = ($pod_content);
+			}
+			push @pod_contents, map { "$title: $_" } @sections;
+		}
 	}
 	
 	if (@pod_contents) {
-		my $output = join ' || ', @pod_contents;
+		my @first_pods = splice @pod_contents, 0, 2;
+		my $channel_name = lc ($m->channel // $m->sender);
+		$self->_results_cache->{$m->network}{$channel_name} = \@pod_contents;
+		$m->show_more(scalar @pod_contents);
+		my $output = join ' || ', @first_pods;
 		$m->reply($output);
 	} else {
 		$m->reply("Empty response to Wolfram|Alpha query");
