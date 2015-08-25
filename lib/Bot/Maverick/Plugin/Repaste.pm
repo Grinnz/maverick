@@ -18,7 +18,7 @@ sub register {
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
-		return unless defined $m->channel;
+		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
 		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
 		return unless @pastebin_keys or @hastebin_keys;
@@ -75,8 +75,11 @@ sub register {
 				push @urls, $url;
 			}
 			
-			my $sender = $m->sender;
-			$m->reply_bare("Repasted text from $sender: ".join(' ', @urls)) if @urls;
+			return undef unless @urls;
+			my $reply = 'Repasted text';
+			$reply .= ' from ' . $m->sender if defined $m->channel;
+			$reply .= ': ' . join ' ', @urls;
+			$m->reply_bare($reply);
 		})->catch(sub { chomp (my $err = $_[1]); $m->logger->error("Error repasting pastebin @pastebin_keys @hastebin_keys: $err") });
 	});
 }

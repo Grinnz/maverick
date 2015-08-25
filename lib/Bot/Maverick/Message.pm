@@ -133,7 +133,7 @@ sub reply_private {
 
 sub reply_bare {
 	my $self = shift;
-	$self->_reply(undef, $self->channel, @_);
+	$self->_reply(undef, $self->channel // $self->sender, @_);
 }
 
 sub _reply {
