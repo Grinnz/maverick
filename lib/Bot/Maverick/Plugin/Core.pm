@@ -3,7 +3,7 @@ package Bot::Maverick::Plugin::Core;
 use Bot::Maverick::Access ':access';
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 

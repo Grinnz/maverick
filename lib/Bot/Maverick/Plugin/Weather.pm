@@ -6,7 +6,7 @@ use Mojo::URL;
 use Scalar::Util 'looks_like_number';
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 

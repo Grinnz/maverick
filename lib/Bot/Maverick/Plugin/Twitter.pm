@@ -7,7 +7,7 @@ use Mojo::Util qw/b64_encode html_unescape url_escape/;
 use Time::Duration 'ago';
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 

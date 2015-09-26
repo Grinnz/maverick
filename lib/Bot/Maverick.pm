@@ -277,8 +277,8 @@ sub add_plugin {
 		local $@;
 		eval {
 			die $err = $@ unless eval "require $class; 1";
-			die "$class is not a Bot::Maverick::Plugin\n"
-				unless $class->isa('Bot::Maverick::Plugin');
+			die "$class does not perform the role Bot::Maverick::Plugin\n"
+				unless $class->DOES('Bot::Maverick::Plugin');
 			my @params = ref $params eq 'HASH' ? %$params : ();
 			$plugin = $class->new(@params, bot => $self);
 			$plugin->register($self);

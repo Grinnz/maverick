@@ -4,10 +4,11 @@ use Bot::Maverick;
 use Carp;
 use Scalar::Util 'blessed';
 
-use Moo;
-use namespace::clean;
+use Moo::Role;
 
 our $VERSION = '0.20';
+
+requires 'register';
 
 has 'bot' => (
 	is => 'ro',
@@ -18,19 +19,17 @@ has 'bot' => (
 	weak_ref => 1,
 );
 
-sub register { die "Method must be overloaded by subclass" }
-
 1;
 
 =head1 NAME
 
-Bot::Maverick::Plugin - Base class for Maverick plugins
+Bot::Maverick::Plugin - Role for Maverick plugins
 
 =head1 SYNOPSIS
 
   package My::Maverick::Plugin;
   use Moo;
-  extends 'Bot::Maverick::Plugin';
+  with 'Bot::Maverick::Plugin';
   sub register { my ($self, $bot) = @_; ... }
   
   my $plugin = My::Maverick::Plugin->new(bot => $bot, %$params);
@@ -38,8 +37,8 @@ Bot::Maverick::Plugin - Base class for Maverick plugins
 
 =head1 DESCRIPTION
 
-L<Bot::Maverick::Plugin> is an abstract base class for plugins for the
-L<Bot::Maverick> IRC bot framework.
+L<Bot::Maverick::Plugin> is a role for plugins for the L<Bot::Maverick> IRC bot
+framework.
 
 =head1 ATTRIBUTES
 
@@ -51,7 +50,7 @@ Weakened reference to L<Bot::Maverick> object.
 
 =head2 register
 
-Register plugin with bot, intended to be overloaded in a subclass.
+Register plugin with bot. Required by classes consuming this role.
 
 =head1 BUGS
 

@@ -4,7 +4,7 @@ use Bot::Maverick::Access ':access';
 use Mojo::Util qw/decode encode slurp spurt/;
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 

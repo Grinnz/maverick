@@ -6,7 +6,7 @@ use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 

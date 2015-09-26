@@ -4,7 +4,7 @@ use Carp 'croak';
 use Math::Calc::Parser 'calc';
 
 use Moo;
-extends 'Bot::Maverick::Plugin';
+with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 
