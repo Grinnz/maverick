@@ -4,7 +4,7 @@
       "Dan Book <dbook@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.036, CPAN::Meta::Converter version 2.150001",
+   "generated_by" : "Dist::Zilla version 5.039, CPAN::Meta::Converter version 2.150005",
    "license" : [
       "artistic_2"
    ],
@@ -13,18 +13,33 @@
       "version" : 2
    },
    "name" : "Bot-Maverick",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples"
+      ]
+   },
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "0"
+            "Module::Build::Tiny" : "0.034"
          }
       },
       "develop" : {
          "requires" : {
-            "Dist::Zilla::PluginBundle::Author::DBOOK" : "0.003"
+            "Pod::Coverage::TrustPod" : "0",
+            "Test::Pod" : "1.41",
+            "Test::Pod::Coverage" : "1.08"
          }
       },
       "runtime" : {
+         "recommends" : {
+            "Mojo::JSON::MaybeXS" : "0"
+         },
          "requires" : {
             "Carp" : "0",
             "Config::IniFiles" : "2.83",
@@ -32,21 +47,24 @@
             "Exporter" : "0",
             "File::Path" : "0",
             "File::Spec" : "0",
+            "File::Temp" : "0",
             "FindBin" : "0",
             "IRC::Utils" : "0.12",
             "List::Util" : "0",
             "Mojo::IOLoop::ForkCall" : "0.16",
-            "Mojo::IRC" : "0.17",
+            "Mojo::IRC" : "0.26",
             "Mojolicious" : "6.0",
             "Moo" : "2.000",
             "Parse::IRC" : "1.20",
+            "Role::EventEmitter" : "0",
             "Scalar::Util" : "0",
-            "namespace::clean" : "0"
+            "Sereal" : "0",
+            "namespace::clean" : "0",
+            "perl" : "5.010001"
          }
       },
       "test" : {
          "requires" : {
-            "File::Temp" : "0",
             "Test::More" : "0.88"
          }
       }
@@ -54,135 +72,135 @@
    "provides" : {
       "Bot::Maverick" : {
          "file" : "lib/Bot/Maverick.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Access" : {
          "file" : "lib/Bot/Maverick/Access.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Channel" : {
          "file" : "lib/Bot/Maverick/Channel.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Command" : {
          "file" : "lib/Bot/Maverick/Command.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Config" : {
          "file" : "lib/Bot/Maverick/Config.pm",
-         "version" : "0.30"
-      },
-      "Bot::Maverick::EventEmitter" : {
-         "file" : "lib/Bot/Maverick/EventEmitter.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Message" : {
          "file" : "lib/Bot/Maverick/Message.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Network" : {
          "file" : "lib/Bot/Maverick/Network.pm",
-         "version" : "0.30"
+         "version" : "0.40"
+      },
+      "Bot::Maverick::Network::ColdFront" : {
+         "file" : "lib/Bot/Maverick/Network/ColdFront.pm",
+         "version" : "0.40"
       },
       "Bot::Maverick::Network::Freenode" : {
          "file" : "lib/Bot/Maverick/Network/Freenode.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Network::GameSurge" : {
          "file" : "lib/Bot/Maverick/Network/GameSurge.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Network::NoAuth" : {
          "file" : "lib/Bot/Maverick/Network/NoAuth.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Network::SocialGamer" : {
          "file" : "lib/Bot/Maverick/Network/SocialGamer.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin" : {
          "file" : "lib/Bot/Maverick/Plugin.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Calc" : {
          "file" : "lib/Bot/Maverick/Plugin/Calc.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Core" : {
          "file" : "lib/Bot/Maverick/Plugin/Core.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::DNS" : {
          "file" : "lib/Bot/Maverick/Plugin/DNS.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::GeoIP" : {
          "file" : "lib/Bot/Maverick/Plugin/GeoIP.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Google" : {
          "file" : "lib/Bot/Maverick/Plugin/Google.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Hailo" : {
          "file" : "lib/Bot/Maverick/Plugin/Hailo.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::LastFM" : {
          "file" : "lib/Bot/Maverick/Plugin/LastFM.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::PYX" : {
          "file" : "lib/Bot/Maverick/Plugin/PYX.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Pick" : {
          "file" : "lib/Bot/Maverick/Plugin/Pick.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Quotes" : {
          "file" : "lib/Bot/Maverick/Plugin/Quotes.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Repaste" : {
          "file" : "lib/Bot/Maverick/Plugin/Repaste.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Spell" : {
          "file" : "lib/Bot/Maverick/Plugin/Spell.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Translate" : {
          "file" : "lib/Bot/Maverick/Plugin/Translate.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Twitter" : {
          "file" : "lib/Bot/Maverick/Plugin/Twitter.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Weather" : {
          "file" : "lib/Bot/Maverick/Plugin/Weather.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Wikipedia" : {
          "file" : "lib/Bot/Maverick/Plugin/Wikipedia.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::Wolfram" : {
          "file" : "lib/Bot/Maverick/Plugin/Wolfram.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Plugin::YouTube" : {
          "file" : "lib/Bot/Maverick/Plugin/YouTube.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::Storage" : {
          "file" : "lib/Bot/Maverick/Storage.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       },
       "Bot::Maverick::User" : {
          "file" : "lib/Bot/Maverick/User.pm",
-         "version" : "0.30"
+         "version" : "0.40"
       }
    },
    "release_status" : "stable",
@@ -197,6 +215,10 @@
          "web" : "https://github.com/Grinnz/maverick"
       }
    },
-   "version" : "0.30"
+   "version" : "0.40",
+   "x_contributors" : [
+      "Dan Book <grinnz@grinnz.com>",
+      "Grinnz <grinnz@gmail.com>"
+   ]
 }
 

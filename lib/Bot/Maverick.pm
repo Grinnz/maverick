@@ -24,6 +24,8 @@ use namespace::clean;
 
 use Exporter 'import';
 
+with 'Role::EventEmitter';
+
 our $AUTOLOAD;
 
 our @EXPORT_OK = keys %{ACCESS_LEVELS()};
@@ -222,8 +224,6 @@ has '_watch_timer' => (
 	clearer => 1,
 	init_arg => undef,
 );
-
-with 'Bot::Maverick::EventEmitter';
 
 sub BUILD {
 	my $self = shift;

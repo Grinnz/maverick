@@ -20,6 +20,8 @@ use namespace::clean;
 use overload 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1] },
 	'""' => sub { shift->name }, bool => sub {1}, fallback => 1;
 
+with 'Role::EventEmitter';
+
 our @CARP_NOT = qw(Bot::Maverick Bot::Maverick::Command Bot::Maverick::User Bot::Maverick::Channel Moo);
 
 our $VERSION = '0.20';
@@ -163,8 +165,6 @@ has '_recurring_check_timer' => (
 	predicate => 1,
 	clearer => 1,
 );
-
-with 'Bot::Maverick::EventEmitter';
 
 sub BUILD {
 	my $self = shift;
