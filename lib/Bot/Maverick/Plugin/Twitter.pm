@@ -82,9 +82,14 @@ sub register {
 		unless defined $self->api_secret;
 	die TWITTER_API_KEY_MISSING unless defined $self->api_key and defined $self->api_secret;
 	
-	$bot->add_helper($self, 'twitter_search');
-	$bot->add_helper($self, 'twitter_tweet_by_id');
-	$bot->add_helper($self, 'twitter_tweet_by_user');
+	$bot->add_helper(_twitter => sub { $self });
+	$bot->add_helper(twitter_api_key => sub { shift->_twitter->api_key });
+	$bot->add_helper(twitter_api_secret => sub { shift->_twitter->api_secret });
+	$bot->add_helper(twitter_access_token => sub { shift->_twitter->_retrieve_access_token(@_) });
+	$bot->add_helper(twitter_results_cache => sub { shift->_twitter->results_cache });
+	$bot->add_helper(twitter_search => \&_twitter_search);
+	$bot->add_helper(twitter_tweet_by_id => \&_twitter_tweet_by_id);
+	$bot->add_helper(twitter_tweet_by_user => \&_twitter_tweet_by_user);
 		
 	$bot->add_command(
 		name => 'twitter',
@@ -98,44 +103,44 @@ sub register {
 			# Tweet ID
 			if ($query =~ /^#(\d+)$/) {
 				my $id = $1;
-				$self->twitter_tweet_by_id($id, sub {
+				$m->bot->twitter_tweet_by_id($id, sub {
 					my $tweet = shift;
 					return $m->reply("Tweet \#$id not found") unless defined $tweet;
-					return $self->_display_tweet($m, $tweet);
+					return _display_tweet($m, $tweet);
 				})->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 			}
 			
 			# User timeline
 			elsif ($query =~ /^\@(\S+)$/) {
 				my $user = $1;
-				$self->twitter_tweet_by_user($user, sub {
+				$m->bot->twitter_tweet_by_user($user, sub {
 					my $tweet = shift;
 					return $m->reply("No tweets found for user \@$user") unless defined $tweet;
-					return $self->_display_tweet($m, $tweet);
+					return _display_tweet($m, $tweet);
 				})->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
 			}
 			
 			# Search
 			else {
-				$self->twitter_search($query, sub {
+				$m->bot->twitter_search($query, sub {
 					my $tweets = shift;
 					return $m->reply("No results for Twitter search") unless @$tweets;
 					my $first_tweet = shift @$tweets;
 					my $channel_name = lc ($m->channel // $m->sender);
-					$self->results_cache->{$m->network}{$channel_name} = $tweets;
+					$m->bot->twitter_results_cache->{$m->network}{$channel_name} = $tweets;
 					$m->show_more(scalar @$tweets);
-					$self->_display_tweet($m, $first_tweet);
+					_display_tweet($m, $first_tweet);
 				})->catch(sub { $m->reply("Twitter search error: $_[1]") });
 			}
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $tweets = $self->results_cache->{$m->network}{$channel_name} // [];
+			my $tweets = $m->bot->twitter_results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Twitter search") unless @$tweets;
 			my $next_tweet = shift @$tweets;
 			$m->show_more(scalar @$tweets);
-			$self->_display_tweet($m, $next_tweet);
+			_display_tweet($m, $next_tweet);
 		},
 	);
 	
@@ -152,64 +157,64 @@ sub register {
 		my $tweet_id = $parts->[0] eq 'statuses' ? $parts->[1] : $parts->[2];
 		$m->logger->debug("Captured Twitter URL $captured with tweet ID $tweet_id");
 		
-		$self->twitter_tweet_by_id($tweet_id, sub {
+		$m->bot->twitter_tweet_by_id($tweet_id, sub {
 			my $tweet = shift;
-			return $self->_display_triggered($m, $tweet) if defined $tweet;
+			return _display_triggered($m, $tweet) if defined $tweet;
 		})->catch(sub { $m->logger->error("Error retrieving Twitter tweet data: $_[1]") });
 	});
 }
 
-sub twitter_tweet_by_id {
-	my ($self, $id, $cb) = @_;
+sub _twitter_tweet_by_id {
+	my ($bot, $id, $cb) = @_;
 	croak 'Undefined tweet ID' unless defined $id;
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('statuses/show.json')->query(id => $id);
 	unless ($cb) {
-		my $token = $self->_retrieve_access_token;
+		my $token = $bot->twitter_access_token;
 		my %headers = (Authorization => "Bearer $token");
-		my $tx = $self->ua->get($url, \%headers);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url, \%headers);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json;
 	}
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		$self->_retrieve_access_token($delay->begin(0))
+		$bot->twitter_access_token($delay->begin(0))
 			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
 	}, sub {
 		my ($delay, $token) = @_;
 		my %headers = (Authorization => "Bearer $token");
-		$self->ua->get($url, \%headers, $delay->begin);
+		$bot->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json);
 	});
 }
 
-sub twitter_tweet_by_user {
-	my ($self, $user, $cb) = @_;
+sub _twitter_tweet_by_user {
+	my ($bot, $user, $cb) = @_;
 	croak 'Undefined twitter user' unless defined $user;
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('users/show.json')
 		->query(screen_name => $user, include_entities => 'false');
 	unless ($cb) {
-		my $token = $self->_retrieve_access_token;
+		my $token = $bot->twitter_access_token;
 		my %headers = (Authorization => "Bearer $token");
-		my $tx = $self->ua->get($url, \%headers);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url, \%headers);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return _swap_user_tweet($tx->res->json);
 	}
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		$self->_retrieve_access_token($delay->begin(0))
+		$bot->twitter_access_token($delay->begin(0))
 			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
 	}, sub {
 		my ($delay, $token) = @_;
 		my %headers = (Authorization => "Bearer $token");
-		$self->ua->get($url, \%headers, $delay->begin);
+		$bot->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(_swap_user_tweet($tx->res->json));
 	});
 }
@@ -221,36 +226,36 @@ sub _swap_user_tweet {
 	return $tweet;
 }
 
-sub twitter_search {
-	my ($self, $query, $cb) = @_;
+sub _twitter_search {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined twitter query' unless defined $query;
 	
 	my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('search/tweets.json')
 		->query(q => $query, count => 15, include_entities => 'false');
 	unless ($cb) {
-		my $token = $self->_retrieve_access_token;
+		my $token = $bot->twitter_access_token;
 		my %headers = (Authorization => "Bearer $token");
-		my $tx = $self->ua->get($url, \%headers);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url, \%headers);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{statuses}//[];
 	}
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		$self->_retrieve_access_token($delay->begin(0))
+		$bot->twitter_access_token($delay->begin(0))
 			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
 	}, sub {
 		my ($delay, $token) = @_;
 		my %headers = (Authorization => "Bearer $token");
-		$self->ua->get($url, \%headers, $delay->begin);
+		$bot->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{statuses}//[]);
 	});
 }
 
 sub _display_tweet {
-	my ($self, $m, $tweet) = @_;
+	my ($m, $tweet) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
 	my $id = $tweet->{id_str};
@@ -263,7 +268,7 @@ sub _display_tweet {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = $self->_parse_tweet_text($tweet->{text});
+	my $content = _parse_tweet_text($m->bot->ua, $tweet->{text});
 	my $created_at = str2time($tweet->{created_at}) // time;
 	my $ago = ago(time - $created_at);
 	
@@ -275,7 +280,7 @@ sub _display_tweet {
 }
 
 sub _display_triggered {
-	my ($self, $m, $tweet) = @_;
+	my ($m, $tweet) = @_;
 	
 	my $username = $tweet->{user}{screen_name};
 	
@@ -286,7 +291,7 @@ sub _display_triggered {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = $self->_parse_tweet_text($tweet->{text});
+	my $content = _parse_tweet_text($m->bot->ua, $tweet->{text});
 	my $created_at = str2time($tweet->{created_at}) // time;
 	my $ago = ago(time - $created_at);
 	
@@ -299,14 +304,14 @@ sub _display_triggered {
 }
 
 sub _parse_tweet_text {
-	my ($self, $text) = @_;
+	my ($ua, $text) = @_;
 	
 	$text = html_unescape $text;
 	$text =~ s/\n/ /g;
 	
 	my @urls = $text =~ m!(https?://t.co/\w+)!g;
 	foreach my $url (@urls) {
-		my $tx = $self->ua->head($url);
+		my $tx = $ua->head($url);
 		if ($tx->success and $tx->res->is_status_class(300)) {
 			my $redir = $tx->res->headers->location;
 			if (defined $redir and $redir ne $url) {

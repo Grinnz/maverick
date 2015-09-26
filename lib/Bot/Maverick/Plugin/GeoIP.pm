@@ -38,8 +38,10 @@ sub register {
 	my $file = $bot->config->param('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
-	$bot->add_helper($self, 'geoip_locate');
-	$bot->add_helper($self, 'geoip_locate_host');
+	$bot->add_helper(_geoip => sub { $self });
+	$bot->add_helper(geoip_resolver => sub { shift->_geoip->geoip });
+	$bot->add_helper(geoip_locate => \&_geoip_locate);
+	$bot->add_helper(geoip_locate_host => \&_geoip_locate_host);
 	
 	$bot->add_command(
 		name => 'locate',
@@ -57,7 +59,7 @@ sub register {
 				$say_target = "$target ($host)";
 			}
 			
-			$self->bot->geoip_locate_host($host, sub {
+			$m->bot->geoip_locate_host($host, sub {
 				my $record = shift;
 				return $m->reply("GeoIP location for $say_target: "._location_str($record));
 			})->catch(sub { $m->reply("Error locating $say_target: $_[1]") });
@@ -65,13 +67,13 @@ sub register {
 	);
 }
 
-sub geoip_locate {
-	my ($self, $ip) = @_;
+sub _geoip_locate {
+	my ($bot, $ip) = @_;
 	die "Invalid IP address $ip\n" unless defined $ip and (is_ipv4 $ip or is_ipv6 $ip);
 	my ($record, $err);
 	{
 		local $@;
-		eval { $record = $self->geoip->city(ip => $ip); 1 } or $err = $@;
+		eval { $record = $bot->geoip_resolver->city(ip => $ip); 1 } or $err = $@;
 	}
 	if (defined $err) {
 		die $err->message."\n" if blessed $err and $err->isa('Throwable::Error');
@@ -81,33 +83,33 @@ sub geoip_locate {
 	return $record;
 }
 
-sub geoip_locate_host {
-	my ($self, $host, $cb) = @_;
+sub _geoip_locate_host {
+	my ($bot, $host, $cb) = @_;
 	croak 'Undefined hostname' unless defined $host;
 	unless ($cb) {
-		return $self->bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
+		return $bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
 		die "DNS plugin is required to resolve hostnames\n"
-			unless $self->bot->has_helper('dns_resolve_ips');
-		return $self->_on_dns_host($self->bot->dns_resolve_ips($host));
+			unless $bot->has_helper('dns_resolve_ips');
+		return _on_dns_host($bot, $bot->dns_resolve_ips($host));
 	}
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		return $cb->($self->bot->geoip_locate($host))
+		return $cb->($bot->geoip_locate($host))
 			if is_ipv4 $host or is_ipv6 $host;
 		die "DNS plugin is required to resolve hostnames\n"
-			unless $self->bot->has_helper('dns_resolve_ips');
+			unless $bot->has_helper('dns_resolve_ips');
 		my $next = $delay->begin(0);
-		$self->bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
+		$bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
 			->catch(sub { $next->("DNS error: $_[1]") });
 	}, sub {
 		my ($delay, $err, $addrs) = @_;
 		die $err if $err;
-		$cb->($self->_on_dns_host($addrs));
+		$cb->(_on_dns_host($bot, $addrs));
 	});
 }
 
 sub _on_dns_host {
-	my ($self, $addrs) = @_;
+	my ($bot, $addrs) = @_;
 	die "No DNS results\n" unless @$addrs;
 	my $last_err = 'No valid DNS results';
 	my $best_record;
@@ -116,7 +118,7 @@ sub _on_dns_host {
 		my ($record, $err);
 		{
 			local $@;
-			eval { $record = $self->bot->geoip_locate($addr); 1 } or $err = $@;
+			eval { $record = $bot->geoip_locate($addr); 1 } or $err = $@;
 		}
 		if (defined $err) {
 			chomp($last_err = $err);

@@ -52,7 +52,7 @@ sub register {
 					$white_card_count = 1 if $white_card_count < 1;
 					$delay->pass({ text => $black_card_text, pick => $white_card_count });
 				} else {
-					$self->_get_black_card($m, $black_card_pick, $delay->begin(0))
+					_get_black_card($m, $black_card_pick, $delay->begin(0))
 						->catch(sub { $m->reply("Error retrieving black card: $_[1]") });
 				}
 			}, sub {
@@ -60,7 +60,7 @@ sub register {
 				$white_card_count //= $card->{pick} // 1;
 				if ($white_card_count > 0) {
 					my $end = $delay->begin(0);
-					$self->_get_white_cards($m, $white_card_count, sub {
+					_get_white_cards($m, $white_card_count, sub {
 						my $cards = shift;
 						if (@$white_cards) {
 							$_ //= shift @$cards for @$white_cards;
@@ -74,14 +74,14 @@ sub register {
 				}
 			}, sub {
 				my ($delay, $black_card, $white_cards) = @_;
-				$self->_show_pyx_match($m, $black_card, $white_cards);
+				_show_pyx_match($m, $black_card, $white_cards);
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
 	);
 }
 
 sub _get_black_card {
-	my ($self, $m, $pick, $cb) = @_;
+	my ($m, $pick, $cb) = @_;
 	if (defined $pick) {
 		$pick = 1 if $pick < 1;
 		$pick = PYX_MAX_PICK if $pick > PYX_MAX_PICK;
@@ -97,10 +97,10 @@ sub _get_black_card {
 	$url->query({pick => $pick}) if defined $pick;
 	
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, shift->begin);
+		$m->bot->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $m->bot->ua_error($tx->error) if $tx->error;
 		my $card = $tx->res->json->{card};
 		die "No applicable black cards\n" unless defined $card and defined $card->{text};
 		$card->{text} = _format_pyx_card($card->{text});
@@ -109,7 +109,7 @@ sub _get_black_card {
 }
 
 sub _get_white_cards {
-	my ($self, $m, $count, $cb) = @_;
+	my ($m, $count, $cb) = @_;
 	$count //= 1;
 	$count = 1 if $count < 1;
 	$count = PYX_MAX_COUNT if $count > PYX_MAX_COUNT;
@@ -124,10 +124,10 @@ sub _get_white_cards {
 	$url->query({count => $count});
 	
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, shift->begin);
+		$m->bot->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $m->bot->ua_error($tx->error) if $tx->error;
 		my $cards = $tx->res->json->{cards} // [];
 		$_ = _format_pyx_card($_->{text}) for @$cards;
 		$cb->($cards);
@@ -135,7 +135,7 @@ sub _get_white_cards {
 }
 
 sub _show_pyx_match {
-	my ($self, $m, $black_card, $white_cards) = @_;
+	my ($m, $black_card, $white_cards) = @_;
 	$black_card //= '';
 	$white_cards //= [];
 	

@@ -24,7 +24,9 @@ sub register {
 	$self->api_key($bot->config->param('apis','lastfm_api_key')) unless defined $self->api_key;
 	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_helper($self, 'lastfm_last_track');
+	$bot->add_helper(_lastfm => sub { $self });
+	$bot->add_helper(lastfm_api_key => sub { shift->_lastfm->api_key });
+	$bot->add_helper(lastfm_last_track => \&_lastfm_last_track);
 	
 	$bot->add_command(
 		name => 'np',
@@ -38,43 +40,43 @@ sub register {
 			if (@args and lc $args[0] eq 'set') {
 				my $username = $args[1];
 				return 'usage' unless defined $username and length $username;
-				$self->bot->storage->data->{lastfm}{usernames}{lc $sender} = $username;
+				$m->bot->storage->data->{lastfm}{usernames}{lc $sender} = $username;
 				return $m->reply("Set Last.fm username of $sender to $username");
 			}
 			
 			my $username = shift @args;
 			unless (defined $username) {
-				$username = $self->bot->storage->data->{lastfm}{usernames}{lc $sender} // $m->sender->nick;
+				$username = $m->bot->storage->data->{lastfm}{usernames}{lc $sender} // $m->sender->nick;
 			}
 			
 			$m->logger->debug("Retrieving Last.fm recent tracks for $username");
-			$self->lastfm_last_track($username, sub {
+			$m->bot->lastfm_last_track($username, sub {
 				my $track = shift;
 				return $m->reply("No recent tracks found for $username")
 					unless defined $track;
-				$self->_lastfm_result($m, $track, $username);
+				_lastfm_result($m, $track, $username);
 			})->catch(sub { $m->reply("Error retrieving recent tracks for $username: $_[1]") });
 		},
 	);
 }
 
-sub lastfm_last_track {
-	my ($self, $username, $cb) = @_;
+sub _lastfm_last_track {
+	my ($bot, $username, $cb) = @_;
 	croak 'Undefined Last.fm username' unless defined $username;
-	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
+	die LASTFM_API_KEY_MISSING unless defined $bot->lastfm_api_key;
 	
 	my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
-		user => $username, api_key => $self->api_key, format => 'json', limit => 1);
+		user => $username, api_key => $bot->lastfm_api_key, format => 'json', limit => 1);
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return _lastfm_recenttrack($tx->res->json);
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(_lastfm_recenttrack($tx->res->json));
 	});
 }
@@ -87,7 +89,7 @@ sub _lastfm_recenttrack {
 }
 
 sub _lastfm_result {
-	my ($self, $m, $track, $username) = @_;
+	my ($m, $track, $username) = @_;
 	my $track_name = $track->{name} // '';
 	my $artist = $track->{artist}{'#text'};
 	my $album = $track->{album}{'#text'};

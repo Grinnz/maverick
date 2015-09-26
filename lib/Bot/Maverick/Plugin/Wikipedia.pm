@@ -20,8 +20,10 @@ has '_results_cache' => (
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper($self, 'wikipedia_search');
-	$bot->add_helper($self, 'wikipedia_page');
+	$bot->add_helper(_wikipedia => sub { $self });
+	$bot->add_helper(wikipedia_results_cache => sub { shift->_wikipedia->_results_cache });
+	$bot->add_helper(wikipedia_search => \&_wikipedia_search);
+	$bot->add_helper(wikipedia_page => \&_wikipedia_page);
 	
 	$bot->add_command(
 		name => 'wikipedia',
@@ -32,67 +34,67 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$self->wikipedia_search($query, sub {
+			$m->bot->wikipedia_search($query, sub {
 				my $titles = shift;
 				return $m->reply("No results for Wikipedia search") unless @$titles;
 				
 				my $first_title = shift @$titles;
 				my $channel_name = lc ($m->channel // $m->sender);
-				$self->_results_cache->{$m->network}{$channel_name} = $titles;
+				$m->bot->wikipedia_results_cache->{$m->network}{$channel_name} = $titles;
 				$m->show_more(scalar @$titles);
-				$self->_display_wiki_page($m, $first_title);
+				_display_wiki_page($m, $first_title);
 			})->catch(sub { $m->reply("Wikipedia search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $titles = $self->_results_cache->{$m->network}{$channel_name} // [];
+			my $titles = $m->bot->wikipedia_results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Wikipedia search") unless @$titles;
 			
 			my $next_title = shift @$titles;
 			$m->show_more(scalar @$titles);
-			$self->_display_wiki_page($m, $next_title);
+			_display_wiki_page($m, $next_title);
 		},
 	);
 }
 
-sub wikipedia_search {
-	my ($self, $query, $cb) = @_;
+sub _wikipedia_search {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
 	
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)
 		->query(format => 'json', action => 'opensearch', search => $query);
 	unless ($cb) {
-		my $tx = $self->ua->get($url);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return ($tx->res->json//[])->[1]//[];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, shift->begin);
+		$bot->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(($tx->res->json//[])->[1]//[]);
 	});
 }
 
-sub wikipedia_page {
-	my ($self, $title, $cb) = @_;
+sub _wikipedia_page {
+	my ($bot, $title, $cb) = @_;
 	croak 'Undefined page title' unless defined $title;
 	
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)->query(format => 'json', action => 'query',
 		redirects => 1, prop => 'extracts|info', explaintext => 1, exsectionformat => 'plain',
 		exchars => 250, inprop => 'url', titles => $title);
 	unless ($cb) {
-		my $tx = $self->ua->get($url);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return _find_page_result($tx->res->json->{query}{pages});
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, shift->begin);
+		$bot->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(_find_page_result($tx->res->json->{query}{pages}));
 	});
 }
@@ -104,9 +106,9 @@ sub _find_page_result {
 }
 
 sub _display_wiki_page {
-	my ($self, $m, $title) = @_;
+	my ($m, $title) = @_;
 	
-	$self->wikipedia_page($title, sub {
+	$m->bot->wikipedia_page($title, sub {
 		my $page = shift;
 		return $m->reply("Wikipedia page $title not found") unless defined $page;
 		

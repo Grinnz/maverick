@@ -8,16 +8,14 @@ extends 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 
-sub calc_expression {
-	my ($self, $expr) = @_;
-	croak 'Undefined expression to evaluate' unless defined $expr;
-	return Math::Calc::Parser->evaluate($expr);
-}
-
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper($self, 'calc_expression');
+	$bot->add_helper(calc_expression => sub {
+		my ($bot, $expr) = @_;
+		croak 'Undefined expression to evaluate' unless defined $expr;
+		return Math::Calc::Parser->evaluate($expr);
+	});
 	
 	$bot->add_command(
 		name => 'calc',
@@ -30,7 +28,7 @@ sub register {
 			my ($err, $result);
 			{
 				local $@;
-				eval { $result = $self->calc_expression($expr); 1 } or $err = $@;
+				eval { $result = $m->bot->calc_expression($expr); 1 } or $err = $@;
 			}
 			return $m->reply("Error evaluating expression: $err") if defined $err;
 			$m->reply("Result: $result");

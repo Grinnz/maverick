@@ -19,6 +19,9 @@ has 'quote_cache' => (
 sub register {
 	my ($self, $bot) = @_;
 	
+	$bot->add_helper(quote_cache => sub { $self->quote_cache });
+	$bot->add_helper(clear_quote_cache => sub { $self->clear_quote_cache });
+	
 	$bot->add_command(
 		name => 'addquote',
 		help_text => 'Add a quote',
@@ -29,11 +32,11 @@ sub register {
 			my $quote = $m->args;
 			return 'usage' unless length $quote;
 			
-			my $quotes = $self->bot->storage->data->{quotes} //= [];
+			my $quotes = $m->bot->storage->data->{quotes} //= [];
 			push @$quotes, $quote;
 			my $num = @$quotes;
 			
-			$self->clear_quote_cache;
+			$m->bot->clear_quote_cache;
 			$m->reply("Added quote $num");
 		},
 		required_access => ACCESS_BOT_ADMIN,
@@ -51,14 +54,14 @@ sub register {
 			return $m->reply("Invalid quote number")
 				unless $num =~ /^\d+$/ and $num > 0;
 			
-			my $quotes = $self->bot->storage->data->{quotes} // [];
+			my $quotes = $m->bot->storage->data->{quotes} // [];
 			my $count = @$quotes;
 			return $m->reply("There are only $count quotes")
 				unless $num <= $count;
 			
 			my ($quote) = splice @$quotes, $num-1, 1;
 			
-			$self->clear_quote_cache;
+			$m->clear_quote_cache;
 			return $m->reply("Deleted quote $num: $quote");
 		},
 		required_access => ACCESS_BOT_ADMIN,
@@ -73,7 +76,7 @@ sub register {
 			my $m = shift;
 			my $args = $m->args;
 			
-			my $quotes = $self->bot->storage->data->{quotes};
+			my $quotes = $m->bot->storage->data->{quotes};
 			return $m->reply("No quotes stored")
 				unless $quotes and @$quotes;
 			
@@ -87,7 +90,7 @@ sub register {
 			
 			if (defined $num) {
 				$num = @$quotes if $num > @$quotes;
-				return $self->_display_quote($m, $quotes, undef, $num);
+				return _display_quote($m, $quotes, undef, $num);
 			}
 			
 			# Quotes by search regex
@@ -101,11 +104,11 @@ sub register {
 				$match_by = '!';
 			}
 			
-			my $results = $self->quote_cache->{$match_by}{lc $args};
+			my $results = $m->bot->quote_cache->{$match_by}{lc $args};
 			if (defined $results) {
-				$self->_display_quote($m, $quotes, $results, $num);
+				_display_quote($m, $quotes, $results, $num);
 			} else {
-				$self->fork_call(sub {
+				$m->bot->fork_call(sub {
 					my $re = qr/$args/i;
 					$quotes->lock_shared;
 					my $num_quotes = @$quotes;
@@ -121,8 +124,8 @@ sub register {
 						$err =~ s/ at .+? line .+?\.$//;
 						return $m->reply("Invalid search regex: $err");
 					}
-					$results = $self->quote_cache->{$match_by}{lc $args} = $matches;
-					$self->_display_quote($m, $quotes, $results, $num);
+					$results = $m->bot->quote_cache->{$match_by}{lc $args} = $matches;
+					_display_quote($m, $quotes, $results, $num);
 				})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 			}
 			
@@ -142,8 +145,8 @@ sub register {
 			return $m->reply("File $filename not found")
 				unless -r $filename;
 			
-			my $quotes = $self->bot->storage->data->{quotes} //= [];
-			$self->fork_call(sub {
+			my $quotes = $m->bot->storage->data->{quotes} //= [];
+			$m->bot->fork_call(sub {
 				my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', slurp $filename;
 				return 0 unless @add_quotes;
 				my $num_quotes = @add_quotes;
@@ -154,7 +157,7 @@ sub register {
 				die $err if $err;
 				return $m->reply("No quotes to add")
 					unless $num_quotes;
-				$self->clear_quote_cache;
+				$m->bot->clear_quote_cache;
 				$m->reply("Loaded $num_quotes from $filename");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
@@ -174,8 +177,8 @@ sub register {
 			return $m->reply("File $filename exists")
 				if -e $filename;
 			
-			my $quotes = $self->bot->storage->data->{quotes} // [];
-			$self->fork_call(sub {
+			my $quotes = $m->bot->storage->data->{quotes} // [];
+			$m->bot->fork_call(sub {
 				spurt encode('UTF-8', join("\n", @$quotes)."\n"), $filename;
 				return scalar @$quotes;
 			}, sub {
@@ -192,13 +195,13 @@ sub register {
 		help_text => 'Delete all quotes',
 		on_run => sub {
 			my $m = shift;
-			$self->fork_call(sub {
-				$self->bot->storage->data->{quotes} = [];
+			$m->bot->fork_call(sub {
+				$m->bot->storage->data->{quotes} = [];
 				return 1;
 			}, sub {
 				my ($fc, $err) = @_;
 				die $err if $err;
-				$self->clear_quote_cache;
+				$m->bot->clear_quote_cache;
 				$m->reply("Deleted all quotes");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
@@ -207,7 +210,7 @@ sub register {
 }
 
 sub _display_quote {
-	my ($self, $m, $quotes, $results, $num) = @_;
+	my ($m, $quotes, $results, $num) = @_;
 	my ($result_num, $result_count);
 	if ($results) {
 		return $m->reply("No matches") unless @$results;

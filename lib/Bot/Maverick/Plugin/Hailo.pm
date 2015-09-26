@@ -33,6 +33,8 @@ sub register {
 	$bot->config->channel_default('hailo_speak', 0);
 	$bot->config->channel_default('hailo_reply_when_addressed', 1);
 	
+	$bot->add_helper(hailo => sub { $self });
+	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
 		my $message = $m->text;
@@ -44,9 +46,9 @@ sub register {
 			$addressed = 1;
 		}
 		
-		$self->hailo->learn($message);
+		$m->bot->hailo->learn($message);
 		$m->logger->debug("Learned: $message");
-		$self->hailo->save;
+		$m->bot->hailo->save;
 		
 		my $speak = 1;
 		$speak = $m->config->channel_param($m->channel, 'hailo_speak') if defined $m->channel;
@@ -55,7 +57,7 @@ sub register {
 		$do_reply = 1 if $when_addressed and $addressed;
 		return unless $do_reply;
 		
-		my $reply = $self->hailo->reply($message);
+		my $reply = $m->bot->hailo->reply($message);
 		$m->logger->debug("Reply: $reply");
 		
 		if ($addressed) {

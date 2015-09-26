@@ -27,11 +27,6 @@ has '_dicts' => (
 	init_arg => undef,
 );
 
-sub spell_dict {
-	my ($self, $lang) = @_;
-	return $self->_dicts->{$lang} //= $self->_build_dict($lang);
-}
-
 sub _build_dict {
 	my ($self, $lang) = @_;
 	my $affix_path = catfile($self->dict_path, "$lang.aff");
@@ -43,7 +38,12 @@ sub _build_dict {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper($self, 'spell_dict');
+	$bot->add_helper(_spell => sub { $self });
+	$bot->add_helper(spell_default_lang => sub { shift->_spell->default_lang });
+	$bot->add_helper(spell_dict => sub {
+		my ($bot, $lang) = @_;
+		return $bot->_spell->_dicts->{$lang} //= $bot->_spell->_build_dict($lang);
+	});
 	
 	$bot->add_command(
 		name => 'spell',
@@ -53,8 +53,8 @@ sub register {
 			my $m = shift;
 			my ($word, $lang) = $m->args_list;
 			return 'usage' unless defined $word and length $word;
-			$lang //= $self->default_lang;
-			my $dict = $self->spell_dict($lang);
+			$lang //= $m->bot->spell_default_lang;
+			my $dict = $m->bot->spell_dict($lang);
 			return $m->reply("Dictionary for $lang not found") unless defined $dict;
 			return $m->reply("$word is a word.") if $dict->check($word);
 			my @suggestions = $dict->suggest($word);

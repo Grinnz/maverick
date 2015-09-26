@@ -27,11 +27,11 @@ sub register {
 		
 		Mojo::IOLoop->delay(sub {
 			my $delay = shift;
-			$self->_retrieve_pastes($m, \@pastes, $delay->begin(0))
+			_retrieve_pastes($m, \@pastes, $delay->begin(0))
 				->catch(sub { $delay->emit(error => $_[1]) });
 		}, sub {
 			my ($delay, $pastes) = @_;
-			$self->_repaste_pastes($m, $pastes, $delay->begin(0))
+			_repaste_pastes($m, $pastes, $delay->begin(0))
 				->catch(sub { $delay->emit(error => $_[1]) });
 		}, sub {
 			my ($delay, $urls) = @_;
@@ -46,7 +46,7 @@ sub register {
 
 sub _retrieve_pastes {
 	my $cb = pop;
-	my ($self, $m, $pastes) = @_;
+	my ($m, $pastes) = @_;
 	
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
@@ -58,7 +58,7 @@ sub _retrieve_pastes {
 				$url = Mojo::URL->new(HASTEBIN_RAW_ENDPOINT)->path($paste->{key});
 			}
 			$m->logger->debug("Found $paste->{type} link to $paste->{key}: $url");
-			$self->ua->get($url, $delay->begin);
+			$m->bot->ua->get($url, $delay->begin);
 		}
 	}, sub {
 		my ($delay, @txs) = @_;
@@ -66,7 +66,7 @@ sub _retrieve_pastes {
 		foreach my $i (0..$#txs) {
 			my $tx = $txs[$i];
 			my $paste = $pastes->[$i];
-			$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
+			$m->logger->error($m->bot->ua_error($tx->error)), next if $tx->error;
 			my $contents = $tx->res->text;
 			$m->logger->debug("No paste contents for $paste->{type} paste $paste->{key}"), next unless length $contents;
 			if ($paste->{type} eq 'pastebin' and $contents =~ /Please refresh the page to continue\.\.\./) {
@@ -82,7 +82,7 @@ sub _retrieve_pastes {
 				my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
 				$m->logger->debug("Rechecking $paste->{type} paste $paste->{key}: $url");
 				my $end = $delay->begin;
-				Mojo::IOLoop->timer(1 => sub { $self->ua->get($url, $end) });
+				Mojo::IOLoop->timer(1 => sub { $m->bot->ua->get($url, $end) });
 			}
 		} else {
 			$cb->($pastes);
@@ -93,7 +93,7 @@ sub _retrieve_pastes {
 			my $tx = $txs[$i];
 			my $paste = $pastes->[$i];
 			next unless defined $tx;
-			$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
+			$m->logger->error($m->bot->ua_error($tx->error)), next if $tx->error;
 			my $contents = $tx->res->text;
 			$m->logger->debug("No paste contents for $paste->{type} paste $paste->{key}"), next unless length $contents;
 			$paste->{contents} = $contents;
@@ -104,7 +104,7 @@ sub _retrieve_pastes {
 
 sub _repaste_pastes {
 	my $cb = pop;
-	my ($self, $m, $pastes) = @_;
+	my ($m, $pastes) = @_;
 	
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
@@ -124,7 +124,7 @@ sub _repaste_pastes {
 			);
 			
 			$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to fpaste");
-			$self->ua->post(FPASTE_PASTE_ENDPOINT, form => \%form, $delay->begin);
+			$m->bot->ua->post(FPASTE_PASTE_ENDPOINT, form => \%form, $delay->begin);
 		}
 	}, sub {
 		my ($delay, @txs) = @_;
@@ -133,7 +133,7 @@ sub _repaste_pastes {
 			my $tx = $txs[$i];
 			my $paste = $pastes->[$i];
 			next unless defined $tx;
-			$m->logger->error($self->ua_error($tx->error)), next if $tx->error;
+			$m->logger->error($m->bot->ua_error($tx->error)), next if $tx->error;
 			
 			my $result = $tx->res->json->{result} // {};
 			$m->logger->error("Paste error: ".$result->{error}), next if $result->{error};

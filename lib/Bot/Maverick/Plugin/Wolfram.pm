@@ -32,7 +32,10 @@ sub register {
 	$self->api_key($bot->config->param('apis','wolfram_api_key')) unless defined $self->api_key;
 	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_helper($self, 'wolfram_query');
+	$bot->add_helper(_wolfram => sub { $self });
+	$bot->add_helper(wolfram_api_key => sub { shift->_wolfram->api_key });
+	$bot->add_helper(wolfram_results_cache => sub { shift->_wolfram->_results_cache });
+	$bot->add_helper(wolfram_query => \&_wolfram_query);
 	
 	$bot->add_command(
 		name => 'wolframalpha',
@@ -50,9 +53,9 @@ sub register {
 				my $delay = shift;
 				if (is_ipv4 $host or is_ipv6 $host) {
 					$delay->pass($host);
-				} elsif ($self->bot->has_helper('dns_resolve_ips')) {
+				} elsif ($m->bot->has_helper('dns_resolve_ips')) {
 					my $cb = $delay->begin(0);
-					$self->bot->dns_resolve_ips($host, sub {
+					$m->bot->dns_resolve_ips($host, sub {
 						my $addrs = shift;
 						$cb->($addrs->[0]);
 					})->catch(sub { $cb->(undef) });
@@ -61,7 +64,7 @@ sub register {
 				}
 			}, sub {
 				my ($delay, $ip) = @_;
-				$self->wolfram_query($query, $ip, $delay->begin(0))
+				$m->bot->wolfram_query($query, $ip, $delay->begin(0))
 					->catch(sub { $m->reply("Wolfram|Alpha query error: $_[1]") });
 			}, sub {
 				my ($delay, $result) = @_;
@@ -69,16 +72,16 @@ sub register {
 				
 				my $success = $result->attr('success');
 				if (defined $success and $success eq 'false') {
-					$self->_reply_wolfram_error($m, $result);
+					_reply_wolfram_error($m, $result);
 				} else {
-					$self->_reply_wolfram_success($m, $result);
+					_reply_wolfram_success($m, $result);
 				}
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $pods = $self->_results_cache->{$m->network}{$channel_name} // [];
+			my $pods = $m->bot->wolfram_results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Wolfram|Alpha query") unless @$pods;
 			
 			my $next_pod = shift @$pods;
@@ -88,32 +91,32 @@ sub register {
 	);
 }
 
-sub wolfram_query {
+sub _wolfram_query {
 	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
-	my ($self, $query, $ip) = @_;
+	my ($bot, $query, $ip) = @_;
 	croak 'Undefined Wolfram query' unless defined $query;
-	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
+	die WOLFRAM_API_KEY_MISSING unless defined $bot->wolfram_api_key;
 	
 	my $url = Mojo::URL->new(WOLFRAM_API_ENDPOINT)
-		->query(input => $query, appid => $self->api_key, format => 'plaintext');
+		->query(input => $query, appid => $bot->wolfram_api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 	
 	unless ($cb) {
-		my $tx = $self->ua->get($url);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($url);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($url, shift->begin);
+		$bot->ua->get($url, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first);
 	});
 }
 
 sub _reply_wolfram_error {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	
 	my $error = $result->attr('error');
 	if (defined $error and $error eq 'true') {
@@ -164,7 +167,7 @@ sub _reply_wolfram_error {
 }
 
 sub _reply_wolfram_success {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	
 	my @pod_contents;
 	my $pods = $result->find('pod');
@@ -199,7 +202,7 @@ sub _reply_wolfram_success {
 	if (@pod_contents) {
 		my @first_pods = splice @pod_contents, 0, 2;
 		my $channel_name = lc ($m->channel // $m->sender);
-		$self->_results_cache->{$m->network}{$channel_name} = \@pod_contents;
+		$m->bot->wolfram_results_cache->{$m->network}{$channel_name} = \@pod_contents;
 		$m->show_more(scalar @pod_contents);
 		my $output = join ' || ', @first_pods;
 		$m->reply($output);

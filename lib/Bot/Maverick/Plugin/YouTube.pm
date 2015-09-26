@@ -33,8 +33,11 @@ sub register {
 	$self->api_key($bot->config->param('apis','google_api_key')) unless defined $self->api_key;
 	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_helper($self, 'youtube_search');
-	$bot->add_helper($self, 'youtube_video');
+	$bot->add_helper(_youtube => sub { $self });
+	$bot->add_helper(youtube_api_key => sub { shift->_youtube->api_key });
+	$bot->add_helper(youtube_results_cache => sub { shift->_youtube->_results_cache });
+	$bot->add_helper(youtube_search => \&_youtube_search);
+	$bot->add_helper(youtube_video => \&_youtube_video);
 	
 	$bot->add_command(
 		name => 'youtube',
@@ -45,26 +48,26 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$self->youtube_search($query, sub {
+			$m->bot->youtube_search($query, sub {
 				my $results = shift;
 				return $m->reply("No results for YouTube search") unless @$results;
 				
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
-				$self->_results_cache->{$m->network}{$channel_name} = $results;
+				$m->bot->youtube_results_cache->{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
-				$self->_display_result($m, $first_result);
+				_display_result($m, $first_result);
 			})->catch(sub { $m->reply("YouTube search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $results = $self->_results_cache->{$m->network}{$channel_name} // [];
+			my $results = $m->bot->youtube_results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for YouTube search") unless @$results;
 			
 			my $next_result = shift @$results;
 			$m->show_more(scalar @$results);
-			$self->_display_result($m, $next_result);
+			_display_result($m, $next_result);
 		},
 	);
 	
@@ -81,58 +84,58 @@ sub register {
 		my $video_id = $captured->query->param('v') // $captured->path->parts->[0] // return;
 		
 		$m->logger->debug("Captured YouTube URL $captured with video ID $video_id");
-		$self->youtube_video($video_id, sub {
+		$m->bot->youtube_video($video_id, sub {
 			my $result = shift;
-			$self->_display_triggered($m, $result) if defined $result;
+			_display_triggered($m, $result) if defined $result;
 		})->catch(sub { $m->logger->error("Error retrieving YouTube video data: $_[1]") });
 	});
 }
 
-sub youtube_search {
-	my ($self, $query, $cb) = @_;
+sub _youtube_search {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
-	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
+	die YOUTUBE_API_KEY_MISSING unless defined $bot->youtube_api_key;
 	
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('search')
-		->query(key => $self->api_key, part => 'snippet', q => $query,
+		->query(key => $bot->youtube_api_key, part => 'snippet', q => $query,
 			safeSearch => 'strict', type => 'video');
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{items}//[];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{items}//[]);
 	});
 }
 
-sub youtube_video {
-	my ($self, $id, $cb) = @_;
+sub _youtube_video {
+	my ($bot, $id, $cb) = @_;
 	croak 'Undefined video ID' unless defined $id;
-	die YOUTUBE_API_KEY_MISSING unless defined $self->api_key;
+	die YOUTUBE_API_KEY_MISSING unless defined $bot->youtube_api_key;
 	
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('videos')
-		->query(key => $self->api_key, part => 'snippet', id => $id);
+		->query(key => $bot->youtube_api_key, part => 'snippet', id => $id);
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return ($tx->res->json->{items}//[])->[0];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(($tx->res->json->{items}//[])->[0]);
 	});
 }
 
 sub _display_result {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	my $video_id = $result->{id}{videoId} // '';
 	my $title = $result->{snippet}{title} // '';
 	
@@ -150,7 +153,7 @@ sub _display_result {
 }
 
 sub _display_triggered {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	my $video_id = $result->{id} // '';
 	my $title = $result->{snippet}{title} // '';
 	

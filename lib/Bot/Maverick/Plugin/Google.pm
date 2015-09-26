@@ -39,8 +39,14 @@ sub register {
 	$self->cse_id($bot->config->param('apis','google_cse_id')) unless defined $self->cse_id;
 	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
 	
-	$bot->add_helper($self, 'google_search_web');
-	$bot->add_helper($self, 'google_search_image');
+	$bot->add_helper(_google => sub { $self });
+	$bot->add_helper(google_results_cache => sub { shift->_google->_results_cache });
+	$bot->add_helper(google_api_key => sub { shift->_google->api_key });
+	$bot->add_helper(google_cse_id => sub { shift->_google->cse_id });
+	$bot->add_helper(google_search_web => \&_google_search_web);
+	$bot->add_helper(google_search_web_count => \&_google_search_web_count);
+	$bot->add_helper(google_search_image => \&_google_search_image);
+	$bot->add_helper(google_complete => \&_google_complete);
 	
 	$bot->add_command(
 		name => 'google',
@@ -51,26 +57,26 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$self->google_search_web($query, sub {
+			$m->bot->google_search_web($query, sub {
 				my $results = shift;
 				return $m->reply("No results for Google search") unless @$results;
 				
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
-				$self->_results_cache->{web}{$m->network}{$channel_name} = $results;
+				$m->bot->google_results_cache->{web}{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
-				$self->_google_result_web($m, $first_result);
+				_google_result_web($m, $first_result);
 			})->catch(sub { $m->reply("Google search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $results = $self->_results_cache->{web}{$m->network}{$channel_name} // [];
+			my $results = $m->bot->google_results_cache->{web}{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Google search") unless @$results;
 			
 			my $next_result = shift @$results;
 			$m->show_more(scalar @$results);
-			$self->_google_result_web($m, $next_result);
+			_google_result_web($m, $next_result);
 		},
 	);
 	
@@ -83,26 +89,26 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$self->google_search_image($query, sub {
+			$m->bot->google_search_image($query, sub {
 				my $results = shift;
 				return $m->reply("No results for Google image search") unless @$results;
 				
 				my $first_result = shift @$results;
 				my $channel_name = lc ($m->channel // $m->sender);
-				$self->_results_cache->{image}{$m->network}{$channel_name} = $results;
+				$m->bot->google_results_cache->{image}{$m->network}{$channel_name} = $results;
 				$m->show_more(scalar @$results);
-				$self->_google_result_image($m, $first_result);
+				_google_result_image($m, $first_result);
 			})->catch(sub { $m->reply("Google search error: $_[1]") });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $results = $self->_results_cache->{image}{$m->network}{$channel_name} // [];
+			my $results = $m->bot->google_results_cache->{image}{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Google image search") unless @$results;
 			
 			my $next_result = shift @$results;
 			$m->show_more(scalar @$results);
-			$self->_google_result_image($m, $next_result);
+			_google_result_image($m, $next_result);
 		},
 	);
 	
@@ -121,7 +127,7 @@ sub register {
 			Mojo::IOLoop->delay(sub {
 				my $delay = shift;
 				foreach my $challenger (@challengers) {
-					$self->google_search_web_count($challenger, $delay->begin(0))
+					$m->bot->google_search_web_count($challenger, $delay->begin(0))
 						->catch(sub { $m->reply("Google search error: $_[1]") });
 				}
 			}, sub {
@@ -155,12 +161,12 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$self->google_complete($query, sub {
+			$m->bot->google_complete($query, sub {
 				my $suggestions = shift;
 				return $m->reply("No Google auto-complete suggestions") unless @$suggestions;
 				
 				my $channel_name = lc ($m->channel // $m->sender);
-				$self->_results_cache->{complete}{$m->network}{$channel_name} = $suggestions;
+				$m->bot->google_results_cache->{complete}{$m->network}{$channel_name} = $suggestions;
 				
 				my @show_suggestions = splice @$suggestions, 0, 5;
 				$m->show_more(scalar @$suggestions);
@@ -171,7 +177,7 @@ sub register {
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $suggestions = $self->_results_cache->{complete}{$m->network}{$channel_name} // [];
+			my $suggestions = $m->bot->google_results_cache->{complete}{$m->network}{$channel_name} // [];
 			return $m->reply("No more Google auto-complete suggestions") unless @$suggestions;
 			
 			my @show_suggestions = splice @$suggestions, 0, 5;
@@ -182,85 +188,85 @@ sub register {
 	);
 }
 
-sub google_search_web {
-	my ($self, $query, $cb) = @_;
+sub _google_search_web {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
-	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
+	die GOOGLE_API_KEY_MISSING unless defined $bot->google_api_key and defined $bot->google_cse_id;
 	
-	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
-		cx => $self->cse_id, q => $query, safe => 'high');
+	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
+		cx => $bot->google_cse_id, q => $query, safe => 'high');
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{items}//[];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{items}//[]);
 	});
 }
 
-sub google_search_web_count {
-	my ($self, $query, $cb) = @_;
+sub _google_search_web_count {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
-	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
+	die GOOGLE_API_KEY_MISSING unless defined $bot->google_api_key and defined $bot->google_cse_id;
 	
-	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
-		cx => $self->cse_id, q => $query, safe => 'off', num => 1);
+	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
+		cx => $bot->google_cse_id, q => $query, safe => 'off', num => 1);
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{searchInformation}{totalResults}//0;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{searchInformation}{totalResults}//0);
 	});
 }
 
-sub google_search_image {
-	my ($self, $query, $cb) = @_;
+sub _google_search_image {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
-	die GOOGLE_API_KEY_MISSING unless defined $self->api_key and defined $self->cse_id;
+	die GOOGLE_API_KEY_MISSING unless defined $bot->google_api_key and defined $bot->google_cse_id;
 	
-	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $self->api_key,
-		cx => $self->cse_id, q => $query, safe => 'high', searchType => 'image');
+	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
+		cx => $bot->google_cse_id, q => $query, safe => 'high', searchType => 'image');
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return $tx->res->json->{items}//[];
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->($tx->res->json->{items}//[]);
 	});
 }
 
-sub google_complete {
-	my ($self, $query, $cb) = @_;
+sub _google_complete {
+	my ($bot, $query, $cb) = @_;
 	croak 'Undefined search query' unless defined $query;
 	
 	my $request = Mojo::URL->new(GOOGLE_COMPLETE_ENDPOINT)->query(output => 'toolbar',
 		client => 'chrome', hl => 'en', q => $query);
 	unless ($cb) {
-		my $tx = $self->ua->get($request);
-		die $self->ua_error($tx->error) if $tx->error;
+		my $tx = $bot->ua->get($request);
+		die $bot->ua_error($tx->error) if $tx->error;
 		return _google_complete_results($tx->res->json);
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->get($request, shift->begin);
+		$bot->ua->get($request, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $bot->ua_error($tx->error) if $tx->error;
 		$cb->(_google_complete_results($tx->res->json));
 	});
 }
@@ -271,7 +277,7 @@ sub _google_complete_results {
 }
 
 sub _google_result_web {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $snippet = $result->{snippet} // '';
@@ -284,7 +290,7 @@ sub _google_result_web {
 }
 
 sub _google_result_image {
-	my ($self, $m, $result) = @_;
+	my ($m, $result) = @_;
 	my $url = $result->{link} // '';
 	my $title = $result->{title} // '';
 	my $context_url = $result->{image}{contextLink} // '';

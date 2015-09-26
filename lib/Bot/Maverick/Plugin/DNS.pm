@@ -40,8 +40,11 @@ sub BUILD {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper($self, 'dns_resolve');
-	$bot->add_helper($self, 'dns_resolve_ips');
+	$bot->add_helper(_dns => sub { $self });
+	$bot->add_helper(dns_native => sub { shift->_dns->native });
+	$bot->add_helper(dns_resolver => sub { shift->_dns->_resolver });
+	$bot->add_helper(dns_resolve => \&_dns_resolve);
+	$bot->add_helper(dns_resolve_ips => \&_dns_resolve_ips);
 	
 	$bot->add_command(
 		name => 'dns',
@@ -60,7 +63,7 @@ sub register {
 			}
 			
 			$m->logger->debug("Resolving $hostname");
-			$self->bot->dns_resolve_ips($hostname, sub {
+			$m->bot->dns_resolve_ips($hostname, sub {
 				my $addrs = shift;
 				return $m->reply("No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
@@ -70,8 +73,8 @@ sub register {
 	);
 }
 
-sub dns_resolve {
-	my ($self, $host, $cb) = @_;
+sub _dns_resolve {
+	my ($bot, $host, $cb) = @_;
 	croak "No hostname to resolve" unless defined $host;
 	unless ($cb) {
 		my ($err, @results) = getaddrinfo $host;
@@ -84,10 +87,10 @@ sub dns_resolve {
 	croak "Invalid dns_resolve callback" unless ref $cb eq 'CODE';
 	return Mojo::IOLoop->delay(sub {
 		my $delay = shift;
-		if ($self->native) {
-			my $dns = $self->_resolver;
+		if ($bot->dns_native) {
+			my $dns = $bot->dns_resolver;
 			my $sock = $dns->getaddrinfo($host);
-			my $remove = $self->bot->once(stop => sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
+			my $remove = $bot->once(stop => sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
 			my $next = $delay->begin(0);
 			Mojo::IOLoop->singleton->reactor->io($sock, sub {
 				$remove->();
@@ -106,14 +109,14 @@ sub dns_resolve {
 	});
 }
 
-sub dns_resolve_ips {
-	my ($self, $host, $cb) = @_;
-	return $self->_ip_results($self->dns_resolve($host)) unless $cb;
-	return $self->dns_resolve($host, sub { $cb->($self->_ip_results($_[0])) });
+sub _dns_resolve_ips {
+	my ($bot, $host, $cb) = @_;
+	return _ip_results($bot->dns_resolve($host)) unless $cb;
+	return $bot->dns_resolve($host, sub { $cb->(_ip_results($_[0])) });
 }
 
 sub _ip_results {
-	my ($self, $results) = @_;
+	my $results = shift;
 	my %found;
 	my @parsed;
 	foreach my $result (@$results) {

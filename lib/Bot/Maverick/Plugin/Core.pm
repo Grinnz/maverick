@@ -17,6 +17,8 @@ has 'more_commands' => (
 sub register {
 	my ($self, $bot) = @_;
 	
+	$bot->add_helper(core_more_commands => sub { $self->more_commands });
+	
 	$bot->add_command(
 		name => 'help',
 		help_text => 'This is the help command',
@@ -26,7 +28,7 @@ sub register {
 			my ($name) = $m->args_list;
 			my ($help_text, $command);
 			if (defined $name) {
-				$command = $self->bot->get_command($name);
+				$command = $m->bot->get_command($name);
 				if (defined $command) {
 					$help_text = $command->help_text // 'No help text for command $name';
 					$help_text .= '.' if $help_text =~ /\w\s*$/;
@@ -94,7 +96,7 @@ sub register {
 		my ($bot, $m) = @_;
 		return unless $m->command->has_on_more;
 		my $channel_name = lc ($m->channel // $m->sender);
-		$self->more_commands->{$m->network}{$channel_name} = lc $m->command->name;
+		$m->bot->core_more_commands->{$m->network}{$channel_name} = lc $m->command->name;
 	});
 	
 	$bot->add_command(
@@ -105,19 +107,19 @@ sub register {
 			my $m = shift;
 			my ($command_name) = $m->args_list;
 			my $channel_name = lc ($m->channel // $m->sender);
-			$command_name //= $self->more_commands->{$m->network}{$channel_name};
+			$command_name //= $m->bot->core_more_commands->{$m->network}{$channel_name};
 			return $m->reply("No more to display") unless defined $command_name;
-			my $command = $self->bot->get_command($command_name);
+			my $command = $m->bot->get_command($command_name);
 			if (!defined $command and $m->config->param('commands','prefixes')) {
-				my $cmds = $self->bot->get_commands_by_prefix($command_name);
+				my $cmds = $m->bot->get_commands_by_prefix($command_name);
 				foreach my $name (@$cmds) {
-					$command = $self->bot->get_command($cmds->[0]);
+					$command = $m->bot->get_command($cmds->[0]);
 					last if $command->has_on_more;
 				}
 			}
 			return $m->reply("No more to display for $command_name")
 				unless $command and $command->has_on_more;
-			$self->more_commands->{$m->network}{$channel_name} = lc $command->name;
+			$m->bot->core_more_commands->{$m->network}{$channel_name} = lc $command->name;
 			$command->on_more->($m);
 		},
 	);
@@ -145,7 +147,7 @@ sub register {
 			my $m = shift;
 			my $quit_msg = $m->args;
 			$quit_msg ||= 'Goodbye';
-			$self->bot->stop($quit_msg);
+			$m->bot->stop($quit_msg);
 		},
 	);
 	
@@ -155,7 +157,7 @@ sub register {
 		required_access => ACCESS_BOT_MASTER,
 		on_run => sub {
 			my $m = shift;
-			$self->bot->reload;
+			$m->bot->reload;
 			$m->reply("Reloaded configuration");
 		},
 	);

@@ -272,24 +272,21 @@ sub add_plugin {
 	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::Maverick::Plugin::$class" unless $class =~ /::/;
-	my ($plugin, $err);
+	my ($plugin, $err, $errored);
 	{
 		local $@;
-		my $loaded = eval "require $class; 1";
-		if ($loaded) {
-			eval {
-				die "$class is not a Bot::Maverick::Plugin\n"
-					unless $class->isa('Bot::Maverick::Plugin');
-				my @params = ref $params eq 'HASH' ? %$params : ();
-				$plugin = $class->new(@params, bot => $self);
-				$plugin->register($self);
-				1;
-			} or $err = $@;
-		} else {
-			$err = $@;
-		}
+		eval {
+			die $err = $@ unless eval "require $class; 1";
+			die "$class is not a Bot::Maverick::Plugin\n"
+				unless $class->isa('Bot::Maverick::Plugin');
+			my @params = ref $params eq 'HASH' ? %$params : ();
+			$plugin = $class->new(@params, bot => $self);
+			$plugin->register($self);
+			1;
+		} or $errored = 1;
+		$err = $@ if $errored;
 	}
-	if (defined $err) {
+	if ($errored) {
 		croak "Plugin $class could not be registered: $err";
 	}
 	return $self;
@@ -303,21 +300,18 @@ sub has_helper {
 }
 
 sub add_helper {
-	my ($self, $plugin, $helper) = @_;
-	my $class = blessed $plugin // croak "Invalid plugin $plugin";
+	my ($self, $helper, $code) = @_;
 	croak "Invalid helper method $helper"
 		unless defined $helper and length $helper and !ref $helper;
 	croak "Method $helper already exists"
 		if exists $self->helpers->{$helper} or $self->can($helper);
-	croak "Method $helper is not implemented by plugin $class"
-		unless $plugin->can($helper);
-	$self->helpers->{$helper} = sub { $plugin->$helper(@_) };
+	$self->helpers->{$helper} = $code;
 	return $self;
 }
 
 # Autoload helper methods
 sub AUTOLOAD {
-	my $self = shift;
+	my ($self) = @_;
 	my $method = $AUTOLOAD;
 	$method =~ s/.*:://;
 	unless (ref $self and exists $self->helpers->{$method}) {
