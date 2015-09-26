@@ -16,7 +16,6 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::Maverick->new },
 	weak_ref => 1,
-	handles => [qw/fork_call logger ua ua_error/],
 );
 
 sub register { die "Method must be overloaded by subclass" }

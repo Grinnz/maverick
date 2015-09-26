@@ -54,11 +54,11 @@ sub _build__access_token {
 		grant_type => 'client_credentials'
 	);
 	unless ($cb) {
-		my $tx = $self->ua->post($url, form => \%form);
+		my $tx = $self->bot->ua->post($url, form => \%form);
 		return $self->_access_token_response($tx);
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->post($url, form => \%form, shift->begin);
+		$self->bot->ua->post($url, form => \%form, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
 		$cb->($self->_access_token_response($tx));
@@ -67,7 +67,7 @@ sub _build__access_token {
 
 sub _access_token_response {
 	my ($self, $tx) = @_;
-	die $self->ua_error($tx->error) if $tx->error;
+	die $self->bot->ua_error($tx->error) if $tx->error;
 	my $data = $tx->res->json;
 	$self->_access_token_expire(time+$data->{expires_in});
 	$self->_access_token($data->{access_token});
@@ -114,20 +114,20 @@ sub _build__languages_by_code {
 		my ($delay, $token) = @_;
 		$delay->data(token => $token);
 		my %headers = (Authorization => "Bearer $token");
-		$self->ua->get($url, \%headers, $delay->begin);
+		$self->bot->ua->get($url, \%headers, $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $self->bot->ua_error($tx->error) if $tx->error;
 		my @languages = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
 		$delay->data(languages => \@languages);
 		
 		$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
 		my $token = $delay->data('token');
 		my %headers = (Authorization => "Bearer $token", 'Content-Type' => 'text/xml');
-		$self->ua->post($url, \%headers, _xml_string_array(@languages), $delay->begin);
+		$self->bot->ua->post($url, \%headers, _xml_string_array(@languages), $delay->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $self->bot->ua_error($tx->error) if $tx->error;
 		my @names = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
 		
 		my %languages_by_code;
@@ -169,8 +169,8 @@ sub register {
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	
-	$self->_build__languages_by_code(sub { $self->logger->debug("Retrieved translation languages") })
-		->catch(sub { $self->logger->error("Error retrieving translation languages: $_[1]") });
+	$self->_build__languages_by_code(sub { $self->bot->logger->debug("Retrieved translation languages") })
+		->catch(sub { $self->bot->logger->error("Error retrieving translation languages: $_[1]") });
 	
 	$bot->add_helper(_translate => sub { $self });
 	$bot->add_helper(microsoft_client_id => sub { shift->_translate->client_id });

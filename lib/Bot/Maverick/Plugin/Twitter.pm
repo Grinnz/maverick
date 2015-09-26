@@ -47,18 +47,18 @@ sub _build__access_token {
 	my $headers = { Authorization => "Basic $bearer_token",
 		'Content-Type' => 'application/x-www-form-urlencoded;charset=UTF-8' };
 	unless ($cb) {
-		my $tx = $self->ua->post($url, $headers,
+		my $tx = $self->bot->ua->post($url, $headers,
 			form => { grant_type => 'client_credentials' });
-		die $self->ua_error($tx->error) if $tx->error;
+		die $self->bot->ua_error($tx->error) if $tx->error;
 		$self->_access_token($tx->res->json->{access_token});
 		return $self->_access_token;
 	}
 	return Mojo::IOLoop->delay(sub {
-		$self->ua->post($url, $headers,
+		$self->bot->ua->post($url, $headers,
 			form => { grant_type => 'client_credentials' }, shift->begin);
 	}, sub {
 		my ($delay, $tx) = @_;
-		die $self->ua_error($tx->error) if $tx->error;
+		die $self->bot->ua_error($tx->error) if $tx->error;
 		$self->_access_token($tx->res->json->{access_token});
 		$cb->($self->_access_token);
 	});
