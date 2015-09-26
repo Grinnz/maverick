@@ -3,7 +3,7 @@ package Bot::Maverick::Config;
 use Carp;
 use Config::IniFiles;
 use File::Path 'make_path';
-use File::Spec;
+use File::Spec::Functions 'catfile';
 use File::Temp;
 use Scalar::Util 'blessed';
 
@@ -84,7 +84,7 @@ sub _build_ini {
 	my $config_file = $self->file;
 	if (defined $dir and length $dir) {
 		make_path($dir) if !-e $dir;
-		$config_file = File::Spec->catfile($dir, $config_file);
+		$config_file = catfile($dir, $config_file);
 	}
 	my $params = $self->_ini_params;
 	$params->{-import} = $self->defaults->ini if $self->has_defaults;

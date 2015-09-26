@@ -1,6 +1,6 @@
 package Bot::Maverick::Plugin::Spell;
 
-use File::Spec;
+use File::Spec::Functions 'catfile';
 use Text::Hunspell;
 
 use Moo;
@@ -34,8 +34,8 @@ sub spell_dict {
 
 sub _build_dict {
 	my ($self, $lang) = @_;
-	my $affix_path = File::Spec->catfile($self->dict_path, "$lang.aff");
-	my $dict_path = File::Spec->catfile($self->dict_path, "$lang.dic");
+	my $affix_path = catfile($self->dict_path, "$lang.aff");
+	my $dict_path = catfile($self->dict_path, "$lang.dic");
 	return undef unless -f $affix_path and -f $dict_path;
 	return Text::Hunspell->new($affix_path, $dict_path);
 }

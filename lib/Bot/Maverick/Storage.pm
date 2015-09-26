@@ -3,7 +3,7 @@ package Bot::Maverick::Storage;
 use Carp;
 use DBM::Deep;
 use File::Path 'make_path';
-use File::Spec;
+use File::Spec::Functions 'catfile';
 
 use Moo;
 use namespace::clean;
@@ -34,7 +34,7 @@ sub _build_data {
 	my $path = $file;
 	if (defined $dir and length $dir) {
 		make_path($dir) if !-e $dir;
-		$path = File::Spec->catfile($dir, $file);
+		$path = catfile($dir, $file);
 	}
 	return DBM::Deep->new($path);
 }

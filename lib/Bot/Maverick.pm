@@ -4,7 +4,6 @@ package Bot::Maverick;
 BEGIN { eval { require Mojo::JSON::MaybeXS; 1 } }
 
 use Carp;
-use File::Spec;
 use IRC::Utils;
 use List::Util 'any';
 use Mojo::IOLoop;

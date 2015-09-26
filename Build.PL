@@ -90,7 +90,7 @@ EOW
         "DBM::Deep" => "2.0011",
         "Exporter" => 0,
         "File::Path" => 0,
-        "File::Spec" => 0,
+        "File::Spec::Functions" => 0,
         "File::Temp" => 0,
         "FindBin" => 0,
         "IRC::Utils" => "0.12",

@@ -4,7 +4,7 @@ requires 'Carp';
 requires 'Config::IniFiles' => '2.83';
 requires 'DBM::Deep' => '2.0011';
 requires 'Exporter';
-requires 'File::Spec';
+requires 'File::Spec::Functions';
 requires 'File::Path';
 requires 'File::Temp';
 requires 'FindBin';

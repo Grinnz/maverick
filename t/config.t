@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
-use File::Spec;
+use File::Spec::Functions 'catfile';
 use File::Temp 'tempfile', 'tempdir';
 
 use Bot::Maverick::Config;
@@ -51,7 +51,7 @@ is_deeply $config2->defaults->to_hash, $config->to_hash, 'defaults configuration
 
 # From existing INI object
 $config2 = Bot::Maverick::Config->new(ini => $config2->ini);
-is_deeply $config2->ini->GetFileName, File::Spec->catfile($temp_dir, $filename), 'right filename';
+is_deeply $config2->ini->GetFileName, catfile($temp_dir, $filename), 'right filename';
 is_deeply $config2->to_hash, {foo => {abc => 'def', bar => 'baz', baz => 'foo'}, bar => {bar => 'bar'}}, 'right configuration';
 
 ($temp_fh, $temp_file) = tempfile;
