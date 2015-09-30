@@ -5,6 +5,7 @@ BEGIN { eval { require Mojo::JSON::MaybeXS; 1 } }
 
 use Carp;
 use IRC::Utils;
+use Future::Mojo;
 use List::Util 'any';
 use Mojo::IOLoop;
 use Mojo::IOLoop::ForkCall;
@@ -472,6 +473,28 @@ sub fork_call {
 		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
 	);
 	return $fc->run(@args, $cb);
+}
+
+sub new_future {
+	my $self = shift;
+	my $loop = shift // Mojo::IOLoop->singleton;
+	return Future::Mojo->new($loop);
+}
+
+sub ua_get_future {
+	my ($self, $url) = @_;
+	my $future = $self->new_future;
+	weaken(my $weak_f = $future);
+	$self->ua->get($url, sub {
+		my ($ua, $tx) = @_;
+		if (my $res = $tx->success) {
+			$weak_f->done($tx->res);
+		} else {
+			chomp(my $err = $self->ua_error($tx->error));
+			$weak_f->fail($err);
+		}
+	});
+	return $future;
 }
 
 sub ua_error {

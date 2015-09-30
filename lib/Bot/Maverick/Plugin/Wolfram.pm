@@ -2,9 +2,7 @@ package Bot::Maverick::Plugin::Wolfram;
 
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
-use Future::Mojo;
 use Mojo::DOM;
-use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -51,11 +49,11 @@ sub register {
 			my $host = $m->sender->host;
 			my $future;
 			if (is_ipv4 $host or is_ipv6 $host) {
-				$future = Future::Mojo->done($host);
+				$future = $m->bot->new_future->done($host);
 			} elsif ($m->bot->has_helper('dns_resolve_ips')) {
 				$future = $m->bot->dns_resolve_ips($host)->transform(done => sub { $_[0][0] });
 			} else {
-				$future = Future::Mojo->done(undef);
+				$future = $m->bot->new_future->done(undef);
 			}
 			return $future->then(sub {
 				my $ip = shift;
@@ -94,14 +92,9 @@ sub _wolfram_query {
 		->query(input => $query, appid => $bot->wolfram_api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 
-	my $future = Future::Mojo->new(Mojo::IOLoop->singleton);
-	$bot->ua->get($url, sub {
-		my ($ua, $tx) = @_;
-		return $future->fail($bot->ua_error($tx->error)) if $tx->error;
-		my $result = Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first;
-		$future->done($result);
+	return $bot->ua_get_future($url)->transform(done => sub {
+		return Mojo::DOM->new->xml(1)->parse(shift->text)->children('queryresult')->first;
 	});
-	return $future;
 }
 
 sub _reply_wolfram_error {

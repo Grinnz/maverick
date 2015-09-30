@@ -1,8 +1,6 @@
 package Bot::Maverick::Plugin::DNS;
 
 use Carp;
-use Future::Mojo;
-use Mojo::IOLoop;
 use Socket qw/AF_INET AF_INET6 getaddrinfo inet_ntop unpack_sockaddr_in unpack_sockaddr_in6/;
 use Scalar::Util 'weaken';
 
@@ -77,14 +75,15 @@ sub register {
 sub _dns_resolve {
 	my ($bot, $host) = @_;
 	croak "No hostname to resolve" unless defined $host;
-	my $future = Future::Mojo->new(Mojo::IOLoop->singleton);
+	my $future = $bot->new_future;
 	if ($bot->dns_native) {
 		my $dns = $bot->dns_resolver;
 		my $sock = $dns->getaddrinfo($host);
-		$future->on_ready(sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
-		Mojo::IOLoop->singleton->reactor->io($sock, sub {
+		$future->on_ready(sub { shift->loop->reactor->remove($sock) });
+		weaken(my $weak_f = $future);
+		$future->loop->reactor->io($sock, sub {
 			my ($err, @results) = $dns->get_result($sock);
-			$err ? $future->fail($err) : $future->done(\@results);
+			$err ? $weak_f->fail($err) : $weak_f->done(\@results);
 		})->watch($sock, 1, 0);
 	} else {
 		my ($err, @results) = getaddrinfo $host;
