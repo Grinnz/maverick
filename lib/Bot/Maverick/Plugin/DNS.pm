@@ -95,7 +95,7 @@ sub _dns_resolve {
 
 sub _dns_resolve_ips {
 	my ($bot, $host) = @_;
-	return $bot->dns_resolve($host)->then(sub { Future->done(_ip_results($_[0])) });
+	return $bot->dns_resolve($host)->transform(done => \&_ip_results);
 }
 
 sub _ip_results {

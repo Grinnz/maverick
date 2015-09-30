@@ -53,7 +53,7 @@ sub register {
 			if (is_ipv4 $host or is_ipv6 $host) {
 				$future = Future->done($host);
 			} elsif ($m->bot->has_helper('dns_resolve_ips')) {
-				$future = $m->bot->dns_resolve_ips($host)->then(sub { Future->done($_[0][0]) });
+				$future = $m->bot->dns_resolve_ips($host)->transform(done => sub { $_[0][0] });
 			} else {
 				$future = Future->done(undef);
 			}

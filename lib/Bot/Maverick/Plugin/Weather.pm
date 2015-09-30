@@ -51,14 +51,7 @@ sub register {
 			if (exists $m->network->users->{lc $target} and $m->bot->has_helper('geoip_locate_host')) {
 				my $hostname = $m->network->user($target)->host;
 				return $m->reply("Unable to find hostname for target") unless defined $hostname;
-				$future = $m->bot->geoip_locate_host($hostname)->then(sub {
-					my $record = shift;
-					my @location_parts = ($record->city->name);
-					push @location_parts, $record->country->iso_code eq 'US'
-						? $record->most_specific_subdivision->iso_code : $record->country->name;
-					my $location = join ', ', grep { defined } @location_parts;
-					return Future->done($location);
-				});
+				$future = $m->bot->geoip_locate_host($hostname)->transform(done => \&_geoip_record_location);
 			} else {
 				$future = Future->done($target);
 			}
@@ -91,14 +84,7 @@ sub register {
 			if (exists $m->network->users->{lc $target} and $m->bot->has_helper('geoip_locate_host')) {
 				my $hostname = $m->network->user($target)->host;
 				return $m->reply("Unable to find hostname for target") unless defined $hostname;
-				$future = $m->bot->geoip_locate_host($hostname)->then(sub {
-					my $record = shift;
-					my @location_parts = ($record->city->name);
-					push @location_parts, $record->country->iso_code eq 'US'
-						? $record->most_specific_subdivision->iso_code : $record->country->name;
-					my $location = join ', ', grep { defined } @location_parts;
-					return Future->done($location);
-				});
+				$future = $m->bot->geoip_locate_host($hostname)->transform(done => \&_geoip_record_location);
 			} else {
 				$future = Future->done($target);
 			}
@@ -114,6 +100,15 @@ sub register {
 			})->on_fail(sub { $m->reply("Error retrieving forecast for $target: $_[0]") });
 		},
 	);
+}
+
+sub _geoip_record_location {
+	my $record = shift;
+	my @location_parts = ($record->city->name);
+	push @location_parts, $record->country->iso_code eq 'US'
+		? $record->most_specific_subdivision->iso_code : $record->country->name;
+	my $location = join ', ', grep { defined } @location_parts;
+	return $location;
 }
 
 sub _weather_autocomplete_location_code {
