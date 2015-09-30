@@ -406,7 +406,10 @@ sub adopt_future {
 		my $future = shift;
 		$self->unsubscribe(stop => $cancel) if $cancel;
 		delete $self->_futures->{$key};
-		$self->logger->error(qq{"$name" failed: } . $future->failure) if $future->is_failed;
+		if ($future->is_failed) {
+			chomp(my $err = $future->failure);
+			$self->logger->error(qq{"$name" failed: $err});
+		}
 	});
 	return $future;
 }

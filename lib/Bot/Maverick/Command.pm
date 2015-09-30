@@ -83,7 +83,7 @@ sub run {
 	unless (eval { $rc = $self->on_run->($m); 1 }) {
 		chomp (my $err = $@);
 		$m->reply("Internal error");
-		$m->logger->error("Error running command $self: $err");
+		$m->logger->error(qq{"$self" failed: $err});
 	}
 	if (blessed $rc and $rc->isa('Future')) {
 		$m->bot->adopt_future($self->name, $rc);

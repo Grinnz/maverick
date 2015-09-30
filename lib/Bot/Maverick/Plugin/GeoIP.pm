@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::GeoIP;
 
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
+use Future;
 use GeoIP2::Database::Reader;
 use Mojo::IOLoop;
 use Scalar::Util 'blessed';
@@ -27,10 +28,13 @@ sub _build_geoip {
 	my ($geoip, $err);
 	{
 		local $@;
-		eval { $geoip = GeoIP2::Database::Reader->new(file => $file); 1 } or $err = $@;
+		if (eval { $geoip = GeoIP2::Database::Reader->new(file => $file); 1 }) {
+			return $geoip;
+		} else {
+			$err = $@;
+		}
 	}
-	die $err if defined $err;
-	return $geoip;
+	die $err;
 }
 
 sub register {
@@ -38,8 +42,7 @@ sub register {
 	my $file = $bot->config->param('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
-	$bot->add_helper(_geoip => sub { $self });
-	$bot->add_helper(geoip_resolver => sub { shift->_geoip->geoip });
+	$bot->add_helper(geoip_resolver => sub { $self->geoip });
 	$bot->add_helper(geoip_locate => \&_geoip_locate);
 	$bot->add_helper(geoip_locate_host => \&_geoip_locate_host);
 	
@@ -59,10 +62,10 @@ sub register {
 				$say_target = "$target ($host)";
 			}
 			
-			$m->bot->geoip_locate_host($host, sub {
+			return $m->bot->geoip_locate_host($host)->on_done(sub {
 				my $record = shift;
-				return $m->reply("GeoIP location for $say_target: "._location_str($record));
-			})->catch(sub { $m->reply("Error locating $say_target: $_[1]") });
+				$m->reply("GeoIP location for $say_target: " . _location_str($record));
+			})->on_fail(sub { $m->reply("Error locating $say_target: $_[0]") });
 		},
 	);
 }
@@ -70,12 +73,13 @@ sub register {
 sub _geoip_locate {
 	my ($bot, $ip) = @_;
 	die "Invalid IP address $ip\n" unless defined $ip and (is_ipv4 $ip or is_ipv6 $ip);
-	my ($record, $err);
+	my ($record, $err, $errored);
 	{
 		local $@;
-		eval { $record = $bot->geoip_resolver->city(ip => $ip); 1 } or $err = $@;
+		eval { $record = $bot->geoip_resolver->city(ip => $ip); 1 } or $errored = 1;
+		$err = $@ if $errored;
 	}
-	if (defined $err) {
+	if ($errored) {
 		die $err->message."\n" if blessed $err and $err->isa('Throwable::Error');
 		chomp $err;
 		die "$err\n";
@@ -84,50 +88,39 @@ sub _geoip_locate {
 }
 
 sub _geoip_locate_host {
-	my ($bot, $host, $cb) = @_;
+	my ($bot, $host) = @_;
 	croak 'Undefined hostname' unless defined $host;
-	unless ($cb) {
-		return $bot->geoip_locate($host) if is_ipv4 $host or is_ipv6 $host;
-		die "DNS plugin is required to resolve hostnames\n"
-			unless $bot->has_helper('dns_resolve_ips');
-		return _on_dns_host($bot, $bot->dns_resolve_ips($host));
-	}
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		return $cb->($bot->geoip_locate($host))
-			if is_ipv4 $host or is_ipv6 $host;
-		die "DNS plugin is required to resolve hostnames\n"
-			unless $bot->has_helper('dns_resolve_ips');
-		my $next = $delay->begin(0);
-		$bot->dns_resolve_ips($host, sub { $next->(undef, $_[0]) })
-			->catch(sub { $next->("DNS error: $_[1]") });
-	}, sub {
-		my ($delay, $err, $addrs) = @_;
-		die $err if $err;
-		$cb->(_on_dns_host($bot, $addrs));
-	});
-}
-
-sub _on_dns_host {
-	my ($bot, $addrs) = @_;
-	die "No DNS results\n" unless @$addrs;
-	my $last_err = 'No valid DNS results';
-	my $best_record;
-	foreach my $addr (@$addrs) {
-		next unless is_ipv4 $addr or is_ipv6 $addr;
-		my ($record, $err);
-		{
-			local $@;
-			eval { $record = $bot->geoip_locate($addr); 1 } or $err = $@;
-		}
-		if (defined $err) {
-			chomp($last_err = $err);
+	if (is_ipv4 $host or is_ipv6 $host) {
+		my $record;
+		local $@;
+		if (eval { $record = $bot->geoip_locate($host); 1 }) {
+			return Future->done($record);
 		} else {
-			return $record if defined $record->city->name;
-			$best_record //= $record;
+			chomp(my $err = $@);
+			return Future->fail($err);
 		}
 	}
-	return $best_record // die "$last_err\n";
+	return Future->fail('DNS plugin is required to resolve hostnames')
+		unless $bot->has_helper('dns_resolve_ips');
+	return $bot->dns_resolve_ips($host)->then(sub {
+		my $addrs = shift;
+		return Future->fail('No DNS results') unless @$addrs;
+		my $last_err = 'No valid DNS results';
+		my $best_record;
+		foreach my $addr (@$addrs) {
+			next unless is_ipv4 $addr or is_ipv6 $addr;
+			my $record;
+			local $@;
+			if (eval { $record = $bot->geoip_locate($addr); 1 }) {
+				return Future->done($record) if defined $record->city->name;
+				$best_record //= $record;
+			} else {
+				chomp($last_err = $@);
+			}
+		}
+		return Future->fail($last_err) unless defined $best_record;
+		return Future->done($best_record);
+	});
 }
 
 sub _location_str {
