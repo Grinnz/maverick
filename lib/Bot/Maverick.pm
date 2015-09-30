@@ -397,7 +397,7 @@ sub _remove_command_prefixes {
 }
 
 sub adopt_future {
-	my ($self, $name, $future) = @_;
+	my ($self, $future) = @_;
 	my $key = "$future";
 	$self->_futures->{$key} = $future;
 	my $cancel = $self->once(stop => sub { $future->cancel });
@@ -406,10 +406,6 @@ sub adopt_future {
 		my $future = shift;
 		$self->unsubscribe(stop => $cancel) if $cancel;
 		delete $self->_futures->{$key};
-		if ($future->is_failed) {
-			chomp(my $err = $future->failure);
-			$self->logger->error(qq{"$name" failed: $err});
-		}
 	});
 	return $future;
 }

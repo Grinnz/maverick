@@ -86,7 +86,11 @@ sub run {
 		$m->logger->error(qq{"$self" failed: $err});
 	}
 	if (blessed $rc and $rc->isa('Future')) {
-		$m->bot->adopt_future($self->name, $rc);
+		$m->bot->adopt_future($rc);
+		$rc->on_fail(sub {
+			chomp(my $err = shift);
+			$m->logger->error(qq{"$self" failed: $err});
+		});
 	} elsif (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
