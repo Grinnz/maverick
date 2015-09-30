@@ -1,8 +1,10 @@
 package Bot::Maverick::Plugin::DNS;
 
 use Carp;
+use Future;
 use Mojo::IOLoop;
 use Socket qw/AF_INET AF_INET6 getaddrinfo inet_ntop unpack_sockaddr_in unpack_sockaddr_in6/;
+use Scalar::Util 'weaken';
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -40,9 +42,8 @@ sub BUILD {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper(_dns => sub { $self });
-	$bot->add_helper(dns_native => sub { shift->_dns->native });
-	$bot->add_helper(dns_resolver => sub { shift->_dns->_resolver });
+	$bot->add_helper(dns_native => sub { $self->native });
+	$bot->add_helper(dns_resolver => sub { $self->_resolver });
 	$bot->add_helper(dns_resolve => \&_dns_resolve);
 	$bot->add_helper(dns_resolve_ips => \&_dns_resolve_ips);
 	
@@ -63,56 +64,43 @@ sub register {
 			}
 			
 			$m->logger->debug("Resolving $hostname");
-			$m->bot->dns_resolve_ips($hostname, sub {
+			$m->bot->dns_resolve_ips($hostname)->on_done(sub {
 				my $addrs = shift;
 				return $m->reply("No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
 				$m->reply("DNS results for $say_result: $addr_list");
-			})->catch(sub { $m->reply("Failed to resolve $hostname: $_[1]") });
+			})->on_fail(sub { $m->reply("Failed to resolve $hostname: $_[0]") });
 		},
 	);
 }
 
 sub _dns_resolve {
-	my ($bot, $host, $cb) = @_;
+	my ($bot, $host) = @_;
 	croak "No hostname to resolve" unless defined $host;
-	unless ($cb) {
+	my $future = Future->new;
+	if ($bot->dns_native) {
+		my $dns = $bot->dns_resolver;
+		my $sock = $dns->getaddrinfo($host);
+		my $cancel = $bot->once(stop => sub { $future->cancel });
+		weaken $cancel;
+		$future->on_ready(sub {
+			Mojo::IOLoop->singleton->reactor->remove($sock);
+			$bot->unsubscribe(stop => $cancel) if $cancel;
+		});
+		Mojo::IOLoop->singleton->reactor->io($sock, sub {
+			my ($err, @results) = $dns->get_result($sock);
+			$err ? $future->fail($err) : $future->done(\@results);
+		})->watch($sock, 1, 0);
+	} else {
 		my ($err, @results) = getaddrinfo $host;
-		if ($err) {
-			chomp $err;
-			die "$err\n";
-		}
-		return \@results;
+		$err ? $future->fail($err) : $future->done(\@results);
 	}
-	croak "Invalid dns_resolve callback" unless ref $cb eq 'CODE';
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		if ($bot->dns_native) {
-			my $dns = $bot->dns_resolver;
-			my $sock = $dns->getaddrinfo($host);
-			my $remove = $bot->once(stop => sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
-			my $next = $delay->begin(0);
-			Mojo::IOLoop->singleton->reactor->io($sock, sub {
-				$remove->();
-				$next->($dns->get_result($sock));
-			})->watch($sock, 1, 0);
-		} else {
-			$delay->pass(getaddrinfo $host);
-		}
-	}, sub {
-		my ($delay, $err, @results) = @_;
-		if ($err) {
-			chomp $err;
-			die "$err\n";
-		}
-		$cb->(\@results);
-	});
+	return $future;
 }
 
 sub _dns_resolve_ips {
-	my ($bot, $host, $cb) = @_;
-	return _ip_results($bot->dns_resolve($host)) unless $cb;
-	return $bot->dns_resolve($host, sub { $cb->(_ip_results($_[0])) });
+	my ($bot, $host) = @_;
+	return $bot->dns_resolve($host)->then(sub { Future->done(_ip_results($_[0])) });
 }
 
 sub _ip_results {
