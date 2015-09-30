@@ -85,7 +85,9 @@ sub run {
 		$m->reply("Internal error");
 		$m->logger->error("Error running command $self: $err");
 	}
-	if (defined $rc and lc $rc eq 'usage') {
+	if (blessed $rc and $rc->isa('Future')) {
+		$m->bot->adopt_future($self->name, $rc);
+	} elsif (defined $rc and lc $rc eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));

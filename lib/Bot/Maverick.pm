@@ -10,7 +10,7 @@ use Mojo::IOLoop;
 use Mojo::IOLoop::ForkCall;
 use Mojo::Log;
 use Mojo::UserAgent;
-use Scalar::Util 'blessed';
+use Scalar::Util qw(blessed weaken);
 use Sereal::Encoder 'sereal_encode_with_object';
 use Sereal::Decoder 'sereal_decode_with_object';
 use Bot::Maverick::Access qw/:access ACCESS_LEVELS/;
@@ -224,6 +224,13 @@ has '_watch_timer' => (
 	init_arg => undef,
 );
 
+has '_futures' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { {} },
+	init_arg => undef,
+);
+
 sub BUILD {
 	my $self = shift;
 	
@@ -387,6 +394,21 @@ sub _remove_command_prefixes {
 		delete $self->_command_prefixes->{$prefix} unless @$prefixes;
 	}
 	return $self;
+}
+
+sub adopt_future {
+	my ($self, $name, $future) = @_;
+	my $key = "$future";
+	$self->_futures->{$key} = $future;
+	my $cancel = $self->once(stop => sub { $future->cancel });
+	weaken $cancel;
+	$future->on_ready(sub {
+		my $future = shift;
+		$self->unsubscribe(stop => $cancel) if $cancel;
+		delete $self->_futures->{$key};
+		$self->logger->error(qq{"$name" failed: } . $future->failure) if $future->is_failed;
+	});
+	return $future;
 }
 
 # Bot actions

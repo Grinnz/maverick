@@ -64,7 +64,7 @@ sub register {
 			}
 			
 			$m->logger->debug("Resolving $hostname");
-			$m->bot->dns_resolve_ips($hostname)->on_done(sub {
+			return $m->bot->dns_resolve_ips($hostname)->on_done(sub {
 				my $addrs = shift;
 				return $m->reply("No DNS info found for $say_result") unless @$addrs;
 				my $addr_list = join ', ', @$addrs;
@@ -81,12 +81,7 @@ sub _dns_resolve {
 	if ($bot->dns_native) {
 		my $dns = $bot->dns_resolver;
 		my $sock = $dns->getaddrinfo($host);
-		my $cancel = $bot->once(stop => sub { $future->cancel });
-		weaken $cancel;
-		$future->on_ready(sub {
-			Mojo::IOLoop->singleton->reactor->remove($sock);
-			$bot->unsubscribe(stop => $cancel) if $cancel;
-		});
+		$future->on_ready(sub { Mojo::IOLoop->singleton->reactor->remove($sock) });
 		Mojo::IOLoop->singleton->reactor->io($sock, sub {
 			my ($err, @results) = $dns->get_result($sock);
 			$err ? $future->fail($err) : $future->done(\@results);
