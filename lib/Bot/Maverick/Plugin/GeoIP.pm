@@ -2,7 +2,7 @@ package Bot::Maverick::Plugin::GeoIP;
 
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
-use Future;
+use Future::Mojo;
 use GeoIP2::Database::Reader;
 use Mojo::IOLoop;
 use Scalar::Util 'blessed';
@@ -94,17 +94,17 @@ sub _geoip_locate_host {
 		my $record;
 		local $@;
 		if (eval { $record = $bot->geoip_locate($host); 1 }) {
-			return Future->done($record);
+			return Future::Mojo->done($record);
 		} else {
 			chomp(my $err = $@);
-			return Future->fail($err);
+			return Future::Mojo->fail($err);
 		}
 	}
-	return Future->fail('DNS plugin is required to resolve hostnames')
+	return Future::Mojo->fail('DNS plugin is required to resolve hostnames')
 		unless $bot->has_helper('dns_resolve_ips');
 	return $bot->dns_resolve_ips($host)->then(sub {
 		my $addrs = shift;
-		return Future->fail('No DNS results') unless @$addrs;
+		return Future::Mojo->fail('No DNS results') unless @$addrs;
 		my $last_err = 'No valid DNS results';
 		my $best_record;
 		foreach my $addr (@$addrs) {
@@ -112,14 +112,14 @@ sub _geoip_locate_host {
 			my $record;
 			local $@;
 			if (eval { $record = $bot->geoip_locate($addr); 1 }) {
-				return Future->done($record) if defined $record->city->name;
+				return Future::Mojo->done($record) if defined $record->city->name;
 				$best_record //= $record;
 			} else {
 				chomp($last_err = $@);
 			}
 		}
-		return Future->fail($last_err) unless defined $best_record;
-		return Future->done($best_record);
+		return Future::Mojo->fail($last_err) unless defined $best_record;
+		return Future::Mojo->done($best_record);
 	});
 }
 

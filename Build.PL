@@ -93,7 +93,7 @@ EOW
         "File::Spec::Functions" => 0,
         "File::Temp" => 0,
         "FindBin" => 0,
-        "Future" => "0.33",
+        "Future::Mojo" => "0.002",
         "IRC::Utils" => "0.12",
         "List::Util" => 0,
         "Mojo::IOLoop::ForkCall" => "0.16",

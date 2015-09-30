@@ -1,7 +1,7 @@
 package Bot::Maverick::Plugin::Weather;
 
 use Carp 'croak';
-use Future;
+use Future::Mojo;
 use Mojo::IOLoop;
 use Mojo::URL;
 use Scalar::Util 'looks_like_number';
@@ -53,7 +53,7 @@ sub register {
 				return $m->reply("Unable to find hostname for target") unless defined $hostname;
 				$future = $m->bot->geoip_locate_host($hostname)->transform(done => \&_geoip_record_location);
 			} else {
-				$future = Future->done($target);
+				$future = Future::Mojo->done($target);
 			}
 			return $future->then(sub {
 				my $location = shift;
@@ -86,7 +86,7 @@ sub register {
 				return $m->reply("Unable to find hostname for target") unless defined $hostname;
 				$future = $m->bot->geoip_locate_host($hostname)->transform(done => \&_geoip_record_location);
 			} else {
-				$future = Future->done($target);
+				$future = Future::Mojo->done($target);
 			}
 			return $future->then(sub {
 				my $location = shift;
@@ -114,7 +114,7 @@ sub _geoip_record_location {
 sub _weather_autocomplete_location_code {
 	my ($bot, $query) = @_;
 	my $url = Mojo::URL->new(WEATHER_API_AUTOCOMPLETE_ENDPOINT)->query(h => 0, query => $query);
-	my $future = Future->new;
+	my $future = Future::Mojo->new(Mojo::IOLoop->singleton);
 	$bot->ua->get($url, sub {
 		my ($ua, $tx) = @_;
 		return $future->fail($bot->ua_error($tx->error)) if $tx->error;
@@ -143,13 +143,13 @@ sub _weather_location_data {
 	
 	my $cached = $bot->weather_cache->{$code};
 	if (defined $cached and $cached->{expiration} > time) {
-		return Future->done($cached);
+		return Future::Mojo->done($cached);
 	}
 	
 	die WEATHER_API_KEY_MISSING unless defined $bot->weather_api_key;
 	my $url = Mojo::URL->new(WEATHER_API_ENDPOINT)
 		->path($bot->weather_api_key."/conditions/forecast/geolookup/q/$code.json");
-	my $future = Future->new;
+	my $future = Future::Mojo->new(Mojo::IOLoop->singleton);
 	$bot->ua->get($url, sub {
 		my ($ua, $tx) = @_;
 		return $future->fail($bot->ua_error($tx->error)) if $tx->error;
