@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::Wolfram;
 
 use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
+use Future;
 use Mojo::DOM;
 use Mojo::IOLoop;
 use Mojo::URL;
@@ -32,9 +33,8 @@ sub register {
 	$self->api_key($bot->config->param('apis','wolfram_api_key')) unless defined $self->api_key;
 	die WOLFRAM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_helper(_wolfram => sub { $self });
-	$bot->add_helper(wolfram_api_key => sub { shift->_wolfram->api_key });
-	$bot->add_helper(wolfram_results_cache => sub { shift->_wolfram->_results_cache });
+	$bot->add_helper(wolfram_api_key => sub { $self->api_key });
+	$bot->add_helper(wolfram_results_cache => sub { $self->_results_cache });
 	$bot->add_helper(wolfram_query => \&_wolfram_query);
 	
 	$bot->add_command(
@@ -49,25 +49,19 @@ sub register {
 			die WOLFRAM_API_KEY_MISSING unless defined $api_key;
 			
 			my $host = $m->sender->host;
-			Mojo::IOLoop->delay(sub {
-				my $delay = shift;
-				if (is_ipv4 $host or is_ipv6 $host) {
-					$delay->pass($host);
-				} elsif ($m->bot->has_helper('dns_resolve_ips')) {
-					my $cb = $delay->begin(0);
-					$m->bot->dns_resolve_ips($host, sub {
-						my $addrs = shift;
-						$cb->($addrs->[0]);
-					})->catch(sub { $cb->(undef) });
-				} else {
-					$delay->pass(undef);
-				}
-			}, sub {
-				my ($delay, $ip) = @_;
-				$m->bot->wolfram_query($query, $ip, $delay->begin(0))
-					->catch(sub { $m->reply("Wolfram|Alpha query error: $_[1]") });
-			}, sub {
-				my ($delay, $result) = @_;
+			my $future;
+			if (is_ipv4 $host or is_ipv6 $host) {
+				$future = Future->done($host);
+			} elsif ($m->bot->has_helper('dns_resolve_ips')) {
+				$future = $m->bot->dns_resolve_ips($host)->then(sub { Future->done($_[0][0]) });
+			} else {
+				$future = Future->done(undef);
+			}
+			return $future->then(sub {
+				my $ip = shift;
+				return $m->bot->wolfram_query($query, $ip);
+			})->on_done(sub {
+				my $result = shift;
 				return $m->reply('No results from Wolfram|Alpha') unless defined $result;
 				
 				my $success = $result->attr('success');
@@ -76,7 +70,7 @@ sub register {
 				} else {
 					_reply_wolfram_success($m, $result);
 				}
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_fail(sub { $m->reply("Error querying Wolfram|Alpha: $_[0]") });
 		},
 		on_more => sub {
 			my $m = shift;
@@ -92,7 +86,6 @@ sub register {
 }
 
 sub _wolfram_query {
-	my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
 	my ($bot, $query, $ip) = @_;
 	croak 'Undefined Wolfram query' unless defined $query;
 	die WOLFRAM_API_KEY_MISSING unless defined $bot->wolfram_api_key;
@@ -100,19 +93,15 @@ sub _wolfram_query {
 	my $url = Mojo::URL->new(WOLFRAM_API_ENDPOINT)
 		->query(input => $query, appid => $bot->wolfram_api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
-	
-	unless ($cb) {
-		my $tx = $bot->ua->get($url);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first;
-	}
-	return Mojo::IOLoop->delay(sub {
-		$bot->ua->get($url, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first);
+
+	my $future = Future->new;
+	$bot->ua->get($url, sub {
+		my ($ua, $tx) = @_;
+		return $future->fail($bot->ua_error($tx->error)) if $tx->error;
+		my $result = Mojo::DOM->new->xml(1)->parse($tx->res->text)->children('queryresult')->first;
+		$future->done($result);
 	});
+	return $future;
 }
 
 sub _reply_wolfram_error {
