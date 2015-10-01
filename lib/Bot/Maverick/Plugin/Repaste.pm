@@ -73,7 +73,7 @@ sub _retrieve_pastes {
 			if ($paste->{recheck}) {
 				my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
 				$m->logger->debug("Rechecking $paste->{type} paste $paste->{key}: $url");
-				push @futures, Future::Mojo->new_timer(Mojo::IOLoop->singleton, 1)
+				push @futures, $m->bot->timer_future(1)
 					->then(sub { $m->bot->ua_request($url) });
 			} else {
 				push @futures, $m->bot->new_future->done(undef);

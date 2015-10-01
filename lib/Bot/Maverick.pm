@@ -477,8 +477,12 @@ sub fork_call {
 
 sub new_future {
 	my $self = shift;
-	my $loop = shift // Mojo::IOLoop->singleton;
-	return Future::Mojo->new($loop);
+	return Future::Mojo->new(Mojo::IOLoop->singleton);
+}
+
+sub timer_future {
+	my ($self, $delay) = @_;
+	return Future::Mojo->new_timer(Mojo::IOLoop->singleton, $delay);
 }
 
 my %methods = map { ($_ => 1) } qw(get post head put delete patch);
