@@ -486,6 +486,7 @@ sub ua_get_future {
 	my $future = $self->new_future;
 	weaken(my $weak_f = $future);
 	$self->ua->get($url, sub {
+		return() unless $weak_f;
 		my ($ua, $tx) = @_;
 		if (my $res = $tx->success) {
 			$weak_f->done($tx->res);
