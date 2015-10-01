@@ -96,7 +96,7 @@ sub _youtube_search {
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('search')
 		->query(key => $bot->youtube_api_key, part => 'snippet', q => $query,
 			safeSearch => 'strict', type => 'video');
-	return $bot->ua_get_future($request)->transform(done => sub { shift->json->{items} // [] });
+	return $bot->ua_request($request)->transform(done => sub { shift->json->{items} // [] });
 }
 
 sub _youtube_video {
@@ -106,7 +106,7 @@ sub _youtube_video {
 	
 	my $request = Mojo::URL->new(YOUTUBE_API_ENDPOINT)->path('videos')
 		->query(key => $bot->youtube_api_key, part => 'snippet', id => $id);
-	return $bot->ua_get_future($request)->transform(done => sub { (shift->json->{items} // [])->[0] });
+	return $bot->ua_request($request)->transform(done => sub { (shift->json->{items} // [])->[0] });
 }
 
 sub _display_result {

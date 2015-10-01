@@ -112,10 +112,10 @@ sub _geoip_record_location {
 sub _weather_autocomplete_location_code {
 	my ($bot, $query) = @_;
 	my $url = Mojo::URL->new(WEATHER_API_AUTOCOMPLETE_ENDPOINT)->query(h => 0, query => $query);
-	return $bot->ua_get_future($url)->then_with_f(sub {
-		my ($future, $res) = @_;
-		my $code = _autocomplete_location_code($res->json) // return $future->new->fail('Location not found');
-		return $future->new->done($code);
+	return $bot->ua_request($url)->then(sub {
+		my $res = shift;
+		my $code = _autocomplete_location_code($res->json) // return $bot->new_future->fail('Location not found');
+		return $bot->new_future->done($code);
 	});
 }
 
@@ -145,7 +145,7 @@ sub _weather_location_data {
 	my $url = Mojo::URL->new(WEATHER_API_ENDPOINT)
 		->path($bot->weather_api_key."/conditions/forecast/geolookup/q/$code.json");
 	weaken $bot;
-	return $bot->ua_get_future($url)->transform(done => sub {
+	return $bot->ua_request($url)->transform(done => sub {
 		_cache_location_data($bot, $code, shift->json);
 	});
 }

@@ -42,10 +42,15 @@ has '_access_token_expire' => (
 	init_arg => undef,
 );
 
-sub _build__access_token {
-	my ($self, $cb) = @_;
-	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
+sub _retrieve_access_token {
+	my ($self) = @_;
+	if ($self->_has_access_token_expire and $self->_access_token_expire <= time) {
+		$self->_clear_access_token;
+		$self->_clear_access_token_expire;
+	}
+	return $self->bot->new_future->done($self->_access_token) if $self->_has_access_token;
 	
+	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	my $url = Mojo::URL->new(MICROSOFT_OAUTH_ENDPOINT);
 	my %form = (
 		client_id => $self->client_id,
@@ -53,40 +58,20 @@ sub _build__access_token {
 		scope => TRANSLATE_OAUTH_SCOPE,
 		grant_type => 'client_credentials'
 	);
-	unless ($cb) {
-		my $tx = $self->bot->ua->post($url, form => \%form);
-		return $self->_access_token_response($tx);
-	}
-	return Mojo::IOLoop->delay(sub {
-		$self->bot->ua->post($url, form => \%form, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		$cb->($self->_access_token_response($tx));
+	return $self->bot->ua_request(post => $url, form => \%form)->transform(done => sub {
+		my $data = shift->json;
+		$self->_access_token_expire(time + $data->{expires_in});
+		$self->_access_token($data->{access_token});
+		return $self->_access_token;
 	});
 }
 
-sub _access_token_response {
-	my ($self, $tx) = @_;
-	die $self->bot->ua_error($tx->error) if $tx->error;
-	my $data = $tx->res->json;
-	$self->_access_token_expire(time+$data->{expires_in});
-	$self->_access_token($data->{access_token});
-	return $self->_access_token;
-}
-
-sub _retrieve_access_token {
-	my ($self, $cb) = @_;
-	if ($self->_has_access_token_expire and $self->_access_token_expire <= time) {
-		$self->_clear_access_token;
-		$self->_clear_access_token_expire;
-	}
-	return $self->_has_access_token ? $self->_access_token : $self->_build__access_token unless $cb;
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		return $cb->($self->_access_token) if $self->_has_access_token;
-		$self->_build__access_token($cb)->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
-	});
-}
+has '_language_codes_built' => (
+	is => 'rw',
+	lazy => 1,
+	default => 0,
+	init_arg => undef,
+);
 
 has '_languages_by_code' => (
 	is => 'rw',
@@ -102,38 +87,30 @@ has '_languages_by_name' => (
 	init_arg => undef,
 );
 
-sub _build__languages_by_code {
-	my ($self, $cb) = @_;
+sub _build_language_codes {
+	my ($self) = @_;
+	return $self->bot->new_future->done if $self->_language_codes_built;
+	$self->_language_codes_built(1);
 	
-	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguagesForTranslate');
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		my $access_token = $self->_retrieve_access_token($delay->begin(0))
-			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
-	}, sub {
-		my ($delay, $token) = @_;
-		$delay->data(token => $token);
+	my ($token, @languages);
+	return $self->_retrieve_access_token->then(sub {
+		$token = shift;
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguagesForTranslate');
 		my %headers = (Authorization => "Bearer $token");
-		$self->bot->ua->get($url, \%headers, $delay->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $self->bot->ua_error($tx->error) if $tx->error;
-		my @languages = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
-		$delay->data(languages => \@languages);
-		
-		$url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
-		my $token = $delay->data('token');
+		return $self->bot->ua_request($url, \%headers);
+	})->then(sub {
+		my $res = shift;
+		@languages = Mojo::DOM->new->xml(1)->parse($res->text)->find('string')->map('text')->each;
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
 		my %headers = (Authorization => "Bearer $token", 'Content-Type' => 'text/xml');
-		$self->bot->ua->post($url, \%headers, _xml_string_array(@languages), $delay->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $self->bot->ua_error($tx->error) if $tx->error;
-		my @names = Mojo::DOM->new->xml(1)->parse($tx->res->text)->find('string')->map('text')->each;
+		return $self->bot->ua_request(post => $url, \%headers, _xml_string_array(@languages));
+	})->on_done(sub {
+		my $res = shift;
+		my @names = Mojo::DOM->new->xml(1)->parse($res->text)->find('string')->map('text')->each;
 		
 		my %languages_by_code;
-		my $languages = $delay->data('languages');
-		for my $i (0..$#$languages) {
-			my $lang = $languages->[$i] // next;
+		for my $i (0..$#languages) {
+			my $lang = $languages[$i] // next;
 			my $name = $names[$i] // next;
 			$languages_by_code{$lang} = $name;
 			$self->_languages_by_name->{lc $name} = $lang;
@@ -145,8 +122,7 @@ sub _build__languages_by_code {
 		}
 		
 		$self->_languages_by_code(\%languages_by_code);
-		$cb->(\%languages_by_code) if $cb;
-	});
+	})->on_fail(sub { $self->_language_codes_built(0) });
 }
 
 sub _xml_string_array {
@@ -169,15 +145,12 @@ sub register {
 		unless defined $self->client_secret;
 	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
 	
-	$self->_build__languages_by_code(sub { $self->bot->logger->debug("Retrieved translation languages") })
-		->catch(sub { $self->bot->logger->error("Error retrieving translation languages: $_[1]") });
-	
-	$bot->add_helper(_translate => sub { $self });
-	$bot->add_helper(microsoft_client_id => sub { shift->_translate->client_id });
-	$bot->add_helper(microsoft_client_secret => sub { shift->_translate->client_secret });
-	$bot->add_helper(microsoft_access_token => sub { shift->_translate->_retrieve_access_token(@_) });
-	$bot->add_helper(translate_languages_by_code => sub { shift->_translate->_languages_by_code });
-	$bot->add_helper(translate_languages_by_name => sub { shift->_translate->_languages_by_name });
+	$bot->add_helper(microsoft_client_id => sub { $self->client_id });
+	$bot->add_helper(microsoft_client_secret => sub { $self->client_secret });
+	$bot->add_helper(_microsoft_access_token => sub { $self->_retrieve_access_token });
+	$bot->add_helper(_translate_build_language_codes => sub { $self->_build_language_codes });
+	$bot->add_helper(_translate_languages_by_code => sub { $self->_languages_by_code });
+	$bot->add_helper(_translate_languages_by_name => sub { $self->_languages_by_name });
 	$bot->add_helper(detect_language => \&_detect_language);
 	$bot->add_helper(translate_language_code => \&_translate_language_code);
 	$bot->add_helper(translate_language_name => \&_translate_language_name);
@@ -208,68 +181,44 @@ sub register {
 			$text =~ s/\s*"\s*$//;
 			return 'usage' unless length $text;
 			
-			Mojo::IOLoop->delay(sub {
-				my $delay = shift;
-				$to = 'en' unless defined $to and length $to;
-				if (defined $from and length $from) {
-					$delay->pass($from);
-				} else { # Detect language
-					$m->bot->detect_language($text, $delay->begin(0))
-						->catch(sub { $delay->remaining([]); $m->reply("Error detecting language: $_[1]") });
-				}
-			}, sub {
-				my ($delay, $from) = @_;
-				return $m->reply("Unknown from language $from")
-					unless defined (my $from_code = $m->bot->translate_language_code($from));;
-				return $m->reply("Unknown to language $to")
-					unless defined (my $to_code = $m->bot->translate_language_code($to));
-				$delay->data(from => $from_code, to => $to_code);
-				$m->bot->translate_text($text, $from_code, $to_code, $delay->begin(0))
-					->catch(sub { $delay->remaining([]); $m->reply("Error translating text: $_[1]") });
-			}, sub {
-				my ($delay, $translated) = @_;
-				my ($from, $to) = @{$delay->data}{'from','to'};
+			my $future;
+			$to = 'en' unless defined $to and length $to;
+			if (defined $from and length $from) {
+				$future = $m->bot->new_future->done($from);
+			} else {
+				$future = $m->bot->detect_language($text);
+			}
+			$future->then(sub {
+				$from = shift;
+				return $m->bot->translate_text($text, $from, $to);
+			})->on_done(sub {
+				my $translated = shift;
 				$from = $m->bot->translate_language_name($from);
 				$to = $m->bot->translate_language_name($to);
 				$m->reply("Translated $from => $to: $translated");
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_fail(sub { $m->reply("Error translating text: $_[0]") });
 		},
 	);
 }
 
 sub _detect_language {
-	my ($bot, $text, $cb) = @_;
+	my ($bot, $text) = @_;
 	croak 'Undefined text to detect' unless defined $text;
 	
-	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
-	unless ($cb) {
-		my $token = $bot->microsoft_access_token;
+	return $bot->_microsoft_access_token->then(sub {
+		my $token = shift;
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
 		my %headers = (Authorization => "Bearer $token");
-		my $tx = $bot->ua->get($url, \%headers);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
-	}
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		$bot->microsoft_access_token($delay->begin(0))
-			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
-	}, sub {
-		my ($delay, $token) = @_;
-		my %headers = (Authorization => "Bearer $token");
-		$bot->ua->get($url, \%headers, $delay->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text);
-	});
+		return $bot->ua_request($url, \%headers);
+	})->transform(done => sub { Mojo::DOM->new->xml(1)->parse(shift->text)->at('string')->text });
 }
 
 sub _translate_language_code {
 	my ($bot, $lang) = @_;
 	croak 'Undefined language' unless defined $lang;
-	unless (exists $bot->translate_languages_by_code->{$lang}) {
-		$lang = $bot->translate_languages_by_name->{lc $lang};
-		return undef unless defined $lang and exists $bot->translate_languages_by_code->{$lang};
+	unless (exists $bot->_translate_languages_by_code->{$lang}) {
+		$lang = $bot->_translate_languages_by_name->{lc $lang};
+		return undef unless defined $lang and exists $bot->_translate_languages_by_code->{$lang};
 	}
 	return $lang;
 }
@@ -277,43 +226,30 @@ sub _translate_language_code {
 sub _translate_language_name {
 	my ($bot, $lang) = @_;
 	croak 'Undefined language' unless defined $lang;
-	unless (exists $bot->translate_languages_by_code->{$lang}) {
-		$lang = $bot->translate_languages_by_name->{lc $lang};
-		return undef unless defined $lang and exists $bot->translate_languages_by_code->{$lang};
+	unless (exists $bot->_translate_languages_by_code->{$lang}) {
+		$lang = $bot->_translate_languages_by_name->{lc $lang};
+		return undef unless defined $lang and exists $bot->_translate_languages_by_code->{$lang};
 	}
-	return $bot->translate_languages_by_code->{$lang};
+	return $bot->_translate_languages_by_code->{$lang};
 }
 
 sub _translate_text {
-	my ($bot, $text, $from, $to, $cb) = @_;
+	my ($bot, $text, $from, $to) = @_;
 	croak 'Undefined text to translate' unless defined $text;
-	croak "Unknown from language $from"
-		unless defined (my $from_code = $bot->translate_language_code($from));
-	croak "Unknown to language $to"
-		unless defined (my $to_code = $bot->translate_language_code($to));
-	
-	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
-		->query(text => $text, from => $from_code, to => $to_code, contentType => 'text/plain');
-	unless ($cb) {
-		my $token = $bot->microsoft_access_token;
+	my $token;
+	return $bot->_microsoft_access_token->then(sub {
+		$token = shift;
+		return $bot->_translate_build_language_codes;
+	})->then(sub {
+		my $from_code = $bot->translate_language_code($from)
+			// return $bot->new_future->fail("Unknown from language $from");
+		my $to_code = $bot->translate_language_code($to)
+			// return $bot->new_future->fail("Unknown to language $to");
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
+			->query(text => $text, from => $from_code, to => $to_code, contentType => 'text/plain');
 		my %headers = (Authorization => "Bearer $token");
-		my $tx = $bot->ua->get($url, \%headers);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text;
-	}
-	return Mojo::IOLoop->delay(sub {
-		my $delay = shift;
-		$bot->microsoft_access_token($delay->begin(0))
-			->catch(sub { $delay->remaining([])->emit(error => $_[1]) });
-	}, sub {
-		my ($delay, $token) = @_;
-		my %headers = (Authorization => "Bearer $token");
-		$bot->ua->get($url, \%headers, $delay->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(Mojo::DOM->new->xml(1)->parse($tx->res->text)->at('string')->text);
-	});
+		return $bot->ua_request($url, \%headers);
+	})->transform(done => sub { Mojo::DOM->new->xml(1)->parse(shift->text)->at('string')->text });
 }
 
 1;

@@ -186,7 +186,7 @@ sub _google_search_web {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
 		cx => $bot->google_cse_id, q => $query, safe => 'high');
-	return $bot->ua_get_future($request)->transform(done => sub { shift->json->{items} // [] });
+	return $bot->ua_request($request)->transform(done => sub { shift->json->{items} // [] });
 }
 
 sub _google_search_web_count {
@@ -196,7 +196,7 @@ sub _google_search_web_count {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
 		cx => $bot->google_cse_id, q => $query, safe => 'off', num => 1);
-	return $bot->ua_get_future($request)->transform(done => sub { shift->json->{searchInformation}{totalResults} // 0 });
+	return $bot->ua_request($request)->transform(done => sub { shift->json->{searchInformation}{totalResults} // 0 });
 }
 
 sub _google_search_image {
@@ -206,7 +206,7 @@ sub _google_search_image {
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
 		cx => $bot->google_cse_id, q => $query, safe => 'high', searchType => 'image');
-	return $bot->ua_get_future($request)->transform(done => sub { shift->json->{items} // [] });
+	return $bot->ua_request($request)->transform(done => sub { shift->json->{items} // [] });
 }
 
 sub _google_complete {
@@ -215,7 +215,7 @@ sub _google_complete {
 	
 	my $request = Mojo::URL->new(GOOGLE_COMPLETE_ENDPOINT)->query(output => 'toolbar',
 		client => 'chrome', hl => 'en', q => $query);
-	return $bot->ua_get_future($request)->transform(done => sub { (shift->json // [])->[1] // [] });
+	return $bot->ua_request($request)->transform(done => sub { (shift->json // [])->[1] // [] });
 }
 
 sub _google_result_web {

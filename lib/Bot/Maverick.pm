@@ -481,11 +481,18 @@ sub new_future {
 	return Future::Mojo->new($loop);
 }
 
-sub ua_get_future {
-	my ($self, $url) = @_;
+my %methods = map { ($_ => 1) } qw(get post head put delete patch);
+sub ua_request {
+	my ($self, $method, @args) = @_;
+	if (exists $methods{lc $method}) {
+		$method = lc $method;
+	} else {
+		unshift @args, $method;
+		$method = 'get';
+	}
 	my $future = $self->new_future;
 	weaken(my $weak_f = $future);
-	$self->ua->get($url, sub {
+	$self->ua->$method(@args, sub {
 		return() unless $weak_f;
 		my ($ua, $tx) = @_;
 		if (my $res = $tx->success) {

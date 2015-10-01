@@ -92,7 +92,7 @@ sub _wolfram_query {
 		->query(input => $query, appid => $bot->wolfram_api_key, format => 'plaintext');
 	$url->query({ip => $ip}) if defined $ip;
 
-	return $bot->ua_get_future($url)->transform(done => sub {
+	return $bot->ua_request($url)->transform(done => sub {
 		return Mojo::DOM->new->xml(1)->parse(shift->text)->children('queryresult')->first;
 	});
 }
