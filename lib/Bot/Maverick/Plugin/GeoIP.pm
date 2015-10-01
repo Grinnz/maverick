@@ -14,12 +14,12 @@ use constant GEOIP_FILE_MISSING =>
 	"GeoIP plugin requires a readable GeoLite2 City database file located by the configuration option 'geoip_file' in section 'apis'\n" .
 	"See http://dev.maxmind.com/geoip/geoip2/geolite2/ for more information on obtaining a GeoLite2 City database file.\n";
 
-has 'geoip' => (
+has '_geoip' => (
 	is => 'lazy',
 	init_arg => undef,
 );
 
-sub _build_geoip {
+sub _build__geoip {
 	my $self = shift;
 	my $file = $self->bot->config->param('apis', 'geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
@@ -40,7 +40,7 @@ sub register {
 	my $file = $bot->config->param('apis','geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
 	
-	$bot->add_helper(geoip_resolver => sub { $self->geoip });
+	$bot->add_helper(_geoip_resolver => sub { $self->_geoip });
 	$bot->add_helper(geoip_locate => \&_geoip_locate);
 	$bot->add_helper(geoip_locate_host => \&_geoip_locate_host);
 	
@@ -74,7 +74,7 @@ sub _geoip_locate {
 	my ($record, $err, $errored);
 	{
 		local $@;
-		eval { $record = $bot->geoip_resolver->city(ip => $ip); 1 } or $errored = 1;
+		eval { $record = $bot->_geoip_resolver->city(ip => $ip); 1 } or $errored = 1;
 		$err = $@ if $errored;
 	}
 	if ($errored) {

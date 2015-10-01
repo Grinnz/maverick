@@ -38,11 +38,10 @@ sub _build_dict {
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper(_spell => sub { $self });
-	$bot->add_helper(spell_default_lang => sub { shift->_spell->default_lang });
 	$bot->add_helper(spell_dict => sub {
 		my ($bot, $lang) = @_;
-		return $bot->_spell->_dicts->{$lang} //= $bot->_spell->_build_dict($lang);
+		$lang //= $self->default_lang;
+		return $self->_dicts->{$lang} //= $self->_build_dict($lang);
 	});
 	
 	$bot->add_command(
@@ -53,8 +52,8 @@ sub register {
 			my $m = shift;
 			my ($word, $lang) = $m->args_list;
 			return 'usage' unless defined $word and length $word;
-			$lang //= $m->bot->spell_default_lang;
 			my $dict = $m->bot->spell_dict($lang);
+			$lang //= 'default';
 			return $m->reply("Dictionary for $lang not found") unless defined $dict;
 			return $m->reply("$word is a word.") if $dict->check($word);
 			my @suggestions = $dict->suggest($word);
@@ -99,10 +98,11 @@ Default dictionary language, defaults to C<en_US>.
 
 =head2 spell_dict
 
+ my $dict = $bot->spell_dict;
  my $dict = $bot->spell_dict('fr_FR');
 
-Retrieves the dictionary for a specified language as a L<Text::Hunspell>
-object.
+Retrieves the dictionary for a specified language or L</"default_lang"> as a
+L<Text::Hunspell> object.
 
 =head1 COMMANDS
 

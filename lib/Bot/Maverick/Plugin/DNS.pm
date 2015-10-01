@@ -41,7 +41,7 @@ sub register {
 	my ($self, $bot) = @_;
 	
 	$bot->add_helper(dns_native => sub { $self->native });
-	$bot->add_helper(dns_resolver => sub { $self->_resolver });
+	$bot->add_helper(_dns_resolver => sub { $self->_resolver });
 	$bot->add_helper(dns_resolve => \&_dns_resolve);
 	$bot->add_helper(dns_resolve_ips => \&_dns_resolve_ips);
 	
@@ -77,7 +77,7 @@ sub _dns_resolve {
 	croak "No hostname to resolve" unless defined $host;
 	my $future = $bot->new_future;
 	if ($bot->dns_native) {
-		my $dns = $bot->dns_resolver;
+		my $dns = $bot->_dns_resolver;
 		my $sock = $dns->getaddrinfo($host);
 		$future->on_ready(sub { shift->loop->reactor->remove($sock) });
 		weaken(my $weak_f = $future);

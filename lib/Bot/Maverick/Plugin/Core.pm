@@ -17,7 +17,7 @@ has 'more_commands' => (
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper(core_more_commands => sub { $self->more_commands });
+	$bot->add_helper(_core_more_commands => sub { $self->more_commands });
 	
 	$bot->add_command(
 		name => 'help',
@@ -96,7 +96,7 @@ sub register {
 		my ($bot, $m) = @_;
 		return unless $m->command->has_on_more;
 		my $channel_name = lc ($m->channel // $m->sender);
-		$m->bot->core_more_commands->{$m->network}{$channel_name} = lc $m->command->name;
+		$m->bot->_core_more_commands->{$m->network}{$channel_name} = lc $m->command->name;
 	});
 	
 	$bot->add_command(
@@ -107,7 +107,7 @@ sub register {
 			my $m = shift;
 			my ($command_name) = $m->args_list;
 			my $channel_name = lc ($m->channel // $m->sender);
-			$command_name //= $m->bot->core_more_commands->{$m->network}{$channel_name};
+			$command_name //= $m->bot->_core_more_commands->{$m->network}{$channel_name};
 			return $m->reply("No more to display") unless defined $command_name;
 			my $command = $m->bot->get_command($command_name);
 			if (!defined $command and $m->config->param('commands','prefixes')) {
@@ -119,7 +119,7 @@ sub register {
 			}
 			return $m->reply("No more to display for $command_name")
 				unless $command and $command->has_on_more;
-			$m->bot->core_more_commands->{$m->network}{$channel_name} = lc $command->name;
+			$m->bot->_core_more_commands->{$m->network}{$channel_name} = lc $command->name;
 			return $command->on_more->($m);
 		},
 	);

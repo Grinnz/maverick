@@ -8,7 +8,7 @@ with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 
-has 'quote_cache' => (
+has '_quote_cache' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { {} },
@@ -19,8 +19,8 @@ has 'quote_cache' => (
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper(quote_cache => sub { $self->quote_cache });
-	$bot->add_helper(clear_quote_cache => sub { $self->clear_quote_cache });
+	$bot->add_helper(_quote_cache => sub { $self->_quote_cache });
+	$bot->add_helper(_clear_quote_cache => sub { $self->_clear_quote_cache });
 	
 	$bot->add_command(
 		name => 'addquote',
@@ -36,7 +36,7 @@ sub register {
 			push @$quotes, $quote;
 			my $num = @$quotes;
 			
-			$m->bot->clear_quote_cache;
+			$m->bot->_clear_quote_cache;
 			$m->reply("Added quote $num");
 		},
 		required_access => ACCESS_BOT_ADMIN,
@@ -61,7 +61,7 @@ sub register {
 			
 			my ($quote) = splice @$quotes, $num-1, 1;
 			
-			$m->clear_quote_cache;
+			$m->_clear_quote_cache;
 			return $m->reply("Deleted quote $num: $quote");
 		},
 		required_access => ACCESS_BOT_ADMIN,
@@ -104,7 +104,7 @@ sub register {
 				$match_by = '!';
 			}
 			
-			my $results = $m->bot->quote_cache->{$match_by}{lc $args};
+			my $results = $m->bot->_quote_cache->{$match_by}{lc $args};
 			if (defined $results) {
 				_display_quote($m, $quotes, $results, $num);
 			} else {
@@ -124,7 +124,7 @@ sub register {
 						$err =~ s/ at .+? line .+?\.$//;
 						return $m->reply("Invalid search regex: $err");
 					}
-					$results = $m->bot->quote_cache->{$match_by}{lc $args} = $matches;
+					$results = $m->bot->_quote_cache->{$match_by}{lc $args} = $matches;
 					_display_quote($m, $quotes, $results, $num);
 				})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 			}
@@ -157,7 +157,7 @@ sub register {
 				die $err if $err;
 				return $m->reply("No quotes to add")
 					unless $num_quotes;
-				$m->bot->clear_quote_cache;
+				$m->bot->_clear_quote_cache;
 				$m->reply("Loaded $num_quotes from $filename");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
@@ -201,7 +201,7 @@ sub register {
 			}, sub {
 				my ($fc, $err) = @_;
 				die $err if $err;
-				$m->bot->clear_quote_cache;
+				$m->bot->_clear_quote_cache;
 				$m->reply("Deleted all quotes");
 			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
 		},
