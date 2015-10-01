@@ -20,8 +20,7 @@ has '_results_cache' => (
 sub register {
 	my ($self, $bot) = @_;
 	
-	$bot->add_helper(_wikipedia => sub { $self });
-	$bot->add_helper(wikipedia_results_cache => sub { shift->_wikipedia->_results_cache });
+	$bot->add_helper(_wikipedia_results_cache => sub { $self->_results_cache });
 	$bot->add_helper(wikipedia_search => \&_wikipedia_search);
 	$bot->add_helper(wikipedia_page => \&_wikipedia_page);
 	
@@ -34,69 +33,58 @@ sub register {
 			my $query = $m->args;
 			return 'usage' unless length $query;
 			
-			$m->bot->wikipedia_search($query, sub {
+			return $m->bot->wikipedia_search($query)->then(sub {
 				my $titles = shift;
-				return $m->reply("No results for Wikipedia search") unless @$titles;
+				unless (@$titles) {
+					$m->reply("No results for Wikipedia search");
+					return $m->bot->new_future->done(undef);
+				}
 				
 				my $first_title = shift @$titles;
 				my $channel_name = lc ($m->channel // $m->sender);
-				$m->bot->wikipedia_results_cache->{$m->network}{$channel_name} = $titles;
+				$m->bot->_wikipedia_results_cache->{$m->network}{$channel_name} = $titles;
 				$m->show_more(scalar @$titles);
-				_display_wiki_page($m, $first_title);
-			})->catch(sub { $m->reply("Wikipedia search error: $_[1]") });
+				
+				return $m->bot->wikipedia_page($first_title);
+			})->on_done(sub {
+				my $page = shift;
+				_display_wiki_page($m, $page);
+			})->on_fail(sub { $m->reply("Wikipedia search error: $_[0]") });
 		},
 		on_more => sub {
 			my $m = shift;
 			my $channel_name = lc ($m->channel // $m->sender);
-			my $titles = $m->bot->wikipedia_results_cache->{$m->network}{$channel_name} // [];
+			my $titles = $m->bot->_wikipedia_results_cache->{$m->network}{$channel_name} // [];
 			return $m->reply("No more results for Wikipedia search") unless @$titles;
 			
 			my $next_title = shift @$titles;
 			$m->show_more(scalar @$titles);
-			_display_wiki_page($m, $next_title);
+			
+			return $m->bot->wikipedia_page($next_title)->on_done(sub {
+				my $page = shift;
+				_display_wiki_page($m, $page);
+			})->on_fail(sub { $m->reply("Wikipedia search error: $_[0]") });
 		},
 	);
 }
 
 sub _wikipedia_search {
-	my ($bot, $query, $cb) = @_;
+	my ($bot, $query) = @_;
 	croak 'Undefined search query' unless defined $query;
 	
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)
 		->query(format => 'json', action => 'opensearch', search => $query);
-	unless ($cb) {
-		my $tx = $bot->ua->get($url);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return ($tx->res->json//[])->[1]//[];
-	}
-	return Mojo::IOLoop->delay(sub {
-		$bot->ua->get($url, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(($tx->res->json//[])->[1]//[]);
-	});
+	return $bot->ua_request($url)->transform(done => sub { (shift->json // [])->[1] // [] });
 }
 
 sub _wikipedia_page {
-	my ($bot, $title, $cb) = @_;
+	my ($bot, $title) = @_;
 	croak 'Undefined page title' unless defined $title;
 	
 	my $url = Mojo::URL->new(WIKIPEDIA_API_ENDPOINT)->query(format => 'json', action => 'query',
 		redirects => 1, prop => 'extracts|info', explaintext => 1, exsectionformat => 'plain',
 		exchars => 250, inprop => 'url', titles => $title);
-	unless ($cb) {
-		my $tx = $bot->ua->get($url);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return _find_page_result($tx->res->json->{query}{pages});
-	}
-	return Mojo::IOLoop->delay(sub {
-		$bot->ua->get($url, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(_find_page_result($tx->res->json->{query}{pages}));
-	});
+	return $bot->ua_request($url)->transform(done => sub { _find_page_result(shift->json->{query}{pages}) });
 }
 
 sub _find_page_result {
@@ -106,21 +94,17 @@ sub _find_page_result {
 }
 
 sub _display_wiki_page {
-	my ($m, $title) = @_;
+	my ($m, $page) = @_;
+	return() unless defined $page;
 	
-	$m->bot->wikipedia_page($title, sub {
-		my $page = shift;
-		return $m->reply("Wikipedia page $title not found") unless defined $page;
-		
-		my $title = $page->{title} // '';
-		my $url = $page->{fullurl} // '';
-		my $extract = $page->{extract} // '';
-		$extract =~ s/\n/ /g;
-		
-		my $b_code = chr 2;
-		my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract";
-		return $m->reply($response);
-	})->catch(sub { $m->reply("Error retrieving Wikipedia result: $_[1]") });
+	my $title = $page->{title} // '';
+	my $url = $page->{fullurl} // '';
+	my $extract = $page->{extract} // '';
+	$extract =~ s/\n/ /g;
+	
+	my $b_code = chr 2;
+	my $response = "Wikipedia search result: $b_code$title$b_code - $url - $extract";
+	$m->reply($response);
 }
 
 1;

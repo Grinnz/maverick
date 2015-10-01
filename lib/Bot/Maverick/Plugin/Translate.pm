@@ -2,7 +2,6 @@ package Bot::Maverick::Plugin::Translate;
 
 use Carp 'croak';
 use Mojo::DOM;
-use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;

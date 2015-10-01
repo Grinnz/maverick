@@ -120,7 +120,7 @@ sub register {
 			return $m->reply("No more to display for $command_name")
 				unless $command and $command->has_on_more;
 			$m->bot->core_more_commands->{$m->network}{$channel_name} = lc $command->name;
-			$command->on_more->($m);
+			return $command->on_more->($m);
 		},
 	);
 	

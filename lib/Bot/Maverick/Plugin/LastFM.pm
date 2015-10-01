@@ -1,7 +1,6 @@
 package Bot::Maverick::Plugin::LastFM;
 
 use Carp 'croak';
-use Mojo::IOLoop;
 use Mojo::URL;
 use Time::Duration 'ago';
 
@@ -24,8 +23,7 @@ sub register {
 	$self->api_key($bot->config->param('apis','lastfm_api_key')) unless defined $self->api_key;
 	die LASTFM_API_KEY_MISSING unless defined $self->api_key;
 	
-	$bot->add_helper(_lastfm => sub { $self });
-	$bot->add_helper(lastfm_api_key => sub { shift->_lastfm->api_key });
+	$bot->add_helper(lastfm_api_key => sub { $self->api_key });
 	$bot->add_helper(lastfm_last_track => \&_lastfm_last_track);
 	
 	$bot->add_command(
@@ -50,42 +48,31 @@ sub register {
 			}
 			
 			$m->logger->debug("Retrieving Last.fm recent tracks for $username");
-			$m->bot->lastfm_last_track($username, sub {
+			return $m->bot->lastfm_last_track($username)->on_done(sub {
 				my $track = shift;
 				return $m->reply("No recent tracks found for $username")
 					unless defined $track;
 				_lastfm_result($m, $track, $username);
-			})->catch(sub { $m->reply("Error retrieving recent tracks for $username: $_[1]") });
+			})->on_fail(sub { $m->reply("Error retrieving recent tracks for $username: $_[0]") });
 		},
 	);
 }
 
 sub _lastfm_last_track {
-	my ($bot, $username, $cb) = @_;
+	my ($bot, $username) = @_;
 	croak 'Undefined Last.fm username' unless defined $username;
 	die LASTFM_API_KEY_MISSING unless defined $bot->lastfm_api_key;
 	
 	my $request = Mojo::URL->new(LASTFM_API_ENDPOINT)->query(method => 'user.getrecenttracks',
 		user => $username, api_key => $bot->lastfm_api_key, format => 'json', limit => 1);
-	unless ($cb) {
-		my $tx = $bot->ua->get($request);
-		die $bot->ua_error($tx->error) if $tx->error;
-		return _lastfm_recenttrack($tx->res->json);
-	}
-	return Mojo::IOLoop->delay(sub {
-		$bot->ua->get($request, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $bot->ua_error($tx->error) if $tx->error;
-		$cb->(_lastfm_recenttrack($tx->res->json));
+	return $bot->ua_request($request)->then(sub {
+		my $res = shift;
+		my $data = $res->json;
+		return $bot->new_future->fail("Last.fm error: $data->{message}") if $data->{error};
+		my $track = ref $data->{recenttracks}{track} eq 'ARRAY'
+			? $data->{recenttracks}{track}[0] : $data->{recenttracks}{track};
+		return $bot->new_future->done($track);
 	});
-}
-
-sub _lastfm_recenttrack {
-	my $response = shift;
-	die "Last.fm error: $response->{message}\n" if $response->{error};
-	return ref $response->{recenttracks}{track} eq 'ARRAY'
-		? $response->{recenttracks}{track}[0] : $response->{recenttracks}{track};
 }
 
 sub _lastfm_result {
