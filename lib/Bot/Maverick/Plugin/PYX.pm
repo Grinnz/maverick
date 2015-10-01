@@ -1,6 +1,5 @@
 package Bot::Maverick::Plugin::PYX;
 
-use Mojo::IOLoop;
 use Mojo::URL;
 
 use Moo;
@@ -46,42 +45,37 @@ sub register {
 				}
 			}
 			
-			Mojo::IOLoop->delay(sub {
-				my $delay = shift;
-				if (defined $black_card_text) {
-					$white_card_count = 1 if $white_card_count < 1;
-					$delay->pass({ text => $black_card_text, pick => $white_card_count });
-				} else {
-					_get_black_card($m, $black_card_pick, $delay->begin(0))
-						->catch(sub { $m->reply("Error retrieving black card: $_[1]") });
-				}
-			}, sub {
-				my ($delay, $card) = @_;
+			my $future;
+			if (defined $black_card_text) {
+				$white_card_count = 1 if $white_card_count < 1;
+				$future = $m->bot->new_future->done({ text => $black_card_text, pick => $white_card_count });
+			} else {
+				$future = _get_black_card($m, $black_card_pick);
+			}
+			return $future->then(sub {
+				my $card = shift;
 				$white_card_count //= $card->{pick} // 1;
 				if ($white_card_count > 0) {
-					my $end = $delay->begin(0);
-					_get_white_cards($m, $white_card_count, sub {
+					return _get_white_cards($m, $white_card_count)->transform(done => sub {
 						my $cards = shift;
 						if (@$white_cards) {
 							$_ //= shift @$cards for @$white_cards;
 						} else {
 							$white_cards = $cards;
 						}
-						$end->($card->{text}, $white_cards);
-					})->catch(sub { $m->reply("Error retrieving white cards: $_[1]") });
+						return ($card->{text}, $white_cards);
+					});
 				} else {
-					$delay->pass($card->{text}, $white_cards);
+					return $m->bot->new_future->done($card->{text}, $white_cards);
 				}
-			}, sub {
-				my ($delay, $black_card, $white_cards) = @_;
-				_show_pyx_match($m, $black_card, $white_cards);
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_done(sub { _show_pyx_match($m, @_) })
+				->on_fail(sub { $m->reply("Error retrieving PYX cards: $_[0]") });
 		},
 	);
 }
 
 sub _get_black_card {
-	my ($m, $pick, $cb) = @_;
+	my ($m, $pick) = @_;
 	if (defined $pick) {
 		$pick = 1 if $pick < 1;
 		$pick = PYX_MAX_PICK if $pick > PYX_MAX_PICK;
@@ -96,20 +90,17 @@ sub _get_black_card {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({pick => $pick}) if defined $pick;
 	
-	return Mojo::IOLoop->delay(sub {
-		$m->bot->ua->get($url, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $m->bot->ua_error($tx->error) if $tx->error;
-		my $card = $tx->res->json->{card};
-		die "No applicable black cards\n" unless defined $card and defined $card->{text};
+	return $m->bot->ua_request($url)->then(sub {
+		my $res = shift;
+		my $card = $res->json->{card};
+		return $m->bot->new_future->fail('No applicable black cards') unless defined $card and defined $card->{text};
 		$card->{text} = _format_pyx_card($card->{text});
-		$cb->($card);
+		return $m->bot->new_future->done($card);
 	});
 }
 
 sub _get_white_cards {
-	my ($m, $count, $cb) = @_;
+	my ($m, $count) = @_;
 	$count //= 1;
 	$count = 1 if $count < 1;
 	$count = PYX_MAX_COUNT if $count > PYX_MAX_COUNT;
@@ -123,14 +114,11 @@ sub _get_white_cards {
 	$url->query({card_set => \@card_sets}) if @card_sets;
 	$url->query({count => $count});
 	
-	return Mojo::IOLoop->delay(sub {
-		$m->bot->ua->get($url, shift->begin);
-	}, sub {
-		my ($delay, $tx) = @_;
-		die $m->bot->ua_error($tx->error) if $tx->error;
-		my $cards = $tx->res->json->{cards} // [];
+	return $m->bot->ua_request($url)->transform(done => sub {
+		my $res = shift;
+		my $cards = $res->json->{cards} // [];
 		$_ = _format_pyx_card($_->{text}) for @$cards;
-		$cb->($cards);
+		return $cards;
 	});
 }
 
