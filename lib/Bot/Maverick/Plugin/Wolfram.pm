@@ -218,7 +218,7 @@ Bot::Maverick::Plugin::Wolfram - Wolfram|Alpha plugin for Maverick
  
  # Standalone usage
  my $wolfram = Bot::Maverick::Plugin::Wolfram->new(api_key => $api_key);
- my $results = $wolfram->wolfram_query($query);
+ my $results = $wolfram->wolfram_query($query)->get;
 
 =head1 DESCRIPTION
 
@@ -241,14 +241,13 @@ C<wolfram_api_key> in section C<apis>.
 
 =head2 wolfram_query
 
- my $results = $bot->wolfram_query($query);
- $bot->wolfram_query($query, sub {
+ my $results = $bot->wolfram_query($query)->get;
+ my $future = $bot->wolfram_query($query)->on_done(sub {
    my $results = @_;
- })->catch(sub { $m->reply("Wolfram|Alpha query error: $_[1]") });
+ })->on_fail(sub { $m->reply("Wolfram|Alpha query error: $_[0]") });
 
-Query Wolfram|Alpha. Returns the results as a L<Mojo::DOM> object, or throws an
-exception on transport error. Pass a callback to perform the query
-non-blocking.
+Query Wolfram|Alpha. Returns a L<Future::Mojo> with the results as a
+L<Mojo::DOM> object.
 
 Wolfram|Alpha will set the C<success> attribute of the root element to C<true>
 if the query was successful, and the C<error> attribute to C<true> if an error

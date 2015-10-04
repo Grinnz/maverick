@@ -159,14 +159,14 @@ as a L<GeoIP2::Model::City> object. Throws an exception on error.
 
 =head2 geoip_locate_host
 
- my $record = $bot->geoip_locate_host($hostname);
- $bot->geoip_locate_host($hostname, sub {
+ my $record = $bot->geoip_locate_host($hostname)->get;
+ my $future = $bot->geoip_locate_host($hostname)->on_done(sub {
    my $record = shift;
- })->catch(sub { $m->reply("Error locating $hostname: $_[1]") });
+ })->on_fail(sub { $m->reply("Error locating $hostname: $_[0]") });
 
 Attempt to resolve a hostname and locate the resulting IP address in the GeoIP
-database with L</"geoip_locate">. If a callback is passed, non-blocking DNS
-resolution will be used if available. Throws an exception on error. Requires
+database with L</"geoip_locate">, returning a L<Future::Mojo> with the matching
+record if any. Non-blocking DNS resolution will be used if available. Requires
 the L<Bot::Maverick::Plugin::DNS> plugin.
 
 =head1 COMMANDS

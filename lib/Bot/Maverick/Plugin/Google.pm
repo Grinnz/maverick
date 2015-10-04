@@ -256,7 +256,7 @@ Bot::Maverick::Plugin::Google - Google search plugin for Maverick
  
  # Standalone usage
  my $google = Bot::Maverick::Plugin::Google->new(api_key => $api_key, cse_id => $cse_id);
- my $results = $google->google_search_web($query);
+ my $results = $google->google_search_web($query)->get;
 
 =head1 DESCRIPTION
 
@@ -287,25 +287,43 @@ C<google_cse_id> in section C<apis>.
 
 =head2 google_search_web
 
- my $results = $bot->google_search_web($query);
- $bot->google_search_web($query, sub {
+ my $results = $bot->google_search_web($query)->get;
+ my $future = $bot->google_search_web($query)->on_done(sub {
    my $results = shift;
- })->catch(sub { $m->reply("Google search error: $_[1]") });
+ })->on_fail(sub { $m->reply("Google search error: $_[0]") });
 
-Search Google web search. Returns the results (if any) in an arrayref, or
-throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Search Google web search. Returns a L<Future::Mojo> containing the results (if
+any) in an arrayref.
+
+=head2 google_search_web_count
+
+ my $count = $bot->google_search_web_count($query)->get;
+ my $future = $bot->google_search_web($query)->on_done(sub {
+   my $count = shift;
+ })->on_fail(sub { $m->reply("Google search error: $_[0]") });
+
+Search Google web search. Returns a L<Future::Mojo> containing the approximate
+number of results.
 
 =head2 google_search_image
 
- my $results = $bot->google_search_image($query);
- $bot->google_search_image($query, sub {
+ my $results = $bot->google_search_image($query)->get;
+ my $future = $bot->google_search_image($query)->on_done(sub {
    my $results = shift;
- })->catch(sub { $m->reply("Google search error: $_[1]") });
+ })->on_fail(sub { $m->reply("Google search error: $_[0]") });
 
-Search Google image search. Returns the results (if any) in an arrayref, or
-throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Search Google image search. Returns a L<Future::Mojo> containing the results
+(if any) in an arrayref.
+
+=head2 google_complete
+
+ my $suggestions = $bot->google_complete($query)->get;
+ my $future = $bot->google_complete($query)->on_done(sub {
+   my $suggestions = shift;
+ })->on_fail(sub { $m->reply("Google search error: $_[0]") });
+
+Returns a L<Future::Mojo> containing Google autocomplete suggestions in an
+arrayref.
 
 =head1 COMMANDS
 

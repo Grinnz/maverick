@@ -268,9 +268,9 @@ Bot::Maverick::Plugin::Twitter - Twitter plugin for Maverick
  
  # Standalone usage
  my $twitter = Bot::Maverick::Plugin::Twitter->new(api_key => $api_key, api_secret => $api_secret);
- my $tweets = $twitter->twitter_search($query);
- my $tweet = $twitter->twitter_tweet_by_user($user);
- my $tweet = $twitter->twitter_tweet_by_id($id);
+ my $tweets = $twitter->twitter_search($query)->get;
+ my $tweet = $twitter->twitter_tweet_by_user($user)->get;
+ my $tweet = $twitter->twitter_tweet_by_id($id)->get;
 
 =head1 DESCRIPTION
 
@@ -298,35 +298,33 @@ C<twitter_api_secret> in section C<apis>.
 
 =head2 twitter_search
 
- my $tweets = $bot->twitter_search($query);
- $bot->twitter_search($query, sub {
+ my $tweets = $bot->twitter_search($query)->get;
+ my $future = $bot->twitter_search($query)->on_done(sub {
    my $tweets = shift;
- })->catch(sub { $m->reply("Twitter search error: $_[1]") });
+ })->on_fail(sub { $m->reply("Twitter search error: $_[0]") });
 
-Search tweets on Twitter. Returns the results (if any) in an arrayref, or
-throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Search tweets on Twitter. Returns a L<Future::Mojo> with the results (if any)
+in an arrayref.
 
 =head2 twitter_tweet_by_id
 
- my $tweet = $bot->twitter_tweet_by_id($id);
- $bot->twitter_tweet_by_id($id, sub {
+ my $tweet = $bot->twitter_tweet_by_id($id)->get;
+ my $future = $bot->twitter_tweet_by_id($id)->on_done(sub {
    my $tweet = shift;
- })->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
+ })->on_fail(sub { $m->reply("Error retrieving tweet: $_[0]") });
 
-Retrieve a tweet by Tweet ID. Returns the tweet data as a hashref, or throws an
-exception on error. Pass a callback to perform the query non-blocking.
+Retrieve a tweet by Tweet ID. Returns a L<Future::Mojo> with the tweet data as
+a hashref.
 
 =head2 twitter_tweet_by_user
 
- my $tweet = $bot->twitter_tweet_by_user($user);
- $bot->twitter_tweet_by_user($user, sub {
+ my $tweet = $bot->twitter_tweet_by_user($user)->get;
+ my $future = $bot->twitter_tweet_by_user($user)->on_done(sub {
    my $tweet = shift;
- })->catch(sub { $m->reply("Error retrieving tweet: $_[1]") });
+ })->on_fail(sub { $m->reply("Error retrieving tweet: $_[0]") });
 
-Retrieve the latest tweet in a user's timeline. Returns the tweet data as a
-hashref, or throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Retrieve the latest tweet in a user's timeline. Returns a L<Future::Mojo> with
+the tweet data as a hashref.
 
 =head1 CONFIGURATION
 

@@ -267,8 +267,8 @@ Bot::Maverick::Plugin::Weather - Weather plugin for Maverick
  
  # Standalone usage
  my $weather = Bot::Maverick::Plugin::Weather->new(api_key => $api_key);
- my ($err, $location_code) = $weather->weather_autocomplete_location_code($location);
- my ($err, $data) = $weather->weather_location_data($location_code);
+ my ($err, $location_code) = $weather->weather_autocomplete_location_code($location)->get;
+ my ($err, $data) = $weather->weather_location_data($location_code)->get;
 
 =head1 DESCRIPTION
 
@@ -291,26 +291,24 @@ C<wunderground_api_key> in section C<apis>.
 
 =head2 weather_autocomplete_location_code
 
- my $code = $bot->weather_autocomplete_location_code($query);
- $bot->weather_autocomplete_location_code($query, sub {
+ my $code = $bot->weather_autocomplete_location_code($query)->get;
+ my $future = $bot->weather_autocomplete_location_code($query)->on_done(sub {
    my $code = shift;
- })->catch(sub { $m->reply("Error locating $query: $_[1]") });
+ })->on_fail(sub { $m->reply("Error locating $query: $_[0]") });
 
-Attempt to find a location based on a string. Returns the location code on
-success, or throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Attempt to find a location based on a string. Returns a L<Future::Mojo> with
+the location code.
 
 =head2 weather_location_data
 
- my $data = $bot->weather_location_data($code);
- $bot->weather_location_data($code, sub {
+ my $data = $bot->weather_location_data($code)->get;
+ my $future = $bot->weather_location_data($code)-on_done(sub {
    my $data = shift;
- })->catch(sub { $m->reply("Error retrieving weather data: $_[1]") });
+ })->on_fail(sub { $m->reply("Error retrieving weather data: $_[0]") });
 
-Retrieve the weather and forecast data for a location code. Returns a hashref
-containing the weather data, consisting of C<location>, C<current_observation>,
-and C<forecast>. Throws an exception on error. Pass a callback to perform the
-query non-blocking.
+Retrieve the weather and forecast data for a location code. Returns a
+L<Future::Mojo> with a hashref containing the weather data, consisting of
+C<location>, C<current_observation>, and C<forecast>.
 
 =head1 COMMANDS
 

@@ -145,24 +145,25 @@ will fallback to a blocking method.
 
 head2 dns_resolve
 
- my $results = $bot->dns_resolve($hostname);
- $bot->dns_resolve($hostname, sub {
+ my $results = $bot->dns_resolve($hostname)->get;
+ my $future = $bot->dns_resolve($hostname)->on_done(sub {
    my $results = shift;
- })->catch(sub { $m->reply("DNS error: $_[1]") });
+ })->on_fail(sub { $m->reply("DNS error: $_[0]") });
 
-Attempt to resolve a hostname, returning an arrayref of results in the format
-returned by C<getaddrinfo> in L<Socket>. Pass a callback to run the query
-non-blocking if possible. Throws an exception on DNS error.
+Attempt to resolve a hostname, returning a L<Future::Mojo> with an arrayref of
+results in the format returned by C<getaddrinfo> in L<Socket>. The future will
+be set to failed on DNS error.
 
 head2 dns_resolve_ips
 
- my $ips = $bot->dns_resolve_ips($hostname);
- $bot->dns_resolve_ips($hostname, sub {
+ my $ips = $bot->dns_resolve_ips($hostname)->get;
+ my $future = $bot->dns_resolve_ips($hostname)->on_done(sub {
    my $ips = shift;
- })->catch(sub { $m->reply("DNS error: $_[1]") });
+ })->on_fail(sub { $m->reply("DNS error: $_[0]") });
 
-Attempt to resolve a hostname with L</"dns_resolve">, returning an arrayref of
-IPv4 and IPv6 address strings with duplicates and other results removed.
+Attempt to resolve a hostname with L</"dns_resolve">, returning a
+L<Future::Mojo> with the results parsed into an arrayref of IPv4 and IPv6
+address strings, with duplicates and other results removed.
 
 =head1 COMMANDS
 

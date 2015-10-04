@@ -106,7 +106,7 @@ Bot::Maverick::Plugin::LastFM - Last.FM plugin for Maverick
  
  # Standalone usage
  my $lastfm = Bot::Maverick::Plugin::LastFM->new(api_key => $api_key);
- my $track = $lastfm->lastfm_last_track($username);
+ my $track = $lastfm->lastfm_last_track($username)->get;
 
 =head1 DESCRIPTION
 
@@ -129,14 +129,14 @@ C<lastfm_api_key> in section C<apis>.
 
 =head2 lastfm_last_track
 
- my $track = $bot->lastfm_last_track($username);
- $bot->lastfm_last_track($username, sub {
+ my $track = $bot->lastfm_last_track($username)->get;
+ my $future = $bot->lastfm_last_track($username)->on_done(sub {
    my $track = shift;
- })->catch(sub { $m->reply("Error retrieving recent tracks for $username: $_[1]") });
+ })->on_fail(sub { $m->reply("Error retrieving recent tracks for $username: $_[0]") });
 
-Retrieve last-played track information from Last.FM for a username. Returns the
-track information as a hashref, or undef if no recent tracks are found. Throws
-an exception on error. Pass a callback to perform the query non-blocking.
+Retrieve last-played track information from Last.FM for a username. Returns a
+L<Mojo::Future> with the track information as a hashref, or undef if no recent
+tracks are found.
 
 =head1 COMMANDS
 

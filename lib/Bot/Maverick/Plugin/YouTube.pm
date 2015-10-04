@@ -160,7 +160,7 @@ Bot::Maverick::Plugin::YouTube - YouTube search plugin for Maverick
  
  # Standalone usage
  my $youtube = Bot::Maverick::Plugin::YouTube->new(api_key => $api_key);
- my $results = $youtube->youtube_search($query);
+ my $results = $youtube->youtube_search($query)->get;
 
 =head1 DESCRIPTION
 
@@ -184,24 +184,23 @@ C<google_api_key> in section C<apis>.
 
 =head2 youtube_search
 
- my $results = $bot->youtube_search($query);
- $bot->youtube_search($query, sub {
+ my $results = $bot->youtube_search($query)->get;
+ my $future = $bot->youtube_search($query)->on_done(sub {
    my $results = shift;
- })->catch(sub { $m->reply("YouTube search error: $_[1]") });
+ })->on_fail(sub { $m->reply("YouTube search error: $_[0]") });
 
-Search YouTube videos. Returns the results (if any) in an arrayref, or throws
-an exception on error. Pass a callback to perform the query non-blocking.
+Search YouTube videos. Returns a L<Future::Mojo> with the results (if any) in
+an arrayref.
 
 =head2 youtube_video
 
- my $result = $bot->youtube_video($video_id);
- $bot->youtube_video($video_id, sub {
+ my $result = $bot->youtube_video($video_id)->get;
+ my $future = $bot->youtube_video($video_id)->on_done(sub {
    my $result = shift;
- })->catch(sub { $m->reply("YouTube search error: $_[1]") });
+ })->on_fail(sub { $m->reply("YouTube search error: $_[0]") });
 
-Retrieve information for a YouTube video by its video ID. Returns the result
-if found or undef otherwise. Throws an exception on error. Pass a callback to
-perform the query non-blocking.
+Retrieve information for a YouTube video by its video ID. Returns a
+L<Future::Mojo> with the result if found or undef otherwise.
 
 =head1 CONFIGURATION
 

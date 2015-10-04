@@ -121,9 +121,9 @@ Bot::Maverick::Plugin::Wikipedia - Wikipedia search plugin for Maverick
  
  # Standalone usage
  my $wiki = Bot::Maverick::Plugin::Wikipedia->new;
- my $titles = $wiki->wikipedia_search($query);
+ my $titles = $wiki->wikipedia_search($query)->get;
  foreach my $title (@$titles) {
-   my $page = $wiki->wikipedia_page($title);
+   my $page = $wiki->wikipedia_page($title)->get;
  }
 
 =head1 DESCRIPTION
@@ -135,25 +135,23 @@ IRC bot.
 
 =head2 wikipedia_search
 
- my $titles = $bot->wikipedia_search($query);
- $bot->wikipedia_search($query, sub {
+ my $titles = $bot->wikipedia_search($query)->get;
+ my $future = $bot->wikipedia_search($query)->on_done(sub {
    my $titles = shift;
- })->catch(sub { $m->reply("Wikipedia search error: $_[1]") });
+ })->on_fail(sub { $m->reply("Wikipedia search error: $_[0]") });
 
-Search Wikipedia page titles. Returns matching page titles (if any) in an
-arrayref, or throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Search Wikipedia page titles. Returns a L<Future::Mojo> with an arrayref of
+matching page titles (if any).
 
 =head2 wikipedia_page
 
- my $page = $bot->wikipedia_page($title);
- $bot->wikipedia_page($title, sub {
+ my $page = $bot->wikipedia_page($title)->get;
+ my $future = $bot->wikipedia_page($title)->on_done(sub {
    my $page = shift;
- })->catch(sub { $m->reply("Error retrieving page from Wikipedia: $_[1]") });
+ })->on_fail(sub { $m->reply("Error retrieving page from Wikipedia: $_[0]") });
 
-Retrieve a Wikipedia page by title. Returns the page data as a hashref, or
-undef if it is not found. Throws an exception on error. Pass a calback to
-perform the query non-blocking.
+Retrieve a Wikipedia page by title. Returns a L<Future::Mojo> with the page
+data as a hashref, or undef if it is not found.
 
 =head1 COMMANDS
 

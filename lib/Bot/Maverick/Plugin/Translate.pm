@@ -265,8 +265,8 @@ Bot::Maverick::Plugin::Translate - Language translation plugin for Maverick
  
  # Standalone usage
  my $translate = Bot::Maverick::Plugin::Translate->new(client_id => $client_id, client_secret => $client_secret);
- my $from = $translate->detect_language($text);
- my $translated = $translate->translate_text($text, $from, $to);
+ my $from = $translate->detect_language($text)->get;
+ my $translated = $translate->translate_text($text, $from, $to)->get;
 
 =head1 DESCRIPTION
 
@@ -295,14 +295,13 @@ C<microsoft_client_secret> in section C<apis>.
 
 =head2 detect_language
 
- my $language_code = $bot->detect_language($text);
- $bot->detect_language($text, sub {
+ my $language_code = $bot->detect_language($text)->get;
+ my $future = $bot->detect_language($text)->on_done(sub {
    my $language_code = shift;
- })->catch(sub { $m->reply("Error detecting language: $_[1]") });
+ })->on_fail(sub { $m->reply("Error detecting language: $_[0]") });
 
-Attempt to detect the language of a text string. Returns the language code on
-success, or throws an exception on error. Pass a callback to perform the query
-non-blocking.
+Attempt to detect the language of a text string. Returns a L<Future::Mojo> with
+the language code.
 
 =head2 translate_language_code
 
@@ -320,14 +319,13 @@ language is unknown.
 
 =head2 translate_text
 
- my $translated = $bot->translate_text($text, $from, $to);
- $bot->translate_text($text, $from, $to, sub {
+ my $translated = $bot->translate_text($text, $from, $to)->get;
+ my $future = $bot->translate_text($text, $from, $to)->on_done(sub {
    my $translated = shift;
- })->catch(sub { $m->reply("Error translating text: $_[1]") });
+ })->on_fail(sub { $m->reply("Error translating text: $_[0]") });
 
-Attempt to translate a text string from one language to another. Returns the
-translated text on success, or throws an exception on error. Pass a callback to
-perform the query non-blocking.
+Attempt to translate a text string from one language to another. Returns a
+L<Future::Mojo> with the translated text.
 
 =head1 COMMANDS
 

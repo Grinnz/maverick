@@ -391,20 +391,6 @@ sub _remove_command_prefixes {
 	return $self;
 }
 
-sub adopt_future {
-	my ($self, $future) = @_;
-	my $key = "$future";
-	$self->_futures->{$key} = $future;
-	my $cancel = $self->once(stop => sub { $future->cancel });
-	weaken $cancel;
-	$future->on_ready(sub {
-		my $future = shift;
-		$self->unsubscribe(stop => $cancel) if $cancel;
-		delete $self->_futures->{$key};
-	});
-	return $future;
-}
-
 # Bot actions
 
 sub start {
@@ -467,6 +453,20 @@ sub timer_future {
 	return Future::Mojo->new_timer(Mojo::IOLoop->singleton, $delay);
 }
 
+sub adopt_future {
+	my ($self, $future) = @_;
+	my $key = "$future";
+	$self->_futures->{$key} = $future;
+	my $cancel = $self->once(stop => sub { $future->cancel });
+	weaken $cancel;
+	$future->on_ready(sub {
+		my $future = shift;
+		$self->unsubscribe(stop => $cancel) if $cancel;
+		delete $self->_futures->{$key};
+	});
+	return $future;
+}
+
 sub fork_call {
 	my ($self, @args) = @_;
 	my $serializer = $self->serializer;
@@ -476,9 +476,10 @@ sub fork_call {
 		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
 	);
 	my $future = $self->new_future;
+	weaken(my $weak_f = $future);
 	$fc->run(@args, sub {
 		my ($fc, $err, @return) = @_;
-		$err ? $future->fail($err) : $future->done(@return);
+		$err ? $weak_f->fail($err) : $weak_f->done(@return);
 	});
 	return $future;
 }
@@ -794,15 +795,44 @@ Returns an array reference of command objects matching a prefix, if any.
 
 Removes a command from the bot by name if it exists.
 
-=head2 ua_error
+=head2 new_future
 
-Forms a simple error message from a L<Mojo::UserAgent> transaction error hash.
+  my $future = $bot->new_future;
+
+Returns a L<Future::Mojo> initialized with the bot's L<Mojo::IOLoop>.
+
+=head2 timer_future
+
+  my $future = $bot->timer_future(1);
+
+Returns a L<Future::Mojo> initialized with the bot's L<Mojo::IOLoop>, which
+will be set to done after the specified delay in seconds.
+
+=head2 adopt_future
+
+  $future = $bot->adopt_future($future);
+
+Stores a reference to the passed L<Future> object which will be cleared once
+the future is ready. Stored futures will be cancelled if the bot is stopped.
+
+=head2 ua_request
+
+  my $future = $bot->ua_request($url);
+  my $future = $bot->ua_request(post => $url, {Authorization => 'open sesame'}, json => [1,2,3]);
+
+Runs a non-blocking L<Mojo::UserAgent> request and returns a L<Future::Mojo>
+that will be set to failed on connection or HTTP error, and otherwise will be
+set to done with the L<Mojo::Message::Response>. The first argument can
+optionally be a request method (defaults to C<get>), and the remaining
+arguments are passed to L<Mojo::UserAgent>.
 
 =head2 fork_call
 
-Runs the first callback in a forked process using L<Mojo::IOLoop::ForkCall> and
-calls the second callback when it completes. The returned
-L<Mojo::IOLoop::ForkCall> object can be used to catch errors.
+  my $future = $bot->fork_call(sub { return 'foo' });
+
+Runs a code ref in a forked process using L<Mojo::IOLoop::ForkCall> and returns
+a L<Future::Mojo> that will be set to failed if the code throws an exception,
+and otherwise will be set to done with the returned values.
 
 =head1 BUGS
 
