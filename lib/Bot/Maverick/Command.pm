@@ -3,6 +3,7 @@ package Bot::Maverick::Command;
 use Bot::Maverick::Access qw/:access valid_access_level/;
 use Carp;
 use Scalar::Util 'blessed';
+use Try;
 
 use Moo;
 use namespace::clean;
@@ -78,20 +79,21 @@ sub run {
 	my ($self, $m) = @_;
 	local $SIG{__WARN__} = sub { chomp(my $msg = shift); $m->logger->warn($msg) };
 	$m->bot->emit(before_command => $m);
-	local $@;
-	my $rc;
-	unless (eval { $rc = $self->on_run->($m); 1 }) {
-		chomp (my $err = $@);
+	my $returned;
+	try {
+		$returned = $self->on_run->($m);
+	} catch {
+		chomp(my $err = $_);
 		$m->reply("Internal error");
 		$m->logger->error(qq{"$self" failed: $err});
 	}
-	if (blessed $rc and $rc->isa('Future')) {
-		$m->bot->adopt_future($rc);
-		$rc->on_fail(sub {
+	if (blessed $returned and $returned->isa('Future')) {
+		$m->bot->adopt_future($returned);
+		$returned->on_fail(sub {
 			chomp(my $err = shift);
 			$m->logger->error(qq{"$self" failed: $err});
 		});
-	} elsif (defined $rc and lc $rc eq 'usage') {
+	} elsif (defined $returned and lc $returned eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));

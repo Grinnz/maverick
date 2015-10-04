@@ -4,6 +4,7 @@ use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
 use Scalar::Util 'blessed';
+use Try;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -23,16 +24,13 @@ sub _build__geoip {
 	my $self = shift;
 	my $file = $self->bot->config->param('apis', 'geoip_file');
 	die GEOIP_FILE_MISSING unless defined $file and length $file and -r $file;
-	my ($geoip, $err);
-	{
-		local $@;
-		if (eval { $geoip = GeoIP2::Database::Reader->new(file => $file); 1 }) {
-			return $geoip;
-		} else {
-			$err = $@;
-		}
+	my $geoip;
+	try {
+		$geoip = GeoIP2::Database::Reader->new(file => $file);
+	} catch {
+		die $_;
 	}
-	die $err;
+	return $geoip;
 }
 
 sub register {
@@ -71,14 +69,11 @@ sub register {
 sub _geoip_locate {
 	my ($bot, $ip) = @_;
 	die "Invalid IP address $ip\n" unless defined $ip and (is_ipv4 $ip or is_ipv6 $ip);
-	my ($record, $err, $errored);
-	{
-		local $@;
-		eval { $record = $bot->_geoip_resolver->city(ip => $ip); 1 } or $errored = 1;
-		$err = $@ if $errored;
-	}
-	if ($errored) {
-		die $err->message."\n" if blessed $err and $err->isa('Throwable::Error');
+	my $record;
+	try {
+		$record = $bot->_geoip_resolver->city(ip => $ip);
+	} catch {
+		my $err = (blessed $_ and $_->isa('Throwable::Error')) ? $_->message : $_;
 		chomp $err;
 		die "$err\n";
 	}
@@ -89,14 +84,15 @@ sub _geoip_locate_host {
 	my ($bot, $host) = @_;
 	croak 'Undefined hostname' unless defined $host;
 	if (is_ipv4 $host or is_ipv6 $host) {
-		my $record;
-		local $@;
-		if (eval { $record = $bot->geoip_locate($host); 1 }) {
-			return $bot->new_future->done($record);
-		} else {
-			chomp(my $err = $@);
-			return $bot->new_future->fail($err);
+		my $future;
+		try {
+			my $record = $bot->geoip_locate($host);
+			$future = $bot->new_future->done($record);
+		} catch {
+			chomp(my $err = $_);
+			$future = $bot->new_future->fail($err);
 		}
+		return $future;
 	}
 	return $bot->new_future->fail('DNS plugin is required to resolve hostnames')
 		unless $bot->has_helper('dns_resolve_ips');
@@ -108,13 +104,12 @@ sub _geoip_locate_host {
 		foreach my $addr (@$addrs) {
 			next unless is_ipv4 $addr or is_ipv6 $addr;
 			my $record;
-			local $@;
-			if (eval { $record = $bot->geoip_locate($addr); 1 }) {
-				return $bot->new_future->done($record) if defined $record->city->name;
-				$best_record //= $record;
-			} else {
-				chomp($last_err = $@);
+			try {
+				$best_record //= $record = $bot->geoip_locate($addr);
+			} catch {
+				chomp($last_err = $_);
 			}
+			return $bot->new_future->done($record) if defined $record and defined $record->city->name;
 		}
 		return $bot->new_future->fail($last_err) unless defined $best_record;
 		return $bot->new_future->done($best_record);

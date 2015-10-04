@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::Calc;
 
 use Carp 'croak';
 use Math::Calc::Parser 'calc';
+use Try;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -25,13 +26,12 @@ sub register {
 			my $m = shift;
 			my $expr = $m->args;
 			return 'usage' unless length $expr;
-			my ($err, $result);
-			{
-				local $@;
-				eval { $result = $m->bot->calc_expression($expr); 1 } or $err = $@;
+			try {
+				my $result = $m->bot->calc_expression($expr);
+				$m->reply("Result: $result");
+			} catch {
+				$m->reply("Error evaluating expression: $_");
 			}
-			return $m->reply("Error evaluating expression: $err") if defined $err;
-			$m->reply("Result: $result");
 		},
 	);
 }

@@ -1,12 +1,15 @@
 package Bot::Maverick;
 
+use Try;
+
 # Use JSON::MaybeXS for JSON API processing if available
-BEGIN { eval { require Mojo::JSON::MaybeXS; 1 } }
+BEGIN { try { require Mojo::JSON::MaybeXS } }
 
 use Carp;
 use IRC::Utils;
 use Future::Mojo;
 use List::Util 'any';
+use Module::Runtime 'use_module';
 use Mojo::IOLoop;
 use Mojo::IOLoop::ForkCall;
 use Mojo::Log;
@@ -262,15 +265,14 @@ sub add_network {
 	croak "Network $name already exists" if exists $self->networks->{lc $name};
 	my $class = $attrs->{class} // 'Bot::Maverick::Network';
 	$class = "Bot::Maverick::Network::$class" unless $class =~ /::/;
-	my $err;
-	{
-		local $@;
-		eval "require $class; 1" or $err = $@;
-	}
-	croak $err if defined $err;
 	my %params = (name => $name, bot => $self);
 	$params{config} = $attrs->{config} if defined $attrs->{config};
-	$self->networks->{lc $name} = $class->new(%params);
+	try {
+		my $network = use_module($class)->new(%params);
+		$self->networks->{lc $name} = $network;
+	} catch {
+		croak "Network class $class could not be loaded: $_";
+	}
 	return $self;
 }
 
@@ -280,22 +282,14 @@ sub add_plugin {
 	my ($self, $class, $params) = @_;
 	croak "Plugin class not defined" unless defined $class;
 	$class = "Bot::Maverick::Plugin::$class" unless $class =~ /::/;
-	my ($plugin, $err, $errored);
-	{
-		local $@;
-		eval {
-			die $err = $@ unless eval "require $class; 1";
-			die "$class does not perform the role Bot::Maverick::Plugin\n"
-				unless $class->DOES('Bot::Maverick::Plugin');
-			my @params = ref $params eq 'HASH' ? %$params : ();
-			$plugin = $class->new(@params, bot => $self);
-			$plugin->register($self);
-			1;
-		} or $errored = 1;
-		$err = $@ if $errored;
-	}
-	if ($errored) {
-		croak "Plugin $class could not be registered: $err";
+	my @params = ref $params eq 'HASH' ? %$params : ();
+	try {
+		my $plugin = use_module($class)->new(@params, bot => $self);
+		die "$class does not perform the role Bot::Maverick::Plugin\n"
+			unless $plugin->can('does') and $plugin->does('Bot::Maverick::Plugin');
+		$plugin->register($self);
+	} catch {
+		croak "Plugin $class could not be registered: $_";
 	}
 	return $self;
 }

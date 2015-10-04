@@ -96,6 +96,7 @@ EOW
         "Future::Mojo" => "0.002",
         "IRC::Utils" => "0.12",
         "List::Util" => 0,
+        "Module::Runtime" => 0,
         "Mojo::IOLoop::ForkCall" => "0.16",
         "Mojo::IRC" => "0.26",
         "Mojolicious" => "6.0",
@@ -105,6 +106,7 @@ EOW
         "Role::EventEmitter" => 0,
         "Scalar::Util" => 0,
         "Sereal" => 0,
+        "Try" => 0,
         "namespace::clean" => 0,
         "perl" => "5.010001"
       },
