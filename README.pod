@@ -278,6 +278,12 @@ Returns an array reference of command objects matching a prefix, if any.
 
 Removes a command from the bot by name if it exists.
 
+=head2 loop
+
+  my $loop = $bot->loop;
+
+Returns the L<Mojo::IOLoop> singleton used for the bot's operation.
+
 =head2 new_future
 
   my $future = $bot->new_future;
