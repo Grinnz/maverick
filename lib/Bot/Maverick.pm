@@ -457,18 +457,6 @@ sub _sig_reload {
 
 # Utility methods
 
-sub fork_call {
-	my ($self, @args) = @_;
-	my $cb = (@args > 1 and ref $args[-1] eq 'CODE') ? pop @args : sub {};
-	my $serializer = $self->serializer;
-	my $deserializer = $self->deserializer;
-	my $fc = Mojo::IOLoop::ForkCall->new(
-		serializer => sub { sereal_encode_with_object($serializer, shift) },
-		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
-	);
-	return $fc->run(@args, $cb);
-}
-
 sub new_future {
 	my $self = shift;
 	return Future::Mojo->new(Mojo::IOLoop->singleton);
@@ -477,6 +465,22 @@ sub new_future {
 sub timer_future {
 	my ($self, $delay) = @_;
 	return Future::Mojo->new_timer(Mojo::IOLoop->singleton, $delay);
+}
+
+sub fork_call {
+	my ($self, @args) = @_;
+	my $serializer = $self->serializer;
+	my $deserializer = $self->deserializer;
+	my $fc = Mojo::IOLoop::ForkCall->new(
+		serializer => sub { sereal_encode_with_object($serializer, shift) },
+		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
+	);
+	my $future = $self->new_future;
+	$fc->run(@args, sub {
+		my ($fc, $err, @return) = @_;
+		$err ? $future->fail($err) : $future->done(@return);
+	});
+	return $future;
 }
 
 my %methods = map { ($_ => 1) } qw(get post head put delete patch);

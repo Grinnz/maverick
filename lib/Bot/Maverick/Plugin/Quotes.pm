@@ -108,7 +108,7 @@ sub register {
 			if (defined $results) {
 				_display_quote($m, $quotes, $results, $num);
 			} else {
-				$m->bot->fork_call(sub {
+				return $m->bot->fork_call(sub {
 					my $re = qr/$args/i;
 					$quotes->lock_shared;
 					my $num_quotes = @$quotes;
@@ -117,18 +117,16 @@ sub register {
 						: grep { $quotes->[$_-1] !~ $re } (1..$num_quotes);
 					$quotes->unlock;
 					return \@matches;
-				}, sub {
-					my ($fc, $err, $matches) = @_;
-					if ($err) {
-						chomp $err;
-						$err =~ s/ at .+? line .+?\.$//;
-						return $m->reply("Invalid search regex: $err");
-					}
+				})->on_done(sub {
+					my $matches = shift;
 					$results = $m->bot->_quote_cache->{$match_by}{lc $args} = $matches;
 					_display_quote($m, $quotes, $results, $num);
-				})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+				})->on_fail(sub {
+					chomp(my $err = shift);
+					$err =~ s/ at .+? line .+?\.$//;
+					return $m->reply("Invalid search regex: $err");
+				});
 			}
-			
 		},
 	);
 	
@@ -146,20 +144,18 @@ sub register {
 				unless -r $filename;
 			
 			my $quotes = $m->bot->storage->data->{quotes} //= [];
-			$m->bot->fork_call(sub {
+			return $m->bot->fork_call(sub {
 				my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', slurp $filename;
 				return 0 unless @add_quotes;
 				my $num_quotes = @add_quotes;
 				push @$quotes, @add_quotes;
 				return $num_quotes;
-			}, sub {
-				my ($fc, $err, $num_quotes) = @_;
-				die $err if $err;
-				return $m->reply("No quotes to add")
-					unless $num_quotes;
+			})->on_done(sub {
+				my $num_quotes = shift;
+				return $m->reply("No quotes to add") unless $num_quotes;
 				$m->bot->_clear_quote_cache;
 				$m->reply("Loaded $num_quotes from $filename");
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_fail(sub { $m->reply("Internal error") });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -178,14 +174,13 @@ sub register {
 				if -e $filename;
 			
 			my $quotes = $m->bot->storage->data->{quotes} // [];
-			$m->bot->fork_call(sub {
+			return $m->bot->fork_call(sub {
 				spurt encode('UTF-8', join("\n", @$quotes)."\n"), $filename;
 				return scalar @$quotes;
-			}, sub {
-				my ($fc, $err, $num_quotes) = @_;
-				die $err if $err;
+			})->on_done(sub {
+				my $num_quotes = shift;
 				$m->reply("Stored $num_quotes quotes to $filename");
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_fail(sub { $m->reply("Internal error") });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
@@ -195,15 +190,11 @@ sub register {
 		help_text => 'Delete all quotes',
 		on_run => sub {
 			my $m = shift;
-			$m->bot->fork_call(sub {
+			return $m->bot->fork_call(sub {
 				$m->bot->storage->data->{quotes} = [];
 				return 1;
-			}, sub {
-				my ($fc, $err) = @_;
-				die $err if $err;
-				$m->bot->_clear_quote_cache;
-				$m->reply("Deleted all quotes");
-			})->catch(sub { $m->reply("Internal error"); chomp (my $err = $_[1]); $m->logger->error($err) });
+			})->on_done(sub { $m->bot->_clear_quote_cache; $m->reply("Deleted all quotes") })
+				->on_fail(sub { $m->reply("Internal error") });
 		},
 		required_access => ACCESS_BOT_MASTER,
 	);
