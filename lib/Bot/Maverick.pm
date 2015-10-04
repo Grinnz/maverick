@@ -443,6 +443,8 @@ sub _sig_reload {
 
 # Utility methods
 
+sub loop { Mojo::IOLoop->singleton }
+
 sub new_future {
 	my $self = shift;
 	return Future::Mojo->new(Mojo::IOLoop->singleton);
@@ -794,6 +796,12 @@ Returns an array reference of command objects matching a prefix, if any.
   $bot = $bot->remove_command('locate');
 
 Removes a command from the bot by name if it exists.
+
+=head2 loop
+
+  my $loop = $bot->loop;
+
+Returns the L<Mojo::IOLoop> singleton used for the bot's operation.
 
 =head2 new_future
 

@@ -149,10 +149,15 @@ sub _reply {
 	} elsif (defined $sender) {
 		my @writes;
 		$message .= $more_str;
+		my $future = $self->bot->new_future->done;
 		foreach my $reply ($self->_split_reply(privmsg => $sender, $message)) {
-			push @writes, sub { $self->network->write(privmsg => $sender, ":$reply", shift->begin) };
+			$future = $future->then_with_f(sub {
+				my $f = shift->new;
+				$self->network->write(privmsg => $sender, ":$reply", sub { $f->done });
+				return $f;
+			});
 		}
-		Mojo::IOLoop->delay(@writes);
+		$self->bot->adopt_future($future);
 	} else {
 		croak "No sender or channel specified for reply";
 	}

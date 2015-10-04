@@ -3,7 +3,6 @@ package Bot::Maverick::Network;
 use Carp;
 use List::Util 'any';
 use IRC::Utils 'parse_user';
-use Mojo::IOLoop;
 use Mojo::IRC;
 use Mojo::Util 'dumper';
 use Parse::IRC;
@@ -38,7 +37,7 @@ has 'bot' => (
 	lazy => 1,
 	default => sub { Bot::Maverick->new },
 	weak_ref => 1,
-	handles => [qw/bot_version config_dir is_stopping storage ua/],
+	handles => [qw/bot_version config_dir is_stopping storage ua loop/],
 );
 
 has '_init_config' => (
@@ -262,7 +261,7 @@ sub connect {
 			return if $self->is_stopping or !$self->config->param('irc','reconnect');
 			my $delay = $self->config->param('irc','reconnect_delay');
 			$delay = 10 unless defined $delay and looks_like_number $delay;
-			Mojo::IOLoop->timer($delay => sub { $self->connect });
+			$self->loop->timer($delay => sub { $self->connect });
 		} else {
 			$self->emit('connect');
 		}
@@ -319,16 +318,16 @@ sub join_channels {
 
 sub _start_recurring_check {
 	my $self = shift;
-	Mojo::IOLoop->remove($self->_recurring_check_timer) if $self->_has_recurring_check_timer;
+	$self->loop->remove($self->_recurring_check_timer) if $self->_has_recurring_check_timer;
 	weaken $self;
-	my $timer_id = Mojo::IOLoop->recurring(60 => sub { $self->check_nick; $self->check_channels });
+	my $timer_id = $self->loop->recurring(60 => sub { $self->check_nick; $self->check_channels });
 	$self->_recurring_check_timer($timer_id);
 	return $self;
 }
 
 sub _stop_recurring_check {
 	my $self = shift;
-	Mojo::IOLoop->remove($self->_recurring_check_timer) if $self->_has_recurring_check_timer;
+	$self->loop->remove($self->_recurring_check_timer) if $self->_has_recurring_check_timer;
 	$self->_clear_recurring_check_timer;
 	return $self;
 }
