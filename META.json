@@ -4,7 +4,7 @@
       "Dan Book <dbook@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.039, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Dist::Zilla version 5.040, CPAN::Meta::Converter version 2.150005",
    "license" : [
       "artistic_2"
    ],
@@ -15,12 +15,12 @@
    "name" : "Bot-Maverick",
    "no_index" : {
       "directory" : [
-         "t",
-         "xt",
+         "eg",
+         "examples",
          "inc",
          "share",
-         "eg",
-         "examples"
+         "t",
+         "xt"
       ]
    },
    "prereqs" : {
@@ -38,6 +38,7 @@
       },
       "runtime" : {
          "recommends" : {
+            "IO::Socket::SSL" : "1.94",
             "Mojo::JSON::MaybeXS" : "0"
          },
          "requires" : {
@@ -120,6 +121,10 @@
       },
       "Bot::Maverick::Network::SocialGamer" : {
          "file" : "lib/Bot/Maverick/Network/SocialGamer.pm",
+         "version" : "0.40"
+      },
+      "Bot::Maverick::Network::Twitch" : {
+         "file" : "lib/Bot/Maverick/Network/Twitch.pm",
          "version" : "0.40"
       },
       "Bot::Maverick::Plugin" : {

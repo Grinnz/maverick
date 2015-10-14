@@ -93,7 +93,7 @@ sub run {
 			chomp(my $err = shift);
 			$m->logger->error(qq{"$self" failed: $err});
 		});
-	} elsif (defined $returned and lc $returned eq 'usage') {
+	} elsif (defined $returned and !ref $returned and lc $returned eq 'usage') {
 		my $text = 'Usage: $trigger$name';
 		$text .= ' ' . $self->usage_text if defined $self->usage_text;
 		$m->reply($self->parse_usage_text($m->network, $text));
