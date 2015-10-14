@@ -33,7 +33,7 @@ sub register {
 	$bot->config->channel_default('hailo_speak', 0);
 	$bot->config->channel_default('hailo_reply_when_addressed', 1);
 	
-	$bot->add_helper(hailo => sub { $self });
+	$bot->add_helper(hailo => sub { $self->hailo });
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
