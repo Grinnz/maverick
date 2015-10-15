@@ -56,8 +56,6 @@ sub register {
 			return $future->then(sub {
 				my $location = shift;
 				return $m->bot->weather_autocomplete_location_code($location);
-			}, sub {
-				return $m->bot->weather_autocomplete_location_code($target);
 			})->then(sub {
 				my $code = shift;
 				return $m->bot->weather_location_data($code);
