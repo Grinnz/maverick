@@ -58,6 +58,8 @@ sub register {
 			return $future->then(sub {
 				my $ip = shift;
 				return $m->bot->wolfram_query($query, $ip);
+			}, sub {
+				return $m->bot->wolfram_query($query);
 			})->on_done(sub {
 				my $result = shift;
 				return $m->reply('No results from Wolfram|Alpha') unless defined $result;
