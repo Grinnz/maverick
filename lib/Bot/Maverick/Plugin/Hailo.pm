@@ -32,6 +32,7 @@ sub register {
 	
 	$bot->config->channel_default('hailo_speak', 0);
 	$bot->config->channel_default('hailo_reply_when_addressed', 1);
+	$bot->config->channel_default('hailo_reply_when_mentioned', 0);
 	
 	$bot->add_helper(hailo => sub { $self->hailo });
 	
@@ -40,10 +41,13 @@ sub register {
 		my $message = $m->text;
 		return if $m->sender->is_bot;
 		
-		my $addressed;
+		my ($addressed, $mentioned);
 		my $bot_nick = $m->nick;
-		if ($message =~ s/^\Q$bot_nick\E[:,]?\s+//) {
+		if ($message =~ s/^\Q$bot_nick\E[:,]?\s+//i) {
 			$addressed = 1;
+		}
+		if ($message =~ m/\b\Q$bot_nick\E\b/i) {
+			$mentioned = 1;
 		}
 		
 		$m->bot->hailo->learn($message);
@@ -54,7 +58,9 @@ sub register {
 		$speak = $m->config->channel_param($m->channel, 'hailo_speak') if defined $m->channel;
 		my $do_reply = $speak > rand() ? 1 : 0;
 		my $when_addressed = $m->config->channel_param($m->channel, 'hailo_reply_when_addressed');
+		my $when_mentioned = $m->config->channel_param($m->channel, 'hailo_reply_when_mentioned');
 		$do_reply = 1 if $when_addressed and $addressed;
+		$do_reply = 1 if $when_mentioned and $mentioned;
 		return unless $do_reply;
 		
 		my $reply = $m->bot->hailo->reply($message);
