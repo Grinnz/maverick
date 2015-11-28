@@ -8,7 +8,7 @@ requires 'File::Spec::Functions';
 requires 'File::Path';
 requires 'File::Temp';
 requires 'FindBin';
-requires 'Future::Mojo' => '0.002';
+requires 'Future::Mojo' => '0.003';
 requires 'IRC::Utils' => '0.12';
 requires 'List::Util';
 requires 'Module::Runtime';

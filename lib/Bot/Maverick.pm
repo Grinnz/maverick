@@ -447,12 +447,12 @@ sub loop { Mojo::IOLoop->singleton }
 
 sub new_future {
 	my $self = shift;
-	return Future::Mojo->new(Mojo::IOLoop->singleton);
+	return Future::Mojo->new;
 }
 
 sub timer_future {
 	my ($self, $delay) = @_;
-	return Future::Mojo->new_timer(Mojo::IOLoop->singleton, $delay);
+	return Future::Mojo->new_timer($delay);
 }
 
 sub adopt_future {
@@ -807,13 +807,13 @@ Returns the L<Mojo::IOLoop> singleton used for the bot's operation.
 
   my $future = $bot->new_future;
 
-Returns a L<Future::Mojo> initialized with the bot's L<Mojo::IOLoop>.
+Returns a L<Future::Mojo> initialized with the L<Mojo::IOLoop> singleton.
 
 =head2 timer_future
 
   my $future = $bot->timer_future(1);
 
-Returns a L<Future::Mojo> initialized with the bot's L<Mojo::IOLoop>, which
+Returns a L<Future::Mojo> initialized with the L<Mojo::IOLoop> singleton, which
 will be set to done after the specified delay in seconds.
 
 =head2 adopt_future

@@ -4,7 +4,7 @@
       "Dan Book <dbook@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.040, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Dist::Zilla version 5.041, CPAN::Meta::Converter version 2.150005",
    "license" : [
       "artistic_2"
    ],
@@ -50,7 +50,7 @@
             "File::Spec::Functions" : "0",
             "File::Temp" : "0",
             "FindBin" : "0",
-            "Future::Mojo" : "0.002",
+            "Future::Mojo" : "0.003",
             "IRC::Utils" : "0.12",
             "List::Util" : "0",
             "Module::Runtime" : "0",
