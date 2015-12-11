@@ -2,7 +2,7 @@ package Bot::Maverick::Plugin::Calc;
 
 use Carp 'croak';
 use Math::Calc::Parser 'calc';
-use Try;
+use Try::Tiny;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -31,7 +31,7 @@ sub register {
 				$m->reply("Result: $result");
 			} catch {
 				$m->reply("Error evaluating expression: $_");
-			}
+			};
 		},
 	);
 }

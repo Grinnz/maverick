@@ -4,7 +4,7 @@ use Carp 'croak';
 use Data::Validate::IP qw/is_ipv4 is_ipv6/;
 use GeoIP2::Database::Reader;
 use Scalar::Util 'blessed';
-use Try;
+use Try::Tiny;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -29,7 +29,7 @@ sub _build__geoip {
 		$geoip = GeoIP2::Database::Reader->new(file => $file);
 	} catch {
 		die $_;
-	}
+	};
 	return $geoip;
 }
 
@@ -76,7 +76,7 @@ sub _geoip_locate {
 		my $err = (blessed $_ and $_->isa('Throwable::Error')) ? $_->message : $_;
 		chomp $err;
 		die "$err\n";
-	}
+	};
 	return $record;
 }
 
@@ -91,7 +91,7 @@ sub _geoip_locate_host {
 		} catch {
 			chomp(my $err = $_);
 			$future = $bot->new_future->fail($err);
-		}
+		};
 		return $future;
 	}
 	return $bot->new_future->fail('DNS plugin is required to resolve hostnames')
@@ -108,7 +108,7 @@ sub _geoip_locate_host {
 				$best_record //= $record = $bot->geoip_locate($addr);
 			} catch {
 				chomp($last_err = $_);
-			}
+			};
 			return $bot->new_future->done($record) if defined $record and defined $record->city->name;
 		}
 		return $bot->new_future->fail($last_err) unless defined $best_record;

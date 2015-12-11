@@ -3,7 +3,7 @@ package Bot::Maverick::Plugin::DNS;
 use Carp;
 use Socket qw/AF_INET AF_INET6 getaddrinfo inet_ntop unpack_sockaddr_in unpack_sockaddr_in6/;
 use Scalar::Util 'weaken';
-use Try;
+use Try::Tiny;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -27,7 +27,7 @@ has '_resolver' => (
 sub BUILD {
 	my $self = shift;
 	return unless $self->native;
-	try { require Net::DNS::Native } catch { warn $_; $self->_set_native(0) }
+	try { require Net::DNS::Native } catch { warn $_; $self->_set_native(0) };
 }
 
 sub register {

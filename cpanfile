@@ -22,7 +22,7 @@ requires 'Parse::IRC' => '1.20';
 requires 'Role::EventEmitter';
 requires 'Scalar::Util';
 requires 'Sereal';
-requires 'Try';
+requires 'Try::Tiny';
 test_requires 'Test::More' => '0.88';
 recommends 'IO::Socket::SSL' => '1.94';
 recommends 'Mojo::JSON::MaybeXS';

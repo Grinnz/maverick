@@ -114,7 +114,7 @@ EOW
         "Role::EventEmitter" => 0,
         "Scalar::Util" => 0,
         "Sereal" => 0,
-        "Try" => 0,
+        "Try::Tiny" => 0,
         "namespace::clean" => 0,
         "perl" => "5.010001"
       },

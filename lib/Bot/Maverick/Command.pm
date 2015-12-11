@@ -3,7 +3,7 @@ package Bot::Maverick::Command;
 use Bot::Maverick::Access qw/:access valid_access_level/;
 use Carp;
 use Scalar::Util 'blessed';
-use Try;
+use Try::Tiny;
 
 use Moo;
 use namespace::clean;
@@ -86,7 +86,7 @@ sub run {
 		chomp(my $err = $_);
 		$m->reply("Internal error");
 		$m->logger->error(qq{"$self" failed: $err});
-	}
+	};
 	if (blessed $returned and $returned->isa('Future')) {
 		$m->bot->adopt_future($returned);
 		$returned->on_fail(sub {

@@ -1,6 +1,6 @@
 package Bot::Maverick;
 
-use Try;
+use Try::Tiny;
 
 # Use JSON::MaybeXS for JSON API processing if available
 BEGIN { try { require Mojo::JSON::MaybeXS } }
@@ -272,7 +272,7 @@ sub add_network {
 		$self->networks->{lc $name} = $network;
 	} catch {
 		croak "Network class $class could not be loaded: $_";
-	}
+	};
 	return $self;
 }
 
@@ -290,7 +290,7 @@ sub add_plugin {
 		$plugin->register($self);
 	} catch {
 		croak "Plugin $class could not be registered: $_";
-	}
+	};
 	return $self;
 }
 
