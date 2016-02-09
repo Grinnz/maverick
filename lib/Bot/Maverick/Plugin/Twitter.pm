@@ -184,8 +184,8 @@ sub _display_tweet {
 	my $id = $tweet->id;
 	my $url = Mojo::URL->new('https://twitter.com')->path("$username/status/$id");
 	
-	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
-	my $in_reply_to_user = $tweet->{in_reply_to_screen_name};
+	my $in_reply_to_id = $tweet->in_reply_to_status_id;
+	my $in_reply_to_user = $tweet->in_reply_to_screen_name;
 	
 	my $b_code = chr 2;
 	my $in_reply_to = defined $in_reply_to_id
@@ -208,8 +208,8 @@ sub _display_triggered {
 	
 	my $username = $tweet->user->screen_name;
 	
-	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
-	my $in_reply_to_user = $tweet->{in_reply_to_screen_name};
+	my $in_reply_to_id = $tweet->in_reply_to_status_id;
+	my $in_reply_to_user = $tweet->in_reply_to_screen_name;
 	
 	my $b_code = chr 2;
 	my $in_reply_to = defined $in_reply_to_id
