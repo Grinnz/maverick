@@ -469,6 +469,18 @@ sub adopt_future {
 	return $future;
 }
 
+sub callback_to_future {
+	my ($self, $code) = @_;
+	my $future = $self->new_future;
+	weaken(my $weak_f = $future);
+	$code->(sub {
+		return unless $weak_f;
+		my ($inv, $err, @res) = @_;
+		$err ? $weak_f->fail($err) : $weak_f->done(@res);
+	});
+	return $future;
+}
+
 sub fork_call {
 	my ($self, @args) = @_;
 	my $serializer = $self->serializer;
@@ -477,13 +489,7 @@ sub fork_call {
 		serializer => sub { sereal_encode_with_object($serializer, shift) },
 		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
 	);
-	my $future = $self->new_future;
-	weaken(my $weak_f = $future);
-	$fc->run(@args, sub {
-		my ($fc, $err, @return) = @_;
-		$err ? $weak_f->fail($err) : $weak_f->done(@return);
-	});
-	return $future;
+	return $self->callback_to_future(sub { $fc->run(@args, shift) });
 }
 
 my %methods = map { ($_ => 1) } qw(get post head put delete patch);
@@ -498,7 +504,7 @@ sub ua_request {
 	my $future = $self->new_future;
 	weaken(my $weak_f = $future);
 	$self->ua->$method(@args, sub {
-		return() unless $weak_f;
+		return unless $weak_f;
 		my ($ua, $tx) = @_;
 		if (my $res = $tx->success) {
 			$weak_f->done($tx->res);

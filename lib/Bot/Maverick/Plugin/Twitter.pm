@@ -1,9 +1,9 @@
 package Bot::Maverick::Plugin::Twitter;
 
 use Carp 'croak';
-use Date::Parse;
 use Mojo::URL;
-use Mojo::Util qw/b64_encode html_unescape url_escape/;
+use Mojo::Util 'html_unescape';
+use Mojo::WebService::Twitter;
 use Time::Duration 'ago';
 
 use Moo;
@@ -11,8 +11,6 @@ with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.20';
 
-use constant TWITTER_OAUTH_ENDPOINT => 'https://api.twitter.com/oauth2/token';
-use constant TWITTER_API_ENDPOINT => 'https://api.twitter.com/1.1/';
 use constant TWITTER_API_KEY_MISSING => 
 	"Twitter plugin requires configuration options 'twitter_api_key' and 'twitter_api_secret' in section 'apis'\n" .
 	"Go to https://apps.twitter.com/ to obtain a Twitter API key and secret.\n";
@@ -25,9 +23,20 @@ has 'api_secret' => (
 	is => 'rw',
 );
 
-has '_access_token' => (
+has 'twitter' => (
+	is => 'lazy',
+	init_arg => undef,
+);
+
+sub _build_twitter {
+	my $self = shift;
+	$self->_twitter_authorized(0);
+	die TWITTER_API_KEY_MISSING unless defined (my $api_key = $self->api_key) and defined (my $api_secret = $self->api_secret);
+	return Mojo::WebService::Twitter->new(ua => $self->bot->ua, api_key => $api_key, api_secret => $api_secret);
+}
+
+has '_twitter_authorized' => (
 	is => 'rw',
-	predicate => 1,
 	init_arg => undef,
 );
 
@@ -38,17 +47,18 @@ has '_results_cache' => (
 	init_arg => undef,
 );
 
-sub _retrieve_access_token {
+sub _authorize {
 	my ($self) = @_;
-	return $self->bot->new_future->done($self->_access_token) if $self->_has_access_token;
+	return $self->bot->new_future->done($self->twitter) if $self->_twitter_authorized;
 	
-	die TWITTER_API_KEY_MISSING unless defined $self->api_key and defined $self->api_secret;
-	my $bearer_token = b64_encode(url_escape($self->api_key) . ':' . url_escape($self->api_secret), '');
-	my $url = Mojo::URL->new(TWITTER_OAUTH_ENDPOINT);
-	my $headers = { Authorization => "Basic $bearer_token",
-		'Content-Type' => 'application/x-www-form-urlencoded;charset=UTF-8' };
-	return $self->bot->ua_request(post => $url, $headers, form => { grant_type => 'client_credentials' })
-		->transform(done => sub { $self->_access_token(my $token = shift->json->{access_token}); return $token });
+	return $self->bot->callback_to_future(sub {
+		$self->twitter->request_oauth2(shift);
+	})->transform(done => sub {
+		my $res = shift;
+		$self->twitter->authentication(oauth2 => $res->{access_token});
+		$self->_twitter_authorized(1);
+		return $self->twitter;
+	});
 }
 
 sub register {
@@ -61,7 +71,8 @@ sub register {
 	
 	$bot->add_helper(twitter_api_key => sub { $self->api_key });
 	$bot->add_helper(twitter_api_secret => sub { $self->api_secret });
-	$bot->add_helper(_twitter_access_token => sub { $self->_retrieve_access_token });
+	$bot->add_helper(twitter => sub { $self->twitter });
+	$bot->add_helper(_twitter_authorize => sub { $self->_authorize });
 	$bot->add_helper(_twitter_results_cache => sub { $self->_results_cache });
 	$bot->add_helper(twitter_search => \&_twitter_search);
 	$bot->add_helper(twitter_tweet_by_id => \&_twitter_tweet_by_id);
@@ -143,52 +154,34 @@ sub _twitter_tweet_by_id {
 	my ($bot, $id) = @_;
 	croak 'Undefined tweet ID' unless defined $id;
 	
-	return $bot->_twitter_access_token->then(sub {
-		my $token = shift;
-		my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('statuses/show.json')->query(id => $id);
-		my %headers = (Authorization => "Bearer $token");
-		return $bot->ua_request($url, \%headers);
-	})->transform(done => sub { shift->json });
+	return $bot->_twitter_authorize->then(sub {
+		$bot->callback_to_future(sub { $bot->twitter->get_tweet($id, shift) });
+	});
 }
 
 sub _twitter_tweet_by_user {
 	my ($bot, $user) = @_;
 	croak 'Undefined twitter user' unless defined $user;
 	
-	return $bot->_twitter_access_token->then(sub {
-		my $token = shift;
-		my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('users/show.json')
-			->query(screen_name => $user, include_entities => 'false');
-		my %headers = (Authorization => "Bearer $token");
-		return $bot->ua_request($url, \%headers);
-	})->transform(done => sub { _swap_user_tweet(shift->json) });
-}
-
-sub _swap_user_tweet {
-	my $user = shift // return undef;
-	my $tweet = delete $user->{status};
-	$tweet->{user} = $user;
-	return $tweet;
+	return $bot->_twitter_authorize->then(sub {
+		$bot->callback_to_future(sub { $bot->twitter->get_user(screen_name => $user, shift) });
+	})->transform(done => sub { shift->last_tweet });
 }
 
 sub _twitter_search {
 	my ($bot, $query) = @_;
 	croak 'Undefined twitter query' unless defined $query;
 	
-	return $bot->_twitter_access_token->then(sub {
-		my $token = shift;
-		my $url = Mojo::URL->new(TWITTER_API_ENDPOINT)->path('search/tweets.json')
-			->query(q => $query, count => 15, include_entities => 'false');
-		my %headers = (Authorization => "Bearer $token");
-		return $bot->ua_request($url, \%headers);
-	})->transform(done => sub { shift->json->{statuses} // [] });
+	return $bot->_twitter_authorize->then(sub {
+		$bot->callback_to_future(sub { $bot->twitter->search_tweets($query, count => 15, include_entities => 'false', shift) });
+	});
 }
 
 sub _display_tweet {
 	my ($m, $tweet) = @_;
 	
-	my $username = $tweet->{user}{screen_name};
-	my $id = $tweet->{id_str};
+	my $username = $tweet->user->screen_name;
+	my $id = $tweet->id;
 	my $url = Mojo::URL->new('https://twitter.com')->path("$username/status/$id");
 	
 	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
@@ -198,11 +191,11 @@ sub _display_tweet {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = _parse_tweet_text($m->bot->ua, $tweet->{text});
-	my $created_at = str2time($tweet->{created_at}) // time;
-	my $ago = ago(time - $created_at);
+	my $content = _parse_tweet_text($m->bot->ua, $tweet->text);
+	my $created_at = $tweet->created_at;
+	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
 	
-	my $name = $tweet->{user}{name};
+	my $name = $tweet->user->name;
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
 	my $msg = "Tweeted by $name $ago$in_reply_to: $content ($url)";
@@ -213,7 +206,7 @@ sub _display_triggered {
 	my ($m, $tweet) = @_;
 	return() unless defined $tweet;
 	
-	my $username = $tweet->{user}{screen_name};
+	my $username = $tweet->user->screen_name;
 	
 	my $in_reply_to_id = $tweet->{in_reply_to_status_id_str};
 	my $in_reply_to_user = $tweet->{in_reply_to_screen_name};
@@ -222,11 +215,11 @@ sub _display_triggered {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = _parse_tweet_text($m->bot->ua, $tweet->{text});
-	my $created_at = str2time($tweet->{created_at}) // time;
-	my $ago = ago(time - $created_at);
+	my $content = _parse_tweet_text($m->bot->ua, $tweet->text);
+	my $created_at = $tweet->created_at;
+	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
 	
-	my $name = $tweet->{user}{name};
+	my $name = $tweet->user->name;
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
 	my $sender = $m->sender;
@@ -304,7 +297,7 @@ C<twitter_api_secret> in section C<apis>.
  })->on_fail(sub { $m->reply("Twitter search error: $_[0]") });
 
 Search tweets on Twitter. Returns a L<Future::Mojo> with the results (if any)
-in an arrayref.
+in a L<Mojo::Collection> of L<Mojo::WebService::Twitter::Tweet> objects.
 
 =head2 twitter_tweet_by_id
 
@@ -313,8 +306,8 @@ in an arrayref.
    my $tweet = shift;
  })->on_fail(sub { $m->reply("Error retrieving tweet: $_[0]") });
 
-Retrieve a tweet by Tweet ID. Returns a L<Future::Mojo> with the tweet data as
-a hashref.
+Retrieve a tweet by Tweet ID. Returns a L<Future::Mojo> with a
+L<Mojo::WebService::Twitter::Tweet> object.
 
 =head2 twitter_tweet_by_user
 
@@ -324,7 +317,7 @@ a hashref.
  })->on_fail(sub { $m->reply("Error retrieving tweet: $_[0]") });
 
 Retrieve the latest tweet in a user's timeline. Returns a L<Future::Mojo> with
-the tweet data as a hashref.
+a L<Mojo::WebService::Twitter::Tweet> object.
 
 =head1 CONFIGURATION
 
@@ -364,4 +357,4 @@ the terms of the Artistic License version 2.0.
 
 =head1 SEE ALSO
 
-L<Bot::Maverick>
+L<Bot::Maverick>, L<Mojo::WebService::Twitter>
