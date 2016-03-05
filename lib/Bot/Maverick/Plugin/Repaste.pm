@@ -21,8 +21,8 @@ sub register {
 		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw\.php\?i=)?([a-z0-9]+)!ig);
 		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
-		my @pastes = (map { +{type => 'pastebin', key => $_} } @pastebin_keys),
-			(map { +{type => 'hastebin', key => $_} } @hastebin_keys);
+		my @pastes = ((map { +{type => 'pastebin', key => $_} } @pastebin_keys),
+			(map { +{type => 'hastebin', key => $_} } @hastebin_keys));
 		return() unless @pastes;
 		
 		my $future = _retrieve_pastes($m, \@pastes)->then(sub { _repaste_pastes($m, shift) })->on_done(sub {
