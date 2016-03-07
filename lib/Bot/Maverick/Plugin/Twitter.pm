@@ -191,7 +191,7 @@ sub _display_tweet {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = _parse_tweet_text($m->bot->ua, $tweet->text);
+	my $content = _parse_tweet_text($tweet->text);
 	my $created_at = $tweet->created_at;
 	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
 	
@@ -215,7 +215,7 @@ sub _display_triggered {
 	my $in_reply_to = defined $in_reply_to_id
 		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
 	
-	my $content = _parse_tweet_text($m->bot->ua, $tweet->text);
+	my $content = _parse_tweet_text($tweet->text);
 	my $created_at = $tweet->created_at;
 	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
 	
@@ -228,12 +228,13 @@ sub _display_triggered {
 }
 
 sub _parse_tweet_text {
-	my ($ua, $text) = @_;
+	my ($text) = @_;
 	
 	$text = html_unescape $text;
 	$text =~ s/\n/ /g;
 	
 	my @urls = $text =~ m!(https?://t.co/\w+)!g;
+	my $ua = Mojo::UserAgent->new->max_redirects(0);
 	foreach my $url (@urls) {
 		my $tx = $ua->head($url);
 		if ($tx->success and $tx->res->is_status_class(300)) {
