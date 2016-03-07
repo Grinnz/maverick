@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::Twitter;
 
 use Carp 'croak';
 use Mojo::URL;
+use Mojo::UserAgent;
 use Mojo::Util 'html_unescape';
 use Mojo::WebService::Twitter;
 use Time::Duration 'ago';
