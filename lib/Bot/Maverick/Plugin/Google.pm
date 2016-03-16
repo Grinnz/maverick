@@ -111,6 +111,38 @@ sub register {
 	);
 	
 	$bot->add_command(
+		name => 'gif',
+		help_text => 'Search for animated images with Google',
+		usage_text => '<query>',
+		on_run => sub {
+			my $m = shift;
+			my $query = $m->args;
+			return 'usage' unless length $query;
+			
+			return $m->bot->google_search_image($query, 1)->on_done(sub {
+				my $results = shift;
+				return $m->reply("No results for Google image search") unless @$results;
+				
+				my $first_result = shift @$results;
+				my $channel_name = lc ($m->channel // $m->sender);
+				$m->bot->_google_results_cache->{gif}{$m->network}{$channel_name} = $results;
+				$m->show_more(scalar @$results);
+				_google_result_image($m, $first_result);
+			})->on_fail(sub { $m->reply("Google search error: $_[0]") });
+		},
+		on_more => sub {
+			my $m = shift;
+			my $channel_name = lc ($m->channel // $m->sender);
+			my $results = $m->bot->_google_results_cache->{gif}{$m->network}{$channel_name} // [];
+			return $m->reply("No more results for Google image search") unless @$results;
+			
+			my $next_result = shift @$results;
+			$m->show_more(scalar @$results);
+			_google_result_image($m, $next_result);
+		},
+	);
+	
+	$bot->add_command(
 		name => 'fight',
 		help_text => 'Compare two or more searches in a Google fight',
 		usage_text => '<query1> (vs.|versus) <query2> [(vs.|versus) <query3> ...]',
@@ -200,12 +232,13 @@ sub _google_search_web_count {
 }
 
 sub _google_search_image {
-	my ($bot, $query) = @_;
+	my ($bot, $query, $gif) = @_;
 	croak 'Undefined search query' unless defined $query;
 	die GOOGLE_API_KEY_MISSING unless defined $bot->google_api_key and defined $bot->google_cse_id;
 	
 	my $request = Mojo::URL->new(GOOGLE_API_ENDPOINT)->query(key => $bot->google_api_key,
 		cx => $bot->google_cse_id, q => $query, safe => 'high', searchType => 'image');
+	$request->query({hq => 'animated', tbs => 'itp:animated', fileType => 'gif'}) if $gif;
 	return $bot->ua_request($request)->transform(done => sub { shift->json->{items} // [] });
 }
 
