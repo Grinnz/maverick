@@ -64,8 +64,8 @@ method.
 
 =head1 PLUGINS
 
-Plugins are L<Moo> objects that subclass L<Bot::Maverick::Plugin>. They are
-registered by calling the required method C<register> and may add commands,
+Plugins are L<Moo> objects that compose the role L<Bot::Maverick::Plugin>. They
+are registered by calling the required method C<register> and may add commands,
 hooks, or anything else to the bot instance. A plugin may also register a
 method of its own as a "helper method" which then can be called on the bot
 instance from elsewhere. The plugin object is passed as the invocant of the
