@@ -9,7 +9,8 @@ our $VERSION = '0.20';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
-use constant FPASTE_PASTE_ENDPOINT => 'http://fpaste.org/';
+use constant FPASTE_PASTE_ENDPOINT => 'http://paste.fedoraproject.org/';
+use constant FPASTE_PASTE_VIEW => 'http://fpaste.org/';
 
 sub register {
 	my ($self, $bot) = @_;
@@ -131,14 +132,16 @@ sub _repaste_pastes {
 			next unless $future->is_done;
 			
 			my $res = $future->get // next;
-			my $result = $res->json->{result} // {};
+			my $json = $res->json;
+			$m->logger->error("Did not receive JSON response: ".$res->text), next unless defined $json;
+			my $result = $json->{result} // {};
 			$m->logger->error("Paste error: ".$result->{error}), next if $result->{error};
 			
 			my $id = $result->{id};
 			my $hash = $result->{hash} // '';
 			$m->logger->error("No paste ID returned"), next unless defined $id;
 			
-			my $url = Mojo::URL->new(FPASTE_PASTE_ENDPOINT)->path("$id/$hash/");
+			my $url = Mojo::URL->new(FPASTE_PASTE_VIEW)->path("$id/$hash/");
 			$m->logger->debug("Repasted $paste->{type} paste $paste->{key} to $url");
 			push @urls, $url;
 		}
