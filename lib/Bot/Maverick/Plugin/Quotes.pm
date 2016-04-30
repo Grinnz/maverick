@@ -61,7 +61,7 @@ sub register {
 			
 			my ($quote) = splice @$quotes, $num-1, 1;
 			
-			$m->_clear_quote_cache;
+			$m->bot->_clear_quote_cache;
 			return $m->reply("Deleted quote $num: $quote");
 		},
 		required_access => ACCESS_BOT_ADMIN,
