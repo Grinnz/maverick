@@ -1,6 +1,6 @@
 # To use: cpanm --installdeps --with-recommends ./plugindeps/Google
 requires 'Carp';
-requires 'Lingua::EN::Number::Format::MixWithWords';
+requires 'Lingua::EN::Number::Format::MixWithWords'; # https://metacpan.org/release/SHARYANTO/Lingua-EN-Number-Format-MixWithWords-0.07
 requires 'List::UtilsBy';
 requires 'Mojolicious', '6.0';
 requires 'Moo', '2.000';
