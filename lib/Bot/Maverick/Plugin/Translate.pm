@@ -13,6 +13,7 @@ our $VERSION = '0.50';
 use constant MICROSOFT_ARRAY_SCHEMA => 'http://schemas.microsoft.com/2003/10/Serialization/Arrays';
 use constant XML_SCHEMA_INSTANCE => 'http://www.w3.org/2001/XMLSchema-instance';
 use constant TRANSLATE_TOKEN_ENDPOINT => 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken';
+use constant TRANSLATE_TOKEN_EXPIRE => 8 * ONE_MINUTE; # to be safe, expiration is 10 minutes
 use constant TRANSLATE_API_ENDPOINT => 'http://api.microsofttranslator.com/v2/Http.svc/';
 use constant TRANSLATE_SUBSCRIPTION_KEY_MISSING =>
 	"Translate plugin requires configuration option 'microsoft_translator_subscription_key' in section 'apis'\n" .
@@ -49,7 +50,7 @@ sub _retrieve_access_token {
 	my %headers = ('Ocp-Apim-Subscription-Key' => $self->subscription_key);
 	return $self->bot->ua_request(post => TRANSLATE_TOKEN_ENDPOINT, \%headers)->transform(done => sub {
 		my $token = shift->text;
-		$self->_access_token_expire(time + 8 * ONE_MINUTE);
+		$self->_access_token_expire(time + TRANSLATE_TOKEN_EXPIRE);
 		$self->_access_token($token);
 		return $self->_access_token;
 	});
