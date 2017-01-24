@@ -3,27 +3,23 @@ package Bot::Maverick::Plugin::Translate;
 use Carp 'croak';
 use Mojo::DOM;
 use Mojo::URL;
+use Time::Seconds;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
-use constant MICROSOFT_OAUTH_ENDPOINT => 'https://datamarket.accesscontrol.windows.net/v2/OAuth2-13/';
 use constant MICROSOFT_ARRAY_SCHEMA => 'http://schemas.microsoft.com/2003/10/Serialization/Arrays';
 use constant XML_SCHEMA_INSTANCE => 'http://www.w3.org/2001/XMLSchema-instance';
-use constant TRANSLATE_OAUTH_SCOPE => 'http://api.microsofttranslator.com';
+use constant TRANSLATE_TOKEN_ENDPOINT => 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken';
 use constant TRANSLATE_API_ENDPOINT => 'http://api.microsofttranslator.com/v2/Http.svc/';
-use constant MICROSOFT_API_KEY_MISSING => 
-	"Translate plugin requires configuration options 'microsoft_client_id' and 'microsoft_client_secret' in section 'apis'\n" .
-	"See http://blogs.msdn.com/b/translation/p/gettingstarted1.aspx " .
-	"for more information on obtaining a Microsoft Client ID and Client secret.\n";
+use constant TRANSLATE_SUBSCRIPTION_KEY_MISSING =>
+	"Translate plugin requires configuration option 'microsoft_translator_subscription_key' in section 'apis'\n" .
+	"See http://docs.microsofttranslator.com/text-translate.html " .
+	"for more information on obtaining a Microsoft Translator subscription key.\n";
 
-has 'client_id' => (
-	is => 'rw',
-);
-
-has 'client_secret' => (
+has 'subscription_key' => (
 	is => 'rw',
 );
 
@@ -49,18 +45,12 @@ sub _retrieve_access_token {
 	}
 	return $self->bot->new_future->done($self->_access_token) if $self->_has_access_token;
 	
-	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
-	my $url = Mojo::URL->new(MICROSOFT_OAUTH_ENDPOINT);
-	my %form = (
-		client_id => $self->client_id,
-		client_secret => $self->client_secret,
-		scope => TRANSLATE_OAUTH_SCOPE,
-		grant_type => 'client_credentials'
-	);
-	return $self->bot->ua_request(post => $url, form => \%form)->transform(done => sub {
-		my $data = shift->json;
-		$self->_access_token_expire(time + $data->{expires_in});
-		$self->_access_token($data->{access_token});
+	die TRANSLATE_SUBSCRIPTION_KEY_MISSING unless defined $self->subscription_key;
+	my %headers = ('Ocp-Apim-Subscription-Key' => $self->subscription_key);
+	return $self->bot->ua_request(post => TRANSLATE_TOKEN_ENDPOINT, \%headers)->transform(done => sub {
+		my $token = shift->text;
+		$self->_access_token_expire(time + 8 * ONE_MINUTE);
+		$self->_access_token($token);
 		return $self->_access_token;
 	});
 }
@@ -138,14 +128,11 @@ sub _xml_string_array {
 
 sub register {
 	my ($self, $bot) = @_;
-	$self->client_id($bot->config->param('apis','microsoft_client_id'))
-		unless defined $self->client_id;
-	$self->client_secret($bot->config->param('apis','microsoft_client_secret'))
-		unless defined $self->client_secret;
-	die MICROSOFT_API_KEY_MISSING unless defined $self->client_id and defined $self->client_secret;
+	$self->subscription_key($bot->config->param('apis','microsoft_translator_subscription_key'))
+		unless defined $self->subscription_key;
+	die TRANSLATE_SUBSCRIPTION_KEY_MISSING unless defined $self->subscription_key;
 	
-	$bot->add_helper(microsoft_client_id => sub { $self->client_id });
-	$bot->add_helper(microsoft_client_secret => sub { $self->client_secret });
+	$bot->add_helper(microsoft_translator_subscription_key => sub { $self->subscription_key });
 	$bot->add_helper(_microsoft_access_token => sub { $self->_retrieve_access_token });
 	$bot->add_helper(_translate_build_language_codes => sub { $self->_build_language_codes });
 	$bot->add_helper(_translate_languages_by_code => sub { $self->_languages_by_code });
@@ -264,7 +251,7 @@ Bot::Maverick::Plugin::Translate - Language translation plugin for Maverick
  );
  
  # Standalone usage
- my $translate = Bot::Maverick::Plugin::Translate->new(client_id => $client_id, client_secret => $client_secret);
+ my $translate = Bot::Maverick::Plugin::Translate->new(subscription_key => $subscription_key);
  my $from = $translate->detect_language($text)->get;
  my $translated = $translate->translate_text($text, $from, $to)->get;
 
@@ -273,23 +260,17 @@ Bot::Maverick::Plugin::Translate - Language translation plugin for Maverick
 Adds helper methods and commands for translating text to a L<Bot::Maverick> IRC
 bot.
 
-This plugin requires a Microsoft Client ID and Client secret that is registered
-for the Bing Translate API. These must be configured as C<microsoft_client_id>
-and C<microsoft_client_secret> in the C<apis> section. See
-L<http://blogs.msdn.com/b/translation/p/gettingstarted1.aspx> for information
-on obtaining a Microsoft Client ID and Client secret.
+This plugin requires a Microsoft Translator subscription key, configured as
+C<microsoft_translator_subscription_key> in the C<apis> section. See
+L<http://docs.microsofttranslator.com/text-translate.html> for information on
+obtaining a subscription key.
 
 =head1 ATTRIBUTES
 
-=head2 client_id
+=head2 subscription_key
 
-Client ID for Microsoft API, defaults to value of configuration option
-C<microsoft_client_id> in section C<apis>.
-
-=head2 client_secret
-
-Client secret for Microsoft API, defaults to value of configuration option
-C<microsoft_client_secret> in section C<apis>.
+Microsoft Translator subscription key, defaults to value of configuration
+option C<microsoft_translator_subscription_key> in section C<apis>.
 
 =head1 METHODS
 
