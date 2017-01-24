@@ -6,7 +6,7 @@ use Text::Hunspell;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'dict_path' => (
 	is => 'ro',

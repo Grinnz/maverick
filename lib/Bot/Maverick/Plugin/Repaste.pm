@@ -5,7 +5,7 @@ use Mojo::URL;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';

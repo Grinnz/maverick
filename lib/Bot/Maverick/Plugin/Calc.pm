@@ -7,7 +7,7 @@ use Try::Tiny;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 sub register {
 	my ($self, $bot) = @_;

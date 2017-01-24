@@ -13,7 +13,7 @@ use overload 'cmp' => sub { $_[2] ? lc $_[1] cmp lc $_[0] : lc $_[0] cmp lc $_[1
 
 our @CARP_NOT = qw(Bot::Maverick Bot::Maverick::Network Bot::Maverick::Command Bot::Maverick::Channel Moo);
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'nick' => (
 	is => 'rw',

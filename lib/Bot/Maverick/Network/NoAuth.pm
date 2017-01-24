@@ -5,7 +5,7 @@ use namespace::clean;
 
 extends 'Bot::Maverick::Network';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 sub identify {}
 

@@ -5,7 +5,7 @@ use Mojo::URL;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant PYX_ENDPOINT_MISSING =>
 	"PYX plugin requires configuration option 'pyx_endpoint' in section 'apis'\n";

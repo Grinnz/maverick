@@ -7,7 +7,7 @@ use Time::Duration 'ago';
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant YOUTUBE_API_ENDPOINT => 'https://www.googleapis.com/youtube/v3/';
 use constant YOUTUBE_VIDEO_URL => 'https://www.youtube.com/watch';

@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 my %level_nums = map { $_ => 1 } values %{ACCESS_LEVELS()};
 my %channel_access = (

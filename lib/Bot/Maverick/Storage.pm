@@ -8,7 +8,7 @@ use File::Spec::Functions 'catfile';
 use Moo;
 use namespace::clean;
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'data' => (
 	is => 'lazy',

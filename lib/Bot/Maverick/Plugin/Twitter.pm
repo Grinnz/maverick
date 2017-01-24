@@ -10,7 +10,7 @@ use Time::Duration 'ago';
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant TWITTER_API_KEY_MISSING => 
 	"Twitter plugin requires configuration options 'twitter_api_key' and 'twitter_api_secret' in section 'apis'\n" .

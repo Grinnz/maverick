@@ -6,7 +6,7 @@ use Mojo::URL;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant WIKIPEDIA_API_ENDPOINT => 'https://en.wikipedia.org/w/api.php';
 

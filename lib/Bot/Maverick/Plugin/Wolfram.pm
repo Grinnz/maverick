@@ -8,7 +8,7 @@ use Mojo::URL;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant WOLFRAM_API_ENDPOINT => 'http://api.wolframalpha.com/v2/query';
 use constant WOLFRAM_API_KEY_MISSING => 

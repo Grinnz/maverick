@@ -6,7 +6,7 @@ use Mojo::Util qw/decode encode slurp spurt/;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has '_quote_cache' => (
 	is => 'ro',

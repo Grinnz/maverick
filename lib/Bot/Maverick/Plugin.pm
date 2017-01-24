@@ -6,7 +6,7 @@ use Scalar::Util 'blessed';
 
 use Moo::Role;
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 requires 'register';
 

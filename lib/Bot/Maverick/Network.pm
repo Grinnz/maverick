@@ -23,7 +23,7 @@ with 'Role::EventEmitter';
 
 our @CARP_NOT = qw(Bot::Maverick Bot::Maverick::Command Bot::Maverick::User Bot::Maverick::Channel Moo);
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'name' => (
 	is => 'rwp',

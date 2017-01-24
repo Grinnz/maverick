@@ -5,6 +5,6 @@ use namespace::clean;
 
 extends 'Bot::Maverick::Network::NoAuth';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 1;

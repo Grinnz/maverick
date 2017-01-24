@@ -10,7 +10,7 @@ use Scalar::Util 'blessed';
 use Moo;
 use namespace::clean;
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'dir' => (
 	is => 'ro',

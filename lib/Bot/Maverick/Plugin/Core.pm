@@ -5,7 +5,7 @@ use Bot::Maverick::Access ':access';
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'more_commands' => (
 	is => 'ro',

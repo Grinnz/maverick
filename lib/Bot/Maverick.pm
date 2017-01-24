@@ -36,7 +36,7 @@ our %EXPORT_TAGS = (
 	access => [keys %{ACCESS_LEVELS()}],
 );
 
-our $VERSION = '0.40';
+our $VERSION = '0.50';
 sub bot_version { return $VERSION }
 
 our @CARP_NOT = qw(Bot::Maverick::Network Bot::Maverick::Command Bot::Maverick::User Bot::Maverick::Channel Moo);

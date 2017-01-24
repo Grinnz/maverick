@@ -8,7 +8,7 @@ use Mojo::URL;
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant GOOGLE_API_ENDPOINT => 'https://www.googleapis.com/customsearch/v1';
 use constant GOOGLE_COMPLETE_ENDPOINT => 'http://google.com/complete/search';

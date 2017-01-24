@@ -12,7 +12,7 @@ use namespace::clean;
 
 use constant IRC_MAX_MESSAGE_LENGTH => 510;
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 has 'network' => (
 	is => 'ro',

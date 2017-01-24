@@ -7,7 +7,7 @@ use Scalar::Util 'looks_like_number', 'weaken';
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant WEATHER_API_ENDPOINT => 'http://api.wunderground.com/api/';
 use constant WEATHER_API_AUTOCOMPLETE_ENDPOINT => 'http://autocomplete.wunderground.com/aq';

@@ -7,7 +7,7 @@ use Time::Duration 'ago';
 use Moo;
 with 'Bot::Maverick::Plugin';
 
-our $VERSION = '0.20';
+our $VERSION = '0.50';
 
 use constant LASTFM_API_ENDPOINT => 'http://ws.audioscrobbler.com/2.0/';
 use constant LASTFM_API_KEY_MISSING =>
