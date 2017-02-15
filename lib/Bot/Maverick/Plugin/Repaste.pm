@@ -9,8 +9,7 @@ our $VERSION = '0.50';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
-use constant FPASTE_PASTE_ENDPOINT => 'http://paste.fedoraproject.org/';
-use constant FPASTE_PASTE_VIEW => 'http://fpaste.org/';
+use constant DPASTE_PASTE_ENDPOINT => 'http://dpaste.com/api/v1/';
 
 sub register {
 	my ($self, $bot) = @_;
@@ -110,17 +109,14 @@ sub _repaste_pastes {
 		my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // 'text';
 		
 		my %form = (
-			paste_data => $paste->{contents},
-			paste_lang => $lang,
-			paste_user => $m->sender->nick,
-			paste_private => 'yes',
-			paste_expire => 86400,
-			api_submit => 'true',
-			mode => 'json',
+			content => $paste->{contents},
+			syntax => $lang,
+			poster => $m->sender->nick,
+			expiry_days => 1,
 		);
 		
-		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to fpaste");
-		push @futures, $m->bot->ua_request(post => FPASTE_PASTE_ENDPOINT, form => \%form);
+		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to dpaste");
+		push @futures, $m->bot->ua_request(no_redirect => post => DPASTE_PASTE_ENDPOINT, form => \%form);
 	}
 	return $m->bot->new_future->wait_all(@futures)->transform(done => sub {
 		my @results = @_;
@@ -132,16 +128,12 @@ sub _repaste_pastes {
 			next unless $future->is_done;
 			
 			my $res = $future->get // next;
-			my $json = $res->json;
-			$m->logger->error("Did not receive JSON response: ".$res->text), next unless defined $json;
-			my $result = $json->{result} // {};
-			$m->logger->error("Paste error: ".$result->{error}), next if $result->{error};
+			my $url = $res->headers->header('Location');
+			unless (length $url) {
+				$m->logger->error("No paste URL returned");
+				next;
+			}
 			
-			my $id = $result->{id};
-			my $hash = $result->{hash} // '';
-			$m->logger->error("No paste ID returned"), next unless defined $id;
-			
-			my $url = Mojo::URL->new(FPASTE_PASTE_VIEW)->path("$id/$hash/");
 			$m->logger->debug("Repasted $paste->{type} paste $paste->{key} to $url");
 			push @urls, $url;
 		}
@@ -166,7 +158,7 @@ Bot::Maverick::Plugin::Repaste - Repasting plugin for Maverick
 Hooks into public messages of a L<Bot::Maverick> IRC bot and whenever a
 L<pastebin.com|http://pastebin.com> or L<hastebin.com|http://hastebin.com> link
 is detected, repastes it to another pastebin site like
-L<fpaste|http://fpaste.org>.
+L<dpaste|http://dpaste.com>.
 
 =head1 BUGS
 

@@ -199,6 +199,13 @@ has 'ua' => (
 	init_arg => undef,
 );
 
+has 'ua_no_redirect' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { Mojo::UserAgent->new },
+	init_arg => undef,
+);
+
 has 'serializer' => (
 	is => 'ro',
 	lazy => 1,
@@ -495,6 +502,11 @@ sub fork_call {
 my %methods = map { ($_ => 1) } qw(get post head put delete patch);
 sub ua_request {
 	my ($self, $method, @args) = @_;
+	my $ua = $self->ua;
+	if ($method eq 'no_redirect') {
+		$method = shift @args;
+		$ua = $self->ua_no_redirect;
+	}
 	if (exists $methods{lc $method}) {
 		$method = lc $method;
 	} else {
@@ -503,7 +515,7 @@ sub ua_request {
 	}
 	my $future = $self->new_future;
 	weaken(my $weak_f = $future);
-	$self->ua->$method(@args, sub {
+	$ua->$method(@args, sub {
 		return unless $weak_f;
 		my ($ua, $tx) = @_;
 		if (my $res = $tx->success) {
