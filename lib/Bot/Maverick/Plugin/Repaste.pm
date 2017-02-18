@@ -9,7 +9,7 @@ our $VERSION = '0.50';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
-use constant DPASTE_PASTE_ENDPOINT => 'http://dpaste.com/api/v1/';
+use constant DPASTE_PASTE_ENDPOINT => 'http://dpaste.com/api/v2/';
 
 sub register {
 	my ($self, $bot) = @_;
