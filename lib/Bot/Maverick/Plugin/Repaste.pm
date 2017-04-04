@@ -9,7 +9,8 @@ our $VERSION = '0.50';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
-use constant DPASTE_PASTE_ENDPOINT => 'http://dpaste.com/api/v2/';
+use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
+use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
 
 sub register {
 	my ($self, $bot) = @_;
@@ -21,8 +22,10 @@ sub register {
 		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw(?:/|\.php\?i=))?([a-z0-9]+)!ig);
 		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
+		my @fpaste_keys = ($m->text =~ m!\b(?:paste\.fedoraproject\.org|fpaste\.org)/paste/([-a-z0-9=~]+)!ig);
 		my @pastes = ((map { +{type => 'pastebin', key => $_} } @pastebin_keys),
-			(map { +{type => 'hastebin', key => $_} } @hastebin_keys));
+			(map { +{type => 'hastebin', key => $_} } @hastebin_keys),
+			(map { +{type => 'fpaste', key => $_} } @fpaste_keys));
 		return() unless @pastes;
 		
 		my $future = _retrieve_pastes($m, \@pastes)->then(sub { _repaste_pastes($m, shift) })->on_done(sub {
@@ -42,14 +45,21 @@ sub _retrieve_pastes {
 	
 	my @futures;
 	foreach my $paste (@$pastes) {
-		my $url;
 		if ($paste->{type} eq 'pastebin') {
-			$url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
+			my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
+			push @futures, $m->bot->ua_request($url);
 		} elsif ($paste->{type} eq 'hastebin') {
-			$url = Mojo::URL->new(HASTEBIN_RAW_ENDPOINT)->path($paste->{key});
+			my $url = Mojo::URL->new(HASTEBIN_RAW_ENDPOINT)->path($paste->{key});
+			push @futures, $m->bot->ua_request($url);
+		} elsif ($paste->{type} eq 'fpaste') {
+			my $url = Mojo::URL->new(FPASTE_API_ENDPOINT)->path('details');
+			my %params = (paste_id => $paste->{key});
+			push @futures, $m->bot->ua_request(post => $url, json => \%params);
+		} else {
+			$m->logger->warn("Unknown paste type $paste->{type} for paste link $paste->{key}");
+			next;
 		}
-		$m->logger->debug("Found $paste->{type} link to $paste->{key}: $url");
-		push @futures, $m->bot->ua_request($url);
+		$m->logger->debug("Found $paste->{type} link to $paste->{key}");
 	}
 	return $m->bot->new_future->wait_all(@futures)->then(sub {
 		my @results = @_;
@@ -59,12 +69,22 @@ sub _retrieve_pastes {
 			$m->logger->error("Error retrieving $paste->{type} paste $paste->{key}: " . $future->failure) if $future->is_failed;
 			next unless $future->is_done;
 			my $res = $future->get;
-			my $contents = $res->text;
-			$m->logger->debug("No paste contents for $paste->{type} paste $paste->{key}"), next unless length $contents;
-			if ($paste->{type} eq 'pastebin' and $contents =~ /Please refresh the page to continue\.\.\./) {
-				$paste->{recheck} = 1;
-			} else {
+			if ($paste->{type} eq 'fpaste') {
+				my $json = $res->json;
+				$m->logger->error("Error retrieving $paste->{type} paste $paste->{key}: " . $json->{message}), next unless $json->{success};
+				my $contents = $json->{details}{contents};
+				$m->logger->debug("No paste contents for $paste->{type} paste $paste->{key}"), next unless length $contents;
 				$paste->{contents} = $contents;
+				$paste->{title} = $json->{details}{title};
+				$paste->{lang} = $json->{details}{language};
+			} else {
+				my $contents = $res->text;
+				$m->logger->debug("No paste contents for $paste->{type} paste $paste->{key}"), next unless length $contents;
+				if ($paste->{type} eq 'pastebin' and $contents =~ /Please refresh the page to continue\.\.\./) {
+					$paste->{recheck} = 1;
+				} else {
+					$paste->{contents} = $contents;
+				}
 			}
 		}
 		
@@ -80,7 +100,7 @@ sub _retrieve_pastes {
 			}
 		}
 		return $m->bot->new_future->wait_all(@futures);
-	})->transform(done => sub {
+	})->transform(done => sub { # this whole stupid extra step for pastebin.com
 		my @results = @_;
 		foreach my $i (0..$#results) {
 			my $future = $results[$i];
@@ -106,7 +126,7 @@ sub _repaste_pastes {
 			next;
 		}
 		
-		my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // 'text';
+		my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // $paste->{lang} // 'text';
 		
 		my %form = (
 			content => $paste->{contents},
@@ -114,9 +134,10 @@ sub _repaste_pastes {
 			poster => $m->sender->nick,
 			expiry_days => 1,
 		);
+		$form{title} = $paste->{title} if defined $paste->{title};
 		
 		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to dpaste");
-		push @futures, $m->bot->ua_request(no_redirect => post => DPASTE_PASTE_ENDPOINT, form => \%form);
+		push @futures, $m->bot->ua_request(no_redirect => post => DPASTE_API_ENDPOINT, form => \%form);
 	}
 	return $m->bot->new_future->wait_all(@futures)->transform(done => sub {
 		my @results = @_;
