@@ -1,4 +1,4 @@
-package Bot::Maverick::Network::ColdFront;
+package Bot::Maverick::Network::TheAirlock;
 
 use Moo;
 use namespace::clean;

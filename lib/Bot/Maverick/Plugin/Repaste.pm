@@ -11,6 +11,7 @@ use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
 use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
 use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
+use constant PERLBOT_API_ENDPOINT => 'https://perlbot.pl/api/v1/';
 
 sub register {
 	my ($self, $bot) = @_;
@@ -129,15 +130,16 @@ sub _repaste_pastes {
 		my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // $paste->{lang} // 'text';
 		
 		my %form = (
-			content => $paste->{contents},
-			syntax => $lang,
-			poster => $m->sender->nick,
-			expiry_days => 1,
+			paste => $paste->{contents},
+			language => $lang,
+			username => $m->sender->nick,
+			expire => 24,
 		);
-		$form{title} = $paste->{title} if defined $paste->{title};
+		$form{description} = $paste->{title} if defined $paste->{title};
 		
-		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to dpaste");
-		push @futures, $m->bot->ua_request(no_redirect => post => DPASTE_API_ENDPOINT, form => \%form);
+		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to perlbot");
+		my $url = Mojo::URL->new(PERLBOT_API_ENDPOINT)->path('paste');
+		push @futures, $m->bot->ua_request(post => $url, form => \%form);
 	}
 	return $m->bot->new_future->wait_all(@futures)->transform(done => sub {
 		my @results = @_;
@@ -149,7 +151,7 @@ sub _repaste_pastes {
 			next unless $future->is_done;
 			
 			my $res = $future->get // next;
-			my $url = $res->headers->header('Location');
+			my $url = $res->json->{url};
 			unless (length $url) {
 				$m->logger->error("No paste URL returned");
 				next;
