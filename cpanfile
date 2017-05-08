@@ -12,7 +12,7 @@ requires 'Future::Mojo' => '0.003';
 requires 'IRC::Utils' => '0.12';
 requires 'List::Util';
 requires 'Module::Runtime';
-requires 'Mojolicious' => '6.0';
+requires 'Mojolicious' => '7.15';
 requires 'Mojo::IOLoop::ForkCall' => '0.16';
 requires 'Mojo::IRC' => '0.26';
 requires 'Moo' => '2.000000';

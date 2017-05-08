@@ -1,7 +1,8 @@
 package Bot::Maverick::Plugin::Quotes;
 
 use Bot::Maverick::Access ':access';
-use Mojo::Util qw/decode encode slurp spurt/;
+use Mojo::File 'path';
+use Mojo::Util qw/decode encode/;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -145,7 +146,7 @@ sub register {
 			
 			my $quotes = $m->bot->storage->data->{quotes} //= [];
 			return $m->bot->fork_call(sub {
-				my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', slurp $filename;
+				my @add_quotes = grep { length } split /\r?\n/, decode 'UTF-8', path($filename)->slurp;
 				return 0 unless @add_quotes;
 				my $num_quotes = @add_quotes;
 				push @$quotes, @add_quotes;
@@ -175,7 +176,7 @@ sub register {
 			
 			my $quotes = $m->bot->storage->data->{quotes} // [];
 			return $m->bot->fork_call(sub {
-				spurt encode('UTF-8', join("\n", @$quotes)."\n"), $filename;
+				path($filename)->spurt(encode('UTF-8', join("\n", @$quotes)."\n"));
 				return scalar @$quotes;
 			})->on_done(sub {
 				my $num_quotes = shift;
