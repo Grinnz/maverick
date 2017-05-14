@@ -231,7 +231,7 @@ my @irc_events = qw/irc_invite irc_join irc_kick irc_mode irc_nick
 	irc_rpl_topic irc_rpl_topicwhotime irc_rpl_namreply irc_rpl_whoreply
 	irc_rpl_endofwho irc_rpl_whoisuser irc_rpl_whoischannels irc_rpl_away
 	irc_rpl_whoisoperator irc_rpl_whoisaccount irc_rpl_whoisidle irc_335
-	irc_rpl_endofwhois err_nosuchnick/;
+	irc_rpl_endofwhois err_nosuchnick err_yourebannedcreep/;
 
 sub register_event_handlers {
 	my $self = shift;
@@ -734,6 +734,12 @@ sub _err_nosuchnick { # ERR_NOSUCHNICK
 	my ($to, $nick) = @{$message->{params}};
 	$self->logger->debug("No such nick: $nick");
 	$self->unsubscribe('whois_'.lc($nick));
+}
+
+sub _err_yourebannedcreep { # ERR_YOUREBANNEDCREEP
+	my ($self, $message) = @_;
+	my ($to, $reason) = @{$message->{params}};
+	$self->logger->error("You are banned from this server: $reason");
 }
 
 1;
