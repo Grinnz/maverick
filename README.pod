@@ -319,9 +319,9 @@ arguments are passed to L<Mojo::UserAgent>.
 
   my $future = $bot->fork_call(sub { return 'foo' });
 
-Runs a code ref in a forked process using L<Mojo::IOLoop::ForkCall> and returns
-a L<Future::Mojo> that will be set to failed if the code throws an exception,
-and otherwise will be set to done with the returned values.
+Runs a code ref in a forked process using L<Mojo::IOLoop::Subprocess::Sereal>
+and returns a L<Future::Mojo> that will be set to failed if the code throws an
+exception, and otherwise will be set to done with the returned values.
 
 =head1 BUGS
 
