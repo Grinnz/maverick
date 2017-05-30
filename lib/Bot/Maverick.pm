@@ -11,12 +11,10 @@ use Future::Mojo;
 use List::Util 'any';
 use Module::Runtime 'use_module';
 use Mojo::IOLoop;
-use Mojo::IOLoop::ForkCall;
+use Mojo::IOLoop::Subprocess::Sereal;
 use Mojo::Log;
 use Mojo::UserAgent;
 use Scalar::Util qw(blessed weaken);
-use Sereal::Encoder 'sereal_encode_with_object';
-use Sereal::Decoder 'sereal_decode_with_object';
 use Bot::Maverick::Access qw/:access ACCESS_LEVELS/;
 use Bot::Maverick::Command;
 use Bot::Maverick::Config;
@@ -203,20 +201,6 @@ has 'ua_no_redirect' => (
 	is => 'ro',
 	lazy => 1,
 	default => sub { Mojo::UserAgent->new },
-	init_arg => undef,
-);
-
-has 'serializer' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { Sereal::Encoder->new },
-	init_arg => undef,
-);
-
-has 'deserializer' => (
-	is => 'ro',
-	lazy => 1,
-	default => sub { Sereal::Decoder->new },
 	init_arg => undef,
 );
 
@@ -490,13 +474,7 @@ sub callback_to_future {
 
 sub fork_call {
 	my ($self, @args) = @_;
-	my $serializer = $self->serializer;
-	my $deserializer = $self->deserializer;
-	my $fc = Mojo::IOLoop::ForkCall->new(
-		serializer => sub { sereal_encode_with_object($serializer, shift) },
-		deserializer => sub { sereal_decode_with_object($deserializer, shift) },
-	);
-	return $self->callback_to_future(sub { $fc->run(@args, shift) });
+	return $self->callback_to_future(sub { Mojo::IOLoop->$_subprocess(@args, shift) });
 }
 
 my %methods = map { ($_ => 1) } qw(get post head put delete patch);
@@ -856,9 +834,9 @@ arguments are passed to L<Mojo::UserAgent>.
 
   my $future = $bot->fork_call(sub { return 'foo' });
 
-Runs a code ref in a forked process using L<Mojo::IOLoop::ForkCall> and returns
-a L<Future::Mojo> that will be set to failed if the code throws an exception,
-and otherwise will be set to done with the returned values.
+Runs a code ref in a forked process using L<Mojo::IOLoop::Subprocess::Sereal>
+and returns a L<Future::Mojo> that will be set to failed if the code throws an
+exception, and otherwise will be set to done with the returned values.
 
 =head1 BUGS
 
