@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::Translate;
 
 use Carp 'croak';
 use Mojo::DOM;
+use Mojo::Template;
 use Mojo::URL;
 use Time::Seconds;
 
@@ -115,16 +116,18 @@ sub _build_language_codes {
 	})->on_fail(sub { $self->_language_codes_built(0) });
 }
 
+my $mt = Mojo::Template->new(auto_escape => 1, vars => 1);
+
 sub _xml_string_array {
-	my $xml = Mojo::DOM->new->xml(1)->content('<ArrayOfstring></ArrayOfstring>');
-	my $array = $xml->at('ArrayOfstring');
-	$array->attr(xmlns => MICROSOFT_ARRAY_SCHEMA, 'xmlns:i' => XML_SCHEMA_INSTANCE);
-	foreach my $string (@_) {
-		my $elem = Mojo::DOM->new->xml(1)->content('<string></string>')->at('string');
-		$elem->content($string);
-		$array->append_content($elem->to_string);
-	}
-	return $xml->to_string;
+	my $template = <<'EOF';
+<ArrayOfstring xmlns="<%= $schema %>" xmlns:i="<%= $instance %>">
+% foreach my $string (@$strings) {
+<string><%= $string %></string>
+% }
+</ArrayOfstring>
+EOF
+	return $mt->render($template,
+		{strings => [@_], schema => MICROSOFT_ARRAY_SCHEMA, instance => XML_SCHEMA_INSTANCE});
 }
 
 sub register {
