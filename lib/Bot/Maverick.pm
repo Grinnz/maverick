@@ -23,11 +23,10 @@ use Bot::Maverick::Storage;
 use Moo;
 use namespace::clean;
 
+use Autoload::AUTOCAN;
 use Exporter 'import';
 
 with 'Role::EventEmitter';
-
-our $AUTOLOAD;
 
 our @EXPORT_OK = keys %{ACCESS_LEVELS()};
 our %EXPORT_TAGS = (
@@ -303,18 +302,10 @@ sub add_helper {
 }
 
 # Autoload helper methods
-sub AUTOLOAD {
-	my ($self) = @_;
-	my $method = $AUTOLOAD;
-	$method =~ s/.*:://;
-	unless (ref $self and exists $self->helpers->{$method}) {
-		# Emulate standard missing method error
-		my ($package, $method) = $AUTOLOAD =~ /^(.*)::([^:]*)/;
-		die sprintf qq(Can't locate object method "%s" via package "%s" at %s line %d.\n),
-			$method, $package, (caller)[1,2];
-	}
-	my $sub = $self->helpers->{$method};
-	goto &$sub;
+sub AUTOCAN {
+	my ($self, $method) = @_;
+	return undef unless ref $self;
+	return $self->helpers->{$method};
 }
 
 # Commands

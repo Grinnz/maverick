@@ -1,5 +1,6 @@
 # To use: cpanm --installdeps .
 requires 'perl' => '5.010001';
+requires 'Autoload::AUTOCAN';
 requires 'Carp';
 requires 'Config::IniFiles' => '2.83';
 requires 'DBM::Deep' => '2.0011';
