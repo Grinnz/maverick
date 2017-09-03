@@ -122,18 +122,22 @@ sub parse_command {
 }
 
 sub reply {
-	my $self = shift;
-	$self->_reply($self->sender, $self->channel, @_);
+	my ($self, $message, $sender, $channel) = @_;
+	$sender //= $self->sender;
+	$channel //= $self->channel;
+	$self->_reply($sender, $channel, $message);
 }
 
 sub reply_private {
-	my $self = shift;
-	$self->_reply($self->sender, undef, @_);
+	my ($self, $message, $sender) = @_;
+	$sender //= $self->sender;
+	$self->_reply($sender, undef, $message);
 }
 
 sub reply_bare {
-	my $self = shift;
-	$self->_reply(undef, $self->channel // $self->sender, @_);
+	my ($self, $message, $channel) = @_;
+	$channel //= $self->channel // $self->sender;
+	$self->_reply(undef, $channel, $message);
 }
 
 sub _reply {
