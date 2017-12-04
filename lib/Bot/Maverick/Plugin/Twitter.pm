@@ -238,7 +238,7 @@ sub _parse_tweet_text {
 	my $ua = Mojo::UserAgent->new->max_redirects(0);
 	foreach my $url (@urls) {
 		my $tx = $ua->head($url);
-		if ($tx->success and $tx->res->is_status_class(300)) {
+		if ($tx->success and $tx->res->is_redirect) {
 			my $redir = $tx->res->headers->location;
 			if (defined $redir and $redir ne $url) {
 				$text =~ s/\Q$url/$redir/g;
