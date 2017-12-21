@@ -11,7 +11,7 @@ use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
 use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
 use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
 use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
-use constant PERLBOT_API_ENDPOINT => 'https://perlbot.pl/api/v1/';
+use constant PERLBOT_API_ENDPOINT => 'https://perl.bot/api/v1/';
 
 sub register {
 	my ($self, $bot) = @_;
