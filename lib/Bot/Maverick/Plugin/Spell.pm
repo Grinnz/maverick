@@ -1,7 +1,7 @@
 package Bot::Maverick::Plugin::Spell;
 
 use File::Spec::Functions 'catfile';
-use Text::Hunspell;
+use Text::Hunspell::FFI;
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -32,7 +32,7 @@ sub _build_dict {
 	my $affix_path = catfile($self->dict_path, "$lang.aff");
 	my $dict_path = catfile($self->dict_path, "$lang.dic");
 	return undef unless -f $affix_path and -f $dict_path;
-	return Text::Hunspell->new($affix_path, $dict_path);
+	return Text::Hunspell::FFI->new($affix_path, $dict_path);
 }
 
 sub register {
@@ -102,7 +102,7 @@ Default dictionary language, defaults to C<en_US>.
  my $dict = $bot->spell_dict('fr_FR');
 
 Retrieves the dictionary for a specified language or L</"default_lang"> as a
-L<Text::Hunspell> object.
+L<Text::Hunspell::FFI> object.
 
 =head1 COMMANDS
 
@@ -131,4 +131,4 @@ the terms of the Artistic License version 2.0.
 
 =head1 SEE ALSO
 
-L<Bot::Maverick>, L<Text::Hunspell>
+L<Bot::Maverick>, L<Text::Hunspell::FFI>
