@@ -18,7 +18,7 @@ my $bot = Bot::Maverick->new(
 		},
 		magnet => {
 			config => {
-				irc => { server => 'irc.perl.org', port => 7062, ssl => 1 },
+				irc => { server => 'irc.perl.org', port => 7062, ssl => 1, insecure => 1 },
 				users => { master => 'Grinnz' },
 			},
 		},

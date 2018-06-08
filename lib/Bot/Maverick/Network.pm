@@ -138,8 +138,8 @@ sub _build_irc {
 
 sub _connect_options {
 	my $self = shift;
-	my ($server, $port, $server_pass, $ssl, $nick, $realname) = 
-		@{$self->config->to_hash->{irc}//{}}{qw/server port server_pass ssl nick realname/};
+	my ($server, $port, $server_pass, $ssl, $insecure, $nick, $realname) = 
+		@{$self->config->to_hash->{irc}//{}}{qw/server port server_pass ssl insecure nick realname/};
 	croak "IRC server for network $self is not configured\n"
 		unless defined $server and length $server;
 	$server .= ":$port" if defined $port and length $port;
@@ -153,7 +153,7 @@ sub _connect_options {
 		user => $nick,
 		name => $realname,
 	);
-	$options{tls} = {} if $ssl;
+	$options{tls} = {insecure => $insecure} if $ssl;
 	$options{pass} = $server_pass if defined $server_pass and length $server_pass;
 	return %options;
 }

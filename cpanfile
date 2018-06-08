@@ -15,7 +15,7 @@ requires 'List::Util';
 requires 'Module::Runtime';
 requires 'Mojolicious' => '7.31';
 requires 'Mojo::IOLoop::Subprocess::Sereal' => '0.005';
-requires 'Mojo::IRC' => '0.26';
+requires 'Mojo::IRC' => '0.45';
 requires 'Moo' => '2.000000';
 requires 'Moo::Role' => '2.000000';
 requires 'namespace::clean';
