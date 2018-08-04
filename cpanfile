@@ -63,7 +63,8 @@ feature Spell => sub {
 feature Translate => sub {
 };
 feature Twitter => sub {
-  requires 'Mojo::WebService::Twitter';
+  requires 'Mojo::Promise::Role::Futurify';
+  requires 'Mojo::WebService::Twitter' => '1.000';
   requires 'Time::Duration';
 };
 feature Weather => sub {

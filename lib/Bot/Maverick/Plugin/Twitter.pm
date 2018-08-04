@@ -5,7 +5,7 @@ use Mojo::URL;
 use Mojo::UserAgent;
 use Mojo::Util 'html_unescape';
 use Mojo::WebService::Twitter;
-use Time::Duration 'ago';
+use Time::Duration qw(ago concise);
 
 use Moo;
 with 'Bot::Maverick::Plugin';
@@ -52,9 +52,7 @@ sub _authorize {
 	my ($self) = @_;
 	return $self->bot->new_future->done($self->twitter) if $self->_twitter_authorized;
 	
-	return $self->bot->callback_to_future(sub {
-		$self->twitter->request_oauth2(shift);
-	})->transform(done => sub {
+	return $self->twitter->request_oauth2_p->with_roles('+Futurify')->futurify->transform(done => sub {
 		my $res = shift;
 		$self->twitter->authentication(oauth2 => $res->{access_token});
 		$self->_twitter_authorized(1);
@@ -156,7 +154,7 @@ sub _twitter_tweet_by_id {
 	croak 'Undefined tweet ID' unless defined $id;
 	
 	return $bot->_twitter_authorize->then(sub {
-		$bot->callback_to_future(sub { $bot->twitter->get_tweet($id, shift) });
+		$bot->twitter->get_tweet_p($id)->with_roles('+Futurify')->futurify;
 	});
 }
 
@@ -165,7 +163,7 @@ sub _twitter_tweet_by_user {
 	croak 'Undefined twitter user' unless defined $user;
 	
 	return $bot->_twitter_authorize->then(sub {
-		$bot->callback_to_future(sub { $bot->twitter->get_user(screen_name => $user, shift) });
+		$bot->twitter->get_user_p(screen_name => $user)->with_roles('+Futurify')->futurify;
 	})->transform(done => sub { shift->last_tweet });
 }
 
@@ -174,7 +172,7 @@ sub _twitter_search {
 	croak 'Undefined twitter query' unless defined $query;
 	
 	return $bot->_twitter_authorize->then(sub {
-		$bot->callback_to_future(sub { $bot->twitter->search_tweets($query, count => 15, include_entities => 'false', shift) });
+		$bot->twitter->search_tweets_p($query, count => 15, include_entities => 'false')->with_roles('+Futurify')->futurify;
 	});
 }
 
@@ -190,16 +188,16 @@ sub _display_tweet {
 	
 	my $b_code = chr 2;
 	my $in_reply_to = defined $in_reply_to_id
-		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
+		? " in reply to $b_code\@$in_reply_to_user$b_code \#$in_reply_to_id" : '';
 	
 	my $content = _parse_tweet_text($tweet->text);
 	my $created_at = $tweet->created_at;
-	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
+	my $ago = concise(ago(defined $created_at ? time - $created_at->epoch : 0));
 	
 	my $name = $tweet->user->name;
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
-	my $msg = "Tweeted by $name $ago$in_reply_to: $content ($url)";
+	my $msg = "$name $ago$in_reply_to: $content ($url)";
 	$m->reply($msg);
 }
 
@@ -214,17 +212,17 @@ sub _display_triggered {
 	
 	my $b_code = chr 2;
 	my $in_reply_to = defined $in_reply_to_id
-		? " in reply to $b_code\@$in_reply_to_user$b_code tweet \#$in_reply_to_id" : '';
+		? " in reply to $b_code\@$in_reply_to_user$b_code \#$in_reply_to_id" : '';
 	
 	my $content = _parse_tweet_text($tweet->text);
 	my $created_at = $tweet->created_at;
-	my $ago = ago(defined $created_at ? time - $created_at->epoch : 0);
+	my $ago = concise(ago(defined $created_at ? time - $created_at->epoch : 0));
 	
 	my $name = $tweet->user->name;
 	$name = defined $name ? "$name ($b_code\@$username$b_code)" : "$b_code\@$username$b_code";
 	
 	my $sender = $m->sender;
-	my $msg = "Tweet linked by $sender: Tweeted by $name $ago$in_reply_to: $content";
+	my $msg = "$name $ago$in_reply_to: $content";
 	$m->reply_bare($msg);
 }
 
