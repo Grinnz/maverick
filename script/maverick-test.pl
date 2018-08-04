@@ -11,7 +11,7 @@ my $bot = Bot::Maverick->new(
 		socialgamer => {
 			class => 'SocialGamer',
 			config => {
-				irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1 },
+				irc => { server => 'irc.socialgamer.net', port => 6697, ssl => 1, insecure => 1 },
 				users => { master => 'Grinnz' },
 			},
 		}
