@@ -1,4 +1,6 @@
-# To use: cpanm --installdeps .
+# cpanm --installdeps --with-recommends --interactive .
+# cpanm --installdeps --with-recommends --with-feature=DNS --with-feature=GeoIP --with-feature=Weather .
+# cpanm --installdeps --with-recommends --with-all-features --without-feature=Hailo
 requires 'perl' => '5.010001';
 requires 'Autoload::AUTOCAN';
 requires 'Carp';
@@ -26,3 +28,51 @@ requires 'Try::Tiny';
 test_requires 'Test::More' => '0.88';
 recommends 'IO::Socket::SSL' => '1.94';
 recommends 'Mojo::JSON::MaybeXS';
+
+feature Calc => sub {
+  requires 'Math::Calc::Parser';
+};
+feature DNS => sub {
+  requires 'Socket';
+  recommends 'Net::DNS::Native', '0.15';
+};
+feature GeoIP => sub {
+  requires 'Data::Validate::IP';
+  requires 'GeoIP2', '2.000';
+  recommends 'MaxMind::DB::Reader::XS';
+};
+feature Google => sub {
+  requires 'Lingua::EN::Number::Format::MixWithWords'; # https://metacpan.org/release/SHARYANTO/Lingua-EN-Number-Format-MixWithWords-0.07
+  requires 'List::UtilsBy';
+};
+feature Hailo => sub {
+  requires 'Hailo';
+};
+feature LastFM => sub {
+  requires 'Time::Duration';
+};
+feature PYX => sub {
+};
+feature Quotes => sub {
+};
+feature Repaste => sub {
+};
+feature Spell => sub {
+  requires 'Text::Hunspell::FFI';
+};
+feature Translate => sub {
+};
+feature Twitter => sub {
+  requires 'Mojo::WebService::Twitter';
+  requires 'Time::Duration';
+};
+feature Weather => sub {
+};
+feature Wikipedia => sub {
+};
+feature Wolfram => sub {
+  requires 'Data::Validate::IP';
+};
+feature YouTube => sub {
+  requires 'Time::Duration';
+};
