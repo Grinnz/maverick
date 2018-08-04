@@ -1,4 +1,0 @@
-# To use: cpanm --installdeps --with-recommends ./plugindeps/Translate
-requires 'Carp';
-requires 'Mojolicious', '6.0';
-requires 'Moo', '2.000';

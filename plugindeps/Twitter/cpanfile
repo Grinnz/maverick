@@ -1,6 +1,0 @@
-# To use: cpanm --installdeps --with-recommends ./plugindeps/Twitter
-requires 'Carp';
-requires 'Mojolicious', '6.0';
-requires 'Mojo::WebService::Twitter';
-requires 'Moo', '2.000';
-requires 'Time::Duration';
