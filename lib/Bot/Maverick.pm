@@ -487,11 +487,11 @@ sub ua_request {
 	$ua->$method(@args, sub {
 		return unless $weak_f;
 		my ($ua, $tx) = @_;
-		if (my $res = $tx->success) {
-			$weak_f->done($tx->res);
-		} else {
-			chomp(my $err = $self->ua_error($tx->error));
+		if (my $err = $tx->error) {
+			chomp($err = $self->ua_error($err));
 			$weak_f->fail($err);
+		} else {
+			$weak_f->done($tx->res);
 		}
 	});
 	return $future;
