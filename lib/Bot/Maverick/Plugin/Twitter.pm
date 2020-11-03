@@ -137,6 +137,7 @@ sub register {
 		my $message = $m->text;
 		return unless defined $m->channel;
 		return unless $m->config->channel_param($m->channel, 'twitter_trigger');
+		return if $m->sender->is_bot;
 		return unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
 		my $captured = Mojo::URL->new($1);
 		my $parts = $captured->path->parts;

@@ -20,6 +20,7 @@ sub register {
 	
 	$bot->on(privmsg => sub {
 		my ($bot, $m) = @_;
+		return() if $m->sender->is_bot;
 		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw(?:/|\.php\?i=))?([a-z0-9]+)!ig);
 		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);

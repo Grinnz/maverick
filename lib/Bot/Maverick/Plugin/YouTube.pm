@@ -76,6 +76,7 @@ sub register {
 		my $message = $m->text;
 		return unless defined $m->channel;
 		return unless $m->config->channel_param($m->channel, 'youtube_trigger');
+		return if $m->sender->is_bot;
 		
 		return unless $message =~ m!\b((https?://)?(?:(?:www\.)?youtube\.com/watch\?[-a-z0-9_=&;:%]+|youtu\.be/[-a-z0-9_]+))!i;
 		my $captured = Mojo::URL->new(length $2 ? $1 : "https://$1");
