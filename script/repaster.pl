@@ -9,10 +9,10 @@ use Bot::Maverick;
 my $bot = Bot::Maverick->new(
 	name => 'Repaster',
 	networks => {
-		freenode => {
+		libera => {
 			class => 'Freenode',
 			config => {
-				irc => { server => 'chat.freenode.net', port => 6697, ssl => 1 },
+				irc => { server => 'irc.libera.chat', port => 6697, ssl => 1 },
 				users => { master => 'Grinnz' },
 			},
 		},
