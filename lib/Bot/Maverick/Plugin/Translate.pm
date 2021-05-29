@@ -89,7 +89,8 @@ sub _build_language_codes {
 			my @words = (split(' ', $name), split(' ', $native_name));
 			$self->_languages_by_name->{lc $_} //= $lang for $lang, $name, $native_name, @words;
 		}
-		$self->_languages_by_name->{klingon} = $self->_languages_by_name->{'klingon (latin)'};
+		$self->_languages_by_name->{klingon} = $self->_languages_by_name->{'klingon (latin)'}
+			if defined $self->_languages_by_name->{'klingon (latin)'};
 	})->on_fail(sub { $self->_language_codes_built(0) });
 }
 
