@@ -1,8 +1,6 @@
 package Bot::Maverick::Plugin::Translate;
 
 use Carp 'croak';
-use Mojo::DOM;
-use Mojo::Template;
 use Mojo::URL;
 use Time::Seconds;
 
@@ -11,14 +9,12 @@ with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.50';
 
-use constant MICROSOFT_ARRAY_SCHEMA => 'http://schemas.microsoft.com/2003/10/Serialization/Arrays';
-use constant XML_SCHEMA_INSTANCE => 'http://www.w3.org/2001/XMLSchema-instance';
 use constant TRANSLATE_TOKEN_ENDPOINT => 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken';
 use constant TRANSLATE_TOKEN_EXPIRE => 8 * ONE_MINUTE; # to be safe, expiration is 10 minutes
-use constant TRANSLATE_API_ENDPOINT => 'http://api.microsofttranslator.com/v2/Http.svc/';
+use constant TRANSLATE_API_ENDPOINT => 'https://api.cognitive.microsofttranslator.com';
 use constant TRANSLATE_SUBSCRIPTION_KEY_MISSING =>
 	"Translate plugin requires configuration option 'microsoft_translator_subscription_key' in section 'apis'\n" .
-	"See http://docs.microsofttranslator.com/text-translate.html " .
+	"See https://docs.microsoft.com/en-us/azure/cognitive-services/translator/translator-how-to-signup " .
 	"for more information on obtaining a Microsoft Translator subscription key.\n";
 
 has 'subscription_key' => (
@@ -48,8 +44,7 @@ sub _retrieve_access_token {
 	return $self->bot->new_future->done($self->_access_token) if $self->_has_access_token;
 	
 	die TRANSLATE_SUBSCRIPTION_KEY_MISSING unless defined $self->subscription_key;
-	my %headers = ('Ocp-Apim-Subscription-Key' => $self->subscription_key);
-	return $self->bot->ua_request(post => TRANSLATE_TOKEN_ENDPOINT, \%headers)->transform(done => sub {
+	return $self->bot->ua_request(post => TRANSLATE_TOKEN_ENDPOINT, {'Ocp-Apim-Subscription-Key' => $self->subscription_key})->transform(done => sub {
 		my $token = shift->text;
 		$self->_access_token_expire(time + TRANSLATE_TOKEN_EXPIRE);
 		$self->_access_token($token);
@@ -83,51 +78,18 @@ sub _build_language_codes {
 	return $self->bot->new_future->done if $self->_language_codes_built;
 	$self->_language_codes_built(1);
 	
-	my ($token, @languages);
-	return $self->_retrieve_access_token->then(sub {
-		$token = shift;
-		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguagesForTranslate');
-		my %headers = (Authorization => "Bearer $token");
-		return $self->bot->ua_request($url, \%headers);
-	})->then(sub {
+	my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('languages')->query('api-version' => '3.0', scope => 'translation');
+	return $self->bot->ua_request(get => $url, {'Accept-Language' => 'en'})->on_done(sub {
 		my $res = shift;
-		@languages = Mojo::DOM->new->xml(1)->parse($res->text)->find('string')->map('text')->each;
-		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('GetLanguageNames')->query(locale => 'en');
-		my %headers = (Authorization => "Bearer $token", 'Content-Type' => 'text/xml');
-		return $self->bot->ua_request(post => $url, \%headers, _xml_string_array(@languages));
-	})->on_done(sub {
-		my $res = shift;
-		my @names = Mojo::DOM->new->xml(1)->parse($res->text)->find('string')->map('text')->each;
-		
-		my %languages_by_code;
-		for my $i (0..$#languages) {
-			my $lang = $languages[$i] // next;
-			my $name = $names[$i] // next;
-			$languages_by_code{$lang} = $name;
-			$self->_languages_by_name->{lc $name} = $lang;
-			my @words = split ' ', $name;
-			if (@words > 1) {
-				$self->_languages_by_name->{lc $_} //= $lang for @words;
-			}
-			$self->_languages_by_name->{lc $lang} //= $lang;
+		my $langs = $res->json->{translation} // {};
+		foreach my $lang (keys %$langs) {
+			my $name = $langs->{$lang}{name};
+			my $native_name = $langs->{$lang}{nativeName};
+			$self->_languages_by_code->{$lang} = $name;
+			my @words = (split(' ', $name), split(' ', $native_name));
+			$self->_languages_by_name->{lc $_} //= $lang for $lang, $name, $native_name, @words;
 		}
-		
-		$self->_languages_by_code(\%languages_by_code);
 	})->on_fail(sub { $self->_language_codes_built(0) });
-}
-
-my $mt = Mojo::Template->new(auto_escape => 1, vars => 1);
-
-sub _xml_string_array {
-	my $template = <<'EOF';
-<ArrayOfstring xmlns="<%= $schema %>" xmlns:i="<%= $instance %>">
-% foreach my $string (@$strings) {
-<string><%= $string %></string>
-% }
-</ArrayOfstring>
-EOF
-	return $mt->render($template,
-		{strings => [@_], schema => MICROSOFT_ARRAY_SCHEMA, instance => XML_SCHEMA_INSTANCE});
 }
 
 sub register {
@@ -197,10 +159,9 @@ sub _detect_language {
 	
 	return $bot->_microsoft_access_token->then(sub {
 		my $token = shift;
-		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Detect')->query(text => $text);
-		my %headers = (Authorization => "Bearer $token");
-		return $bot->ua_request($url, \%headers);
-	})->transform(done => sub { Mojo::DOM->new->xml(1)->parse(shift->text)->at('string')->text });
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('detect')->query('api-version' => '3.0');
+		return $bot->ua_request(post => $url, {Authorization => "Bearer $token"}, json => [{Text => $text}]);
+	})->transform(done => sub { shift->json->[0]{language} });
 }
 
 sub _translate_language_code {
@@ -235,11 +196,10 @@ sub _translate_text {
 			// return $bot->new_future->fail("Unknown from language $from");
 		my $to_code = $bot->translate_language_code($to)
 			// return $bot->new_future->fail("Unknown to language $to");
-		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('Translate')
-			->query(text => $text, from => $from_code, to => $to_code, contentType => 'text/plain');
-		my %headers = (Authorization => "Bearer $token");
-		return $bot->ua_request($url, \%headers);
-	})->transform(done => sub { Mojo::DOM->new->xml(1)->parse(shift->text)->at('string')->text });
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('translate')
+			->query('api-version' => '3.0', from => $from_code, to => $to_code, textType => 'plain');
+		return $bot->ua_request(post => $url, {Authorization => "Bearer $token"}, json => [{Text => $text}]);
+	})->transform(done => sub { shift->json->[0]{translations}[0]{text} });
 }
 
 1;
@@ -266,8 +226,8 @@ bot.
 
 This plugin requires a Microsoft Translator subscription key, configured as
 C<microsoft_translator_subscription_key> in the C<apis> section. See
-L<http://docs.microsofttranslator.com/text-translate.html> for information on
-obtaining a subscription key.
+L<https://docs.microsoft.com/en-us/azure/cognitive-services/translator/translator-how-to-signup>
+for information on obtaining a subscription key.
 
 =head1 ATTRIBUTES
 
