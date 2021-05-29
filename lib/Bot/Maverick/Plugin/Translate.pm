@@ -82,13 +82,14 @@ sub _build_language_codes {
 	return $self->bot->ua_request(get => $url, {'Accept-Language' => 'en'})->on_done(sub {
 		my $res = shift;
 		my $langs = $res->json->{translation} // {};
-		foreach my $lang (keys %$langs) {
+		foreach my $lang (sort keys %$langs) {
 			my $name = $langs->{$lang}{name};
 			my $native_name = $langs->{$lang}{nativeName};
 			$self->_languages_by_code->{$lang} = $name;
 			my @words = (split(' ', $name), split(' ', $native_name));
 			$self->_languages_by_name->{lc $_} //= $lang for $lang, $name, $native_name, @words;
 		}
+		$self->_languages_by_name->{klingon} = $self->_languages_by_name->{'klingon (latin)'};
 	})->on_fail(sub { $self->_language_codes_built(0) });
 }
 
@@ -134,18 +135,11 @@ sub register {
 			return 'usage' unless length $text;
 			
 			my $future;
-			$to = 'en' unless defined $to and length $to;
-			if (defined $from and length $from) {
-				$future = $m->bot->new_future->done($from);
-			} else {
-				$future = $m->bot->detect_language($text);
-			}
-			$future->then(sub {
-				$from = shift;
-				return $m->bot->translate_text($text, $from, $to);
-			})->on_done(sub {
-				my $translated = shift;
-				$from = $m->bot->translate_language_name($from);
+			undef $from unless length $from;
+			$to = 'en' unless length $to;
+			$m->bot->translate_text($text, $from, $to)->on_done(sub {
+				my ($translated, $detected) = @_;
+				$from = $m->bot->translate_language_name($detected // $from);
 				$to = $m->bot->translate_language_name($to);
 				$m->reply("Translated $from => $to: $translated");
 			})->on_fail(sub { $m->reply("Error translating text: $_[0]") });
@@ -187,19 +181,24 @@ sub _translate_language_name {
 sub _translate_text {
 	my ($bot, $text, $from, $to) = @_;
 	croak 'Undefined text to translate' unless defined $text;
-	my $token;
-	return $bot->_microsoft_access_token->then(sub {
-		$token = shift;
-		return $bot->_translate_build_language_codes;
+	return $bot->_translate_build_language_codes->then(sub {
+		return $bot->_microsoft_access_token;
 	})->then(sub {
-		my $from_code = $bot->translate_language_code($from)
-			// return $bot->new_future->fail("Unknown from language $from");
-		my $to_code = $bot->translate_language_code($to)
+		my $token = shift;
+		my %query = ('api-version' => '3.0', textType => 'plain');
+		if (defined $from) {
+			$query{from} = $bot->translate_language_code($from)
+				// return $bot->new_future->fail("Unknown from language $from");
+		}
+		$query{to} = $bot->translate_language_code($to)
 			// return $bot->new_future->fail("Unknown to language $to");
-		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('translate')
-			->query('api-version' => '3.0', from => $from_code, to => $to_code, textType => 'plain');
+		my $url = Mojo::URL->new(TRANSLATE_API_ENDPOINT)->path('translate')->query(%query);
 		return $bot->ua_request(post => $url, {Authorization => "Bearer $token"}, json => [{Text => $text}]);
-	})->transform(done => sub { shift->json->[0]{translations}[0]{text} });
+	})->transform(done => sub {
+		my $result = shift->json->[0];
+		my $detected = $result->{detectedLanguage} // {};
+		return ($result->{translations}[0]{text}, $detected->{language});
+	});
 }
 
 1;
@@ -266,11 +265,13 @@ language is unknown.
 
  my $translated = $bot->translate_text($text, $from, $to)->get;
  my $future = $bot->translate_text($text, $from, $to)->on_done(sub {
-   my $translated = shift;
+   my ($translated, $detected) = @_;
  })->on_fail(sub { $m->reply("Error translating text: $_[0]") });
 
-Attempt to translate a text string from one language to another. Returns a
-L<Future::Mojo> with the translated text.
+Attempt to translate a text string from one language to another. Attempts to
+detect the language of the text string if C<$from> is undefined. Returns a
+L<Future::Mojo> with the translated text, and the detected language code if
+C<$from> was not defined.
 
 =head1 COMMANDS
 
