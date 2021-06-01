@@ -26,7 +26,7 @@ sub register {
 		my $future = _get_link_titles($m, @urls)->on_done(sub {
 			my @titles = @_;
 			return() unless @titles;
-			$m->reply_bare(join ' ', map { "[ $_ ]" } @titles);
+			$m->reply_bare('Link title(s): ' . join ' ', map { "[ $_ ]" } @titles);
 		})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") });
 		$m->bot->adopt_future($future);
 	});
@@ -43,6 +43,7 @@ sub _get_link_titles {
 			if ($f->is_done) {
 				my $title = $f->get->dom->at('title');
 				$title = trim $title->text if defined $title;
+				$title = substr($title, 0, 47) . '...' if length($title) > 50;
 				$title_f->done($title) if length $title;
 			}
 			$title_f->done unless $title_f->is_ready;
