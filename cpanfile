@@ -12,6 +12,7 @@ requires 'File::Path';
 requires 'File::Temp';
 requires 'FindBin';
 requires 'Future::Mojo' => '0.003';
+requires 'Future::Utils';
 requires 'IRC::Utils' => '0.12';
 requires 'List::Util';
 requires 'Module::Runtime';
@@ -50,6 +51,9 @@ feature Hailo => sub {
 };
 feature LastFM => sub {
   requires 'Time::Duration';
+};
+feature LinkTitle => sub {
+  requires 'URL::Search';
 };
 feature PYX => sub {
 };

@@ -19,6 +19,6 @@ my $bot = Bot::Maverick->new(
 	plugins => { DNS => { native => 1 }, LastFM => 1, Google => 1, YouTube => 1,
 		GeoIP => 1, Weather => 1, Calc => 1, Wolfram => 1, Wikipedia => 1, PYX => 1,
 		Quotes => 1, Twitter => 1, Pick => 1, Translate => 1, Spell => { default_lang => 'en_GB' },
-		Repaste => 1, Say => 1, },
+		Repaste => 1, Say => 1, LinkTitle => 1, },
 );
 $bot->start;
