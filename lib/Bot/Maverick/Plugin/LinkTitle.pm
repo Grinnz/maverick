@@ -20,15 +20,20 @@ sub register {
 		return unless defined $m->channel;
 		return unless $m->config->channel_param($m->channel, 'linktitle_trigger');
 		return if $m->sender->is_bot;
-		return unless my @urls = extract_urls $message;
-		$m->logger->debug("Checking link titles for URLs: @urls");
 		
-		my $future = _get_link_titles($m, @urls)->on_done(sub {
-			my @titles = @_;
-			return() unless @titles;
-			$m->reply_bare('Link title(s): ' . join ' ', map { "[ $_ ]" } @titles);
-		})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") });
-		$m->bot->adopt_future($future);
+		$m->network->after_who($m->sender->nick, sub {
+			my ($network, $user) = @_;
+			return if $user->is_bot;
+			
+			return unless my @urls = extract_urls $message;
+			$m->logger->debug("Checking link titles for URLs: @urls");
+			my $future = _get_link_titles($m, @urls)->on_done(sub {
+				my @titles = @_;
+				return() unless @titles;
+				$m->reply_bare('Link title(s): ' . join ' ', map { "[ $_ ]" } @titles);
+			})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") });
+			$m->bot->adopt_future($future);
+		});
 	});
 }
 
