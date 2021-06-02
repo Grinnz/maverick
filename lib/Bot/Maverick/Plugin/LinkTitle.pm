@@ -48,7 +48,7 @@ sub _get_link_titles {
 			if ($f->is_done) {
 				my $title = $f->get->dom->at('title');
 				$title = trim $title->text if defined $title;
-				$title = substr($title, 0, 47) . '...' if defined $title and length($title) > 50;
+				$title = substr($title, 0, 97) . '...' if defined $title and length($title) > 100;
 				$title_f->done($title) if length $title;
 			}
 			$title_f->done unless $title_f->is_ready;
