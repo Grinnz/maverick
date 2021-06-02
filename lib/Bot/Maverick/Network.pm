@@ -628,14 +628,13 @@ sub _irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->is_bot($bot);
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
-	
-	$self->emit('who_'.lc($nick) => $user);
 }
 
 sub _irc_rpl_endofwho { # RPL_ENDOFWHO
 	my ($self, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
-	$self->unsubscribe('who_'.lc($nick));
+	my $user = $self->user($nick);
+	$self->emit('who_'.lc($nick) => $user);
 }
 
 sub _irc_rpl_whoisuser { # RPL_WHOISUSER
