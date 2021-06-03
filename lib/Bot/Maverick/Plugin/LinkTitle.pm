@@ -29,8 +29,12 @@ sub register {
 			$m->logger->debug("Checking link titles for URLs: @urls");
 			my $future = _get_link_titles($m, @urls)->on_done(sub {
 				my @titles = @_;
-				return() unless @titles;
-				$m->reply_bare('Link title(s): ' . join ' ', map { "[ $_ ]" } @titles);
+				foreach my $title (@titles) {
+					$title = trim($title // '');
+					$title = substr($title, 0, 97) . '...' if length($title) > 100;
+					$title = "[ $title ]";
+				}
+				$m->reply_bare('Link title(s): ' . join ' ', @titles) if @titles;
 			})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") });
 			$m->bot->adopt_future($future);
 		});
@@ -46,10 +50,12 @@ sub _get_link_titles {
 			$m->logger->error("Error retrieving link title [$url]: " . $f->failure) if $f->is_failed;
 			my $title_f = $m->bot->new_future;
 			if ($f->is_done) {
-				my $title = $f->get->dom->at('title');
-				$title = trim $title->text if defined $title;
-				$title = substr($title, 0, 97) . '...' if defined $title and length($title) > 100;
-				$title_f->done($title) if length $title;
+				my $res = $f->get;
+				my $content_type = $res->headers->content_type // '';
+				if ($content_type =~ m/^text\/html\b/i or $content_type =~ m/^application\/xhtml\b/i) {
+					my $title = $res->dom->at('title');
+					$title_f->done($title->text) if defined $title;
+				}
 			}
 			$title_f->done unless $title_f->is_ready;
 			return $title_f;
