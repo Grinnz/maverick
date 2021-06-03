@@ -20,14 +20,24 @@ sub register {
 		return unless defined $m->channel;
 		return unless $m->config->channel_param($m->channel, 'linktitle_trigger');
 		return if $m->sender->is_bot;
+
+		my $is_bot_f = $m->bot->new_future;
+		if (defined $m->sender->is_bot) {
+			$is_bot_f->done($m->sender->is_bot);
+		} else {
+			$m->network->after_who($m->sender->nick, sub {
+				my ($network, $user) = @_;
+				$is_bot_f->done($user->is_bot);
+			});
+		}
 		
-		$m->network->after_who($m->sender->nick, sub {
-			my ($network, $user) = @_;
-			return if $user->is_bot;
-			
-			return unless my @urls = extract_urls $message;
+		$m->bot->adopt_future($is_bot_f->then(sub {
+			my $is_bot = shift;
+			return $m->bot->new_future->done if $is_bot;
+			my @urls = extract_urls $message;
+			return $m->bot->new_future->done unless @urls;
 			$m->logger->debug("Checking link titles for URLs: @urls");
-			my $future = _get_link_titles($m, @urls)->on_done(sub {
+			return _get_link_titles($m, @urls)->on_done(sub {
 				my @titles = @_;
 				foreach my $title (@titles) {
 					$title = trim($title // '');
@@ -35,9 +45,8 @@ sub register {
 					$title = "[ $title ]";
 				}
 				$m->reply_bare('Link title(s): ' . join ' ', @titles) if @titles;
-			})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") });
-			$m->bot->adopt_future($future);
-		});
+			});
+		})->on_fail(sub { $m->logger->error("Error retrieving link titles: $_[0]") }));
 	});
 }
 

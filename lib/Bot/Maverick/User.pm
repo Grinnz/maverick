@@ -91,8 +91,7 @@ has 'identity' => (
 has 'is_bot' => (
 	is => 'rw',
 	lazy => 1,
-	default => 0,
-	coerce => sub { $_[0] ? 1 : 0 },
+	default => undef,
 	init_arg => undef,
 	clearer => 1,
 );

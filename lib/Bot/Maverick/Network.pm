@@ -625,7 +625,7 @@ sub _irc_rpl_whoreply { # RPL_WHOREPLY
 	$user->realname($realname);
 	$user->is_away($away);
 	$user->is_registered($reg);
-	$user->is_bot($bot);
+	$user->is_bot(1) if $bot;
 	$user->is_ircop($ircop);
 	$user->channel_access($channel => $access);
 }
@@ -634,6 +634,7 @@ sub _irc_rpl_endofwho { # RPL_ENDOFWHO
 	my ($self, $message) = @_;
 	my ($to, $nick) = @{$message->{params}};
 	my $user = $self->user($nick);
+	$user->is_bot(0) unless $user->is_bot;
 	$self->emit('who_'.lc($nick) => $user);
 }
 
@@ -724,6 +725,7 @@ sub _irc_rpl_endofwhois { # RPL_ENDOFWHOIS
 	foreach my $nick (@nicks) {
 		my $user = $self->user($nick);
 		$user->identity(undef) unless $user->is_registered;
+		$user->is_bot(0) unless $user->is_bot;
 		$self->emit('whois_'.lc($nick) => $user);
 	}
 }
