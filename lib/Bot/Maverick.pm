@@ -517,9 +517,9 @@ Bot::Maverick - Mojo::IRC Bot framework
   my $bot = Bot::Maverick->new(
     name => 'MyIRCBot',
     networks => {
-      freenode => {
-        class => 'Freenode',
-        irc => { server => 'chat.freenode.net' },
+      libera => {
+        class => 'Libera',
+        irc => { server => 'irc.libera.chat' },
       },
     },
   );
@@ -653,7 +653,7 @@ C<fred.db>.
 
 =item networks
 
-  networks => { freenode => { class => 'Freenode', config => { debug => 1 } } },
+  networks => { libera => { class => 'Libera', config => { debug => 1 } } },
 
 Hash reference that must contain at least one network to connect to. Keys are
 names which will be used to identify the network as well as lowercased to
@@ -731,7 +731,7 @@ Reloads configuration and reopens log handles.
 
 =head2 add_network
 
-  $bot = $bot->add_network(freenode => { class => 'Freenode' });
+  $bot = $bot->add_network(libera => { class => 'Libera' });
 
 Adds a network for the bot to connect to. See L</"NETWORKS">.
 
