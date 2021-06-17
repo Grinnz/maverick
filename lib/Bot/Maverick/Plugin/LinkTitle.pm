@@ -2,6 +2,7 @@ package Bot::Maverick::Plugin::LinkTitle;
 
 use Future::Utils 'fmap_concat';
 use Mojo::Util 'trim';
+use Mojo::URL;
 use URL::Search 'extract_urls';
 
 use Moo;
@@ -38,11 +39,20 @@ sub register {
 			return $m->bot->new_future->done unless @urls;
 			$m->logger->debug("Checking link titles for URLs: @urls");
 			return _get_link_titles($m, @urls)->on_done(sub {
-				my @titles = @_;
-				foreach my $title (@titles) {
-					$title = trim($title // '');
-					$title = substr($title, 0, 97) . '...' if length($title) > 100;
-					$title = "[ $title ]";
+				my @results = @_;
+				my @titles;
+				foreach my $result (@results) {
+					my $title_str = '';
+					if (defined $result->{title}) {
+						my $title = trim($result->{title} // '');
+						$title = substr($title, 0, 97) . '...' if length($title) > 100;
+						$title_str = $title;
+					}
+					if (defined $result->{new_url}) {
+						$title_str .= ' ' if length $title_str;
+						$title_str .= "<$result->{new_url}>";
+					}
+					push @titles, "[ $title_str ]";
 				}
 				$m->reply_bare('Link title(s): ' . join ' ', @titles) if @titles;
 			});
@@ -54,20 +64,34 @@ sub _get_link_titles {
 	my ($m, @urls) = @_;
 	return fmap_concat {
 		my $url = shift;
+		my $orig_url = Mojo::URL->new($url);
 		return $m->bot->ua_request(get => $url)->followed_by(sub {
 			my $f = shift;
 			$m->logger->error("Error retrieving link title [$url]: " . $f->failure) if $f->is_failed;
-			my $title_f = $m->bot->new_future;
+			my $results_f = $m->bot->new_future;
 			if ($f->is_done) {
-				my $res = $f->get;
+				my ($res, $tx) = $f->get;
 				my $content_type = $res->headers->content_type // '';
+				my $title;
 				if ($content_type =~ m/^text\/html\b/i or $content_type =~ m/^application\/xhtml\b/i) {
-					my $title = $res->dom->at('title');
-					$title_f->done($title->text) if defined $title;
+					$title = $res->dom->at('title');
+					$title = $title->text if defined $title;
 				}
+				my $new_url;
+				my $req_url = $tx->req->url;
+				# normalize trailing slashes for comparison
+				if (!length $orig_url->path or $orig_url->path eq '/') {
+					$orig_url->path($req_url->path) if !length $req_url->path or $req_url->path eq '/';
+				} else {
+					$orig_url->path->trailing_slash($req_url->path->trailing_slash);
+				}
+				if (lc($req_url->host_port) ne lc($orig_url->host_port) or $req_url->path_query ne $orig_url->path_query) {
+					$new_url = $req_url->to_string;
+				}
+				$results_f->done({title => $title, new_url => $new_url}) if defined $title or defined $new_url;
 			}
-			$title_f->done unless $title_f->is_ready;
-			return $title_f;
+			$results_f->done unless $results_f->is_ready;
+			return $results_f;
 		});
 	} foreach => \@urls, concurrent => 5;
 }

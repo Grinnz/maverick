@@ -491,7 +491,7 @@ sub ua_request {
 			chomp($err = $self->ua_error($err));
 			$weak_f->fail($err);
 		} else {
-			$weak_f->done($tx->res);
+			$weak_f->done($tx->res, $tx);
 		}
 	});
 	return $future;
