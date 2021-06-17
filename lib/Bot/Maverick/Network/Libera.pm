@@ -1,5 +1,7 @@
 package Bot::Maverick::Network::Libera;
 
+use IRC::Utils 'parse_user';
+
 use Moo;
 use namespace::clean;
 
@@ -7,20 +9,11 @@ extends 'Bot::Maverick::Network';
 
 our $VERSION = '0.50';
 
-after '_irc_rpl_whoreply' => sub {
+before [qw(_irc_invite _irc_join _irc_kick _irc_mode _irc_nick _irc_notice _irc_part _irc_privmsg _irc_public _irc_quit)] => sub {
 	my ($self, $message) = @_;
-	my ($to, $channel, $username, $host, $server, $nick, $state, $realname) = @{$message->{params}};
-	if ($host =~ m!/bot/!) {
-		$self->logger->debug("Received /bot/ hostmask for $nick");
-		$self->user($nick)->is_bot(1);
-	}
-};
-
-after '_irc_rpl_whoisuser' => sub {
-	my ($self, $message) = @_;
-	my ($to, $nick, $username, $host, $star, $realname) = @{$message->{params}};
-	if ($host =~ m!/bot/!) {
-		$self->logger->debug("Received /bot/ hostmask for $nick");
+	my ($nick, undef, $host) = parse_user($message->{prefix});
+	if ($host =~ m!/bot/! and !$self->user($nick)->is_bot) {
+		$self->logger->debug("Marking $nick as a bot due to /bot/ hostmask");
 		$self->user($nick)->is_bot(1);
 	}
 };
