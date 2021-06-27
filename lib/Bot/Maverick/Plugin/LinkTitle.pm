@@ -85,6 +85,9 @@ sub _get_link_titles {
 				} else {
 					$orig_url->path->trailing_slash($req_url->path->trailing_slash);
 				}
+				# normalize www. for comparison
+				$orig_url->host($req_url->host) if lc($orig_url->host) eq lc('www.' . $req_url->host)
+					or lc($req_url->host) eq lc('www.' . $orig_url->host);
 				if (lc($req_url->host_port) ne lc($orig_url->host_port) or $req_url->path_query ne $orig_url->path_query) {
 					$new_url = $req_url->to_string;
 				}
