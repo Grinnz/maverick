@@ -71,21 +71,22 @@ sub register {
 	
 	$bot->config->channel_default('youtube_trigger', 1);
 	
-	$bot->on(privmsg => sub {
+	$bot->add_handler(sub {
 		my ($bot, $m) = @_;
 		my $message = $m->text;
-		return unless defined $m->channel;
-		return unless $m->config->channel_param($m->channel, 'youtube_trigger');
-		return if $m->sender->is_bot;
+		return 0 unless defined $m->channel;
+		return 0 unless $m->config->channel_param($m->channel, 'youtube_trigger');
+		return 0 if $m->sender->is_bot;
 		
-		return unless $message =~ m!\b((https?://)?(?:(?:www\.)?youtube\.com/watch\?[-a-z0-9_=&;:%]+|youtu\.be/[-a-z0-9_]+))!i;
+		return 0 unless $message =~ m!\b((https?://)?(?:(?:www\.)?youtube\.com/watch\?[-a-z0-9_=&;:%]+|youtu\.be/[-a-z0-9_]+))!i;
 		my $captured = Mojo::URL->new(length $2 ? $1 : "https://$1");
-		my $video_id = $captured->query->param('v') // $captured->path->parts->[0] // return;
+		my $video_id = $captured->query->param('v') // $captured->path->parts->[0] // return 0;
 		
 		$m->logger->debug("Captured YouTube URL $captured with video ID $video_id");
 		my $future = $m->bot->youtube_video($video_id)->on_done(sub { _display_triggered($m, shift) })
 			->on_fail(sub { $m->logger->error("Error retrieving YouTube video data: $_[0]") });
 		$m->bot->adopt_future($future);
+		return 1;
 	});
 }
 

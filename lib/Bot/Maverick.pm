@@ -114,6 +114,13 @@ has '_command_prefixes' => (
 	init_arg => undef,
 );
 
+has 'handlers' => (
+	is => 'ro',
+	lazy => 1,
+	default => sub { [] },
+	init_arg => undef,
+);
+
 has '_init_config' => (
 	is => 'ro',
 	isa => sub { croak "Invalid configuration hash $_[0]"
@@ -373,6 +380,12 @@ sub _remove_command_prefixes {
 	return $self;
 }
 
+sub add_handler {
+	my ($self, $code) = @_;
+	push @{$self->handlers}, $code;
+	return $self;
+}
+
 # Bot actions
 
 sub start {
@@ -583,6 +596,12 @@ Commands are represented by L<Bot::Maverick::Command> objects which define the
 properties of the command and a callback "on_run" that is called when the
 command is invoked by a IRC user.
 
+=head1 HANDLERS
+
+Handlers are callbacks which are run in order for any received message which is
+not a command. If the handler returns a true value, further handlers will not
+be called.
+
 =head1 HOOKS
 
 Hooks are subroutines which are run whenever a specific action occurs. They are
@@ -611,9 +630,9 @@ Emitted when the bot is reloaded.
   $bot->on(privmsg => sub { my ($bot, $m) = @_; ... });
 
 The C<privmsg> hook is called whenever the bot receives a channel or private
-message ("privmsg") from an IRC user. The callback will receive the
-L<Bot::Maverick> object and the L<Bot::Maverick::Message> object containing the
-message details.
+message ("privmsg") from an IRC user, and the message is not a command, and no
+message handlers return true. The callback will receive the L<Bot::Maverick>
+object and the L<Bot::Maverick::Message> object containing the message details.
 
 =head2 before_command
 

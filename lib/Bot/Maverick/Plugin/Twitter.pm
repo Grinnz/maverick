@@ -132,13 +132,13 @@ sub register {
 	
 	$bot->config->channel_default('twitter_trigger', 1);
 	
-	$bot->on(privmsg => sub {
+	$bot->add_handler(sub {
 		my ($bot, $m) = @_;
 		my $message = $m->text;
-		return unless defined $m->channel;
-		return unless $m->config->channel_param($m->channel, 'twitter_trigger');
-		return if $m->sender->is_bot;
-		return unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
+		return 0 unless defined $m->channel;
+		return 0 unless $m->config->channel_param($m->channel, 'twitter_trigger');
+		return 0 if $m->sender->is_bot;
+		return 0 unless $message =~ m!\b(\S+twitter.com/(statuses|[^/]+?/status)\S+)!;
 		my $captured = Mojo::URL->new($1);
 		my $parts = $captured->path->parts;
 		my $tweet_id = $parts->[0] eq 'statuses' ? $parts->[1] : $parts->[2];
@@ -147,6 +147,7 @@ sub register {
 		my $future = $m->bot->twitter_tweet_by_id($tweet_id)->on_done(sub { _display_triggered($m, shift) })
 			->on_fail(sub { $m->logger->error("Error retrieving Twitter tweet data: $_[0]") });
 		$m->bot->adopt_future($future);
+		return 1;
 	});
 }
 

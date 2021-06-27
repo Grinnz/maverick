@@ -534,6 +534,9 @@ sub _check_privmsg {
 			}
 		});
 	} else {
+		foreach my $handler (@{$self->bot->handlers}) {
+			return if $self->bot->$handler($message);
+		}
 		$self->bot->emit(privmsg => $message);
 	}
 }

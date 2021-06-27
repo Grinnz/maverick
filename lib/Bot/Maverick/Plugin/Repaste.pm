@@ -18,9 +18,9 @@ sub register {
 	
 	$bot->config->channel_default(repaste_lang => 'text');
 	
-	$bot->on(privmsg => sub {
+	$bot->add_handler(sub {
 		my ($bot, $m) = @_;
-		return() if $m->sender->is_bot;
+		return 0 if $m->sender->is_bot;
 		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw(?:/|\.php\?i=))?([a-z0-9]+)!ig);
 		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
@@ -28,7 +28,7 @@ sub register {
 		my @pastes = ((map { +{type => 'pastebin', key => $_} } @pastebin_keys),
 			(map { +{type => 'hastebin', key => $_} } @hastebin_keys),
 			(map { +{type => 'fpaste', key => $_} } @fpaste_keys));
-		return() unless @pastes;
+		return 0 unless @pastes;
 		
 		my $future = _retrieve_pastes($m, \@pastes)->then(sub { _repaste_pastes($m, shift) })->on_done(sub {
 			my $urls = shift;
@@ -39,6 +39,7 @@ sub register {
 			$m->reply_bare($reply);
 		})->on_fail(sub { chomp (my $err = $_[0]); $m->logger->error("Error repasting pastes from message '" . $m->text . "': $err") });
 		$m->bot->adopt_future($future);
+		return 1;
 	});
 }
 
