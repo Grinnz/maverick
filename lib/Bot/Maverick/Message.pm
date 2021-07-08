@@ -143,6 +143,7 @@ sub reply_bare {
 sub _reply {
 	my ($self, $sender, $channel, $message) = @_;
 	chomp $message;
+	$message =~ s/\v/  /g;
 	
 	my $show_more = $self->show_more // 0;
 	my $more_str = $show_more > 0 ? " [ $show_more more results ]" : '';
