@@ -8,14 +8,23 @@ with 'Bot::Maverick::Plugin';
 our $VERSION = '0.50';
 
 use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
-use constant HASTEBIN_RAW_ENDPOINT => 'http://hastebin.com/raw/';
+use constant HASTEBIN_RAW_ENDPOINT => 'https://hastebin.com/raw/';
 use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
 use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
 use constant PERLBOT_API_ENDPOINT => 'https://perl.bot/api/v1/';
+use constant HASTEBIN_API_KEY_MISSING =>
+	"Repaste plugin requires configuration option 'hastebin_api_key' in section 'apis' to repaste from Hastebin.\n" .
+	"See https://toptal.com/developers/hastebin/documentation to obtain a Hastebin API key.\n";
+
+has 'hastebin_api_key' => (
+	is => 'rw',
+);
 
 sub register {
 	my ($self, $bot) = @_;
 	
+	$self->hastebin_api_key($bot->config->param('apis','hastebin_api_key')) unless defined $self->hastebin_api_key;
+	$bot->add_helper(hastebin_api_key => sub { $self->hastebin_api_key });
 	$bot->config->channel_default(repaste_lang => 'text');
 	
 	$bot->add_handler(sub {
@@ -23,7 +32,7 @@ sub register {
 		return 0 if $m->sender->is_bot;
 		
 		my @pastebin_keys = ($m->text =~ m!\bpastebin\.com/(?:raw(?:/|\.php\?i=))?([a-z0-9]+)!ig);
-		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/)?([a-z]+)!ig);
+		my @hastebin_keys = ($m->text =~ m!\bhastebin\.com/(?:raw/|share/)?([a-z]+)!ig);
 		my @fpaste_keys = ($m->text =~ m!\b(?:paste\.fedoraproject\.org|fpaste\.org)/paste/([-a-z0-9=~]+)!ig);
 		my @pastes = ((map { +{type => 'pastebin', key => $_} } @pastebin_keys),
 			(map { +{type => 'hastebin', key => $_} } @hastebin_keys),
@@ -52,8 +61,13 @@ sub _retrieve_pastes {
 			my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
 			push @futures, $m->bot->ua_request($url);
 		} elsif ($paste->{type} eq 'hastebin') {
+			my $api_key = $m->bot->hastebin_api_key;
+			unless (defined $api_key) {
+				$m->logger->warn(HASTEBIN_API_KEY_MISSING);
+				next;
+			}
 			my $url = Mojo::URL->new(HASTEBIN_RAW_ENDPOINT)->path($paste->{key});
-			push @futures, $m->bot->ua_request($url);
+			push @futures, $m->bot->ua_request($url, {Authorization => "Bearer $api_key"});
 		} elsif ($paste->{type} eq 'fpaste') {
 			my $url = Mojo::URL->new(FPASTE_API_ENDPOINT)->path('details');
 			my %params = (paste_id => $paste->{key});
@@ -183,7 +197,12 @@ Bot::Maverick::Plugin::Repaste - Repasting plugin for Maverick
 Hooks into public messages of a L<Bot::Maverick> IRC bot and whenever a
 L<pastebin.com|http://pastebin.com> or L<hastebin.com|http://hastebin.com> link
 is detected, repastes it to another pastebin site like
-L<dpaste|http://dpaste.com>.
+L<perl.bot|https://perl.bot>.
+
+This plugin requires a Hastebin API key to repaste content from Hastebin, as
+the configuration option C<hastebin_api_key> in section C<apis>. See
+L<https://toptal.com/developers/hastebin/documentation> to obtain a Hastebin
+API key.
 
 =head1 BUGS
 
