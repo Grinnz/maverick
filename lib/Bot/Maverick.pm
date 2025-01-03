@@ -10,6 +10,7 @@ use IRC::Utils;
 use Future::Mojo;
 use List::Util 'any';
 use Module::Runtime 'use_module';
+use Mojo::File 'curfile';
 use Mojo::IOLoop;
 use Mojo::IOLoop::Subprocess::Sereal;
 use Mojo::Log;
@@ -134,7 +135,7 @@ has 'config_dir' => (
 	is => 'ro',
 	lazy => 1,
 	coerce => sub { defined $_[0] ? $_[0] : '' },
-	default => '',
+	default => sub { curfile->dirname->dirname->dirname },
 );
 
 has 'config_file' => (
