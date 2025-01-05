@@ -50,7 +50,9 @@ sub register {
 					}
 					if (defined $result->{new_url}) {
 						$title_str .= ' ' if length $title_str;
-						$title_str .= "<$result->{new_url}>";
+						my $new_url = $result->{new_url};
+						$new_url = substr($new_url, 0, 197) . '...' if length($new_url) > 200;
+						$title_str .= "<$new_url>";
 					}
 					push @titles, "[ $title_str ]";
 				}
