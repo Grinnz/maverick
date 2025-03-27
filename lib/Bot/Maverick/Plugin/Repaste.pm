@@ -12,6 +12,7 @@ use constant HASTEBIN_RAW_ENDPOINT => 'https://hastebin.com/raw/';
 use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
 use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
 use constant PERLBOT_API_ENDPOINT => 'https://perl.bot/api/v1/';
+use constant RPASTE_API_ENDPOINT => 'https://rpa.st/';
 use constant HASTEBIN_API_KEY_MISSING =>
 	"Repaste plugin requires configuration option 'hastebin_api_key' in section 'apis' to repaste from Hastebin.\n" .
 	"See https://toptal.com/developers/hastebin/documentation to obtain a Hastebin API key.\n";
@@ -146,15 +147,13 @@ sub _repaste_pastes {
 		my $lang = $m->config->channel_param($m->channel, 'repaste_lang') // $paste->{lang} // 'text';
 		
 		my %form = (
-			paste => $paste->{contents},
-			language => $lang,
-			username => $m->sender->nick,
-			expire => 24,
+			raw => $paste->{contents},
+			lexer => $lang,
+			expiry => '1day',
 		);
-		$form{description} = $paste->{title} if defined $paste->{title};
 		
-		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to perlbot");
-		my $url = Mojo::URL->new(PERLBOT_API_ENDPOINT)->path('paste');
+		$m->logger->debug("Repasting $paste->{type} paste $paste->{key} contents to rpaste");
+		my $url = Mojo::URL->new(RPASTE_API_ENDPOINT)->path('curl');
 		push @futures, $m->bot->ua_request(post => $url, form => \%form);
 	}
 	return $m->bot->new_future->wait_all(@futures)->transform(done => sub {
@@ -167,7 +166,8 @@ sub _repaste_pastes {
 			next unless $future->is_done;
 			
 			my $res = $future->get // next;
-			my $url = $res->json->{url};
+			
+			my ($url) = $res->text =~ m/^Paste URL:\s+(.+)$/m;
 			unless (length $url) {
 				$m->logger->error("No paste URL returned");
 				next;
@@ -197,7 +197,7 @@ Bot::Maverick::Plugin::Repaste - Repasting plugin for Maverick
 Hooks into public messages of a L<Bot::Maverick> IRC bot and whenever a
 L<pastebin.com|http://pastebin.com> or L<hastebin.com|http://hastebin.com> link
 is detected, repastes it to another pastebin site like
-L<perl.bot|https://perl.bot>.
+L<rpa.st|https://rpa.st>.
 
 This plugin requires a Hastebin API key to repaste content from Hastebin, as
 the configuration option C<hastebin_api_key> in section C<apis>. See
