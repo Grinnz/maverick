@@ -7,7 +7,7 @@ with 'Bot::Maverick::Plugin';
 
 our $VERSION = '0.50';
 
-use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw.php';
+use constant PASTEBIN_RAW_ENDPOINT => 'http://pastebin.com/raw/';
 use constant HASTEBIN_RAW_ENDPOINT => 'https://hastebin.com/raw/';
 use constant FPASTE_API_ENDPOINT => 'https://paste.fedoraproject.org/api/paste/';
 use constant DPASTE_API_ENDPOINT => 'http://dpaste.com/api/v2/';
@@ -59,7 +59,7 @@ sub _retrieve_pastes {
 	my @futures;
 	foreach my $paste (@$pastes) {
 		if ($paste->{type} eq 'pastebin') {
-			my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->query(i => $paste->{key});
+			my $url = Mojo::URL->new(PASTEBIN_RAW_ENDPOINT)->path($paste->{key});
 			push @futures, $m->bot->ua_request($url);
 		} elsif ($paste->{type} eq 'hastebin') {
 			my $api_key = $m->bot->hastebin_api_key;
